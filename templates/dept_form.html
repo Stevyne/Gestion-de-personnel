@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 620px; margin: 0 auto;">
+    <div class="card-header">
+        <h1>{{ title }}</h1>
+    </div>
+
+    <form method="POST">
+        <div class="form-group">
+            <label for="nom">Nom du département *</label>
+            <input type="text" id="nom" name="nom" class="form-control" 
+                   value="{{ dept.nom if dept else '' }}" required>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea name="description" id="description" class="form-control" rows="3">{{ dept.description if dept else '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="responsable">Responsable</label>
+            <input type="text" id="responsable" name="responsable" class="form-control" 
+                   value="{{ dept.responsable if dept else '' }}">
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                {% if dept %}Mettre à jour{% else %}Créer le département{% endif %}
+            </button>
+            <a href="{{ url_for('departements') }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

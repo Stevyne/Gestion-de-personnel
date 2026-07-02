@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h1>🕒 Mes Présences</h1>
+    <div>
+      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">← Retour</a>
+      <a href="{{ url_for('export_presences_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;">📄 PDF</a>
+      <a href="{{ url_for('export_presences_excel', my=1) }}" class="btn" style="background:#15803d;color:white;">📊 Excel</a>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>Date</th><th>Arrivée</th><th>Retard</th><th>Départ</th><th>Statut</th></tr></thead>
+    <tbody>
+    {% for p in presences %}
+    <tr>
+      <td>{{ p.date }}</td>
+      <td>{{ p.heure_arrivee or '—' }}</td>
+      <td>{% if p.retard_minutes > 0 %}<span style="color:#dc2626;font-weight:700">+{{ p.retard_minutes }} min</span>{% else %}—{% endif %}</td>
+      <td>{{ p.heure_depart or '—' }}</td>
+      <td><span class="badge">{{ p.statut }}</span></td>
+    </tr>
+    {% else %}<tr><td colspan="5">Aucune présence.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

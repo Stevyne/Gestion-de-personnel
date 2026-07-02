@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>👥 Employés ({{ stats.total }})</h1>
+        <a href="{{ url_for('add_employee') }}" class="btn btn-primary">+ Nouvel employé</a>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total }}</div>
+            <div class="stat-label">Employés</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ "%.0f"|format(stats.salaire_moyen) }} €</div>
+            <div class="stat-label">Salaire moyen</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.nb_departements }}</div>
+            <div class="stat-label">Départements</div>
+        </div>
+    </div>
+
+    <div class="filters">
+        <form method="get" action="{{ url_for('index') }}">
+            <input type="text" name="search" placeholder="Rechercher (nom, poste, email...)" 
+                   class="search-input" value="{{ search }}">
+            
+            <select name="departement" class="filter-select">
+                <option value="">Tous les départements</option>
+                {% for dept in depts %}
+                    <option value="{{ dept.nom }}" {% if selected_dept == dept.nom %}selected{% endif %}>
+                        {{ dept.nom }}
+                    </option>
+                {% endfor %}
+            </select>
+            
+            <button type="submit" class="btn btn-secondary">🔍 Filtrer</button>
+            
+            {% if search or selected_dept %}
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Réinitialiser</a>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Employé</th>
+                    <th>Poste</th>
+                    <th>Département</th>
+                    <th>Salaire</th>
+                    <th>Date d'embauche</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for emp in employes %}
+                <tr>
+                    <td>
+                        <div class="employee-name">{{ emp.prenom }} {{ emp.nom }}</div>
+                        {% if emp.email %}
+                            <small style="color:#64748b;">{{ emp.email }}</small>
+                        {% endif %}
+                    </td>
+                    <td>{{ emp.poste }}</td>
+                    <td>
+                        <span class="badge">{{ emp.departement }}</span>
+                    </td>
+                    <td>
+                        {% if emp.salaire %}
+                            <strong>{{ "%.0f"|format(emp.salaire) }} €</strong>
+                        {% else %}
+                            <span style="color:#64748b;">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if emp.date_embauche %}
+                            {{ emp.date_embauche }}
+                        {% else %}
+                            <span style="color:#64748b;">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="actions">
+                            <a href="{{ url_for('view_employee', id=emp.id) }}" class="btn btn-secondary" style="padding:6px 11px;font-size:0.75rem;">👁️</a>
+                            <a href="{{ url_for('edit_employee', id=emp.id) }}" class="btn btn-secondary" style="padding:6px 11px;font-size:0.75rem;">✏️</a>
+                            <form action="{{ url_for('delete_employee', id=emp.id) }}" method="post" style="display:inline;" 
+                                  onsubmit="return confirm('Supprimer {{ emp.prenom }} {{ emp.nom }} ?')">
+                                <button type="submit" class="btn btn-danger" style="padding:6px 11px;font-size:0.75rem;">🗑️</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" style="text-align:center; padding:40px; color:#64748b;">
+                        Aucun employé trouvé.
+                        {% if search or selected_dept %}
+                            <a href="{{ url_for('index') }}">Effacer les filtres</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <p style="text-align:center; color:#64748b; font-size:0.85rem;">
+        {{ employes|length }} résultats affichés
+    </p>
+</div>
+{% endblock %}

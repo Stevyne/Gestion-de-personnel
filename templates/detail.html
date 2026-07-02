@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 900px; margin: 0 auto;">
+    <div class="card-header">
+        <div class="employee-header">
+            <div class="avatar">{{ employee.prenom[0] }}{{ employee.nom[0] }}</div>
+            <div>
+                <h1 style="margin:0;">{{ employee.prenom }} {{ employee.nom }}</h1>
+                <p style="margin:4px 0 0; color:#64748b; font-size:1.1rem;">{{ employee.poste }}</p>
+            </div>
+        </div>
+        <div>
+            <a href="{{ url_for('edit_employee', id=employee.id) }}" class="btn btn-secondary">✏️ Modifier</a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
+        </div>
+    </div>
+
+    <div class="detail-grid">
+        <div class="detail-item">
+            <div class="detail-label">Département</div>
+            <div class="detail-value">{{ employee.departement }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Email</div>
+            <div class="detail-value">{{ employee.email or '—' }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Téléphone</div>
+            <div class="detail-value">{{ employee.telephone or '—' }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Date d'embauche</div>
+            <div class="detail-value">{{ employee.date_embauche or '—' }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Salaire annuel</div>
+            <div class="detail-value">
+                {% if employee.salaire %}
+                    {{ "%.0f"|format(employee.salaire) }} €
+                {% else %}
+                    —
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 30px; text-align: right;">
+        <form action="{{ url_for('delete_employee', id=employee.id) }}" method="post" style="display: inline;"
+              onsubmit="return confirm('Supprimer définitivement cet employé ?')">
+            <button type="submit" class="btn btn-danger">🗑️ Supprimer l'employé</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

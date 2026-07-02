@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion du Personnel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Roboto+Mono&amp;display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="logo">👥</span>
+                <span class="brand-text">Gestion du Personnel</span>
+            </div>
+            
+            {% if session.get('user_id') %}
+            <div class="nav-links">
+                <a href="{{ url_for('dashboard') }}" 
+                   class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    📊 Tableau de Bord
+                </a>
+                <a href="{{ url_for('index') }}" 
+                   class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+                    👥 Employés
+                </a>
+                <a href="{{ url_for('presences') }}" 
+                   class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">
+                    🕒 Présences
+                </a>
+                <a href="{{ url_for('historique') }}" 
+                   class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">
+                    📋 Historique
+                </a>
+                <a href="{{ url_for('conges') }}" 
+                   class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">
+                    🏖️ Congés
+                </a>
+                <a href="{{ url_for('departements') }}" 
+                   class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">
+                    🏢 Départements
+                </a>
+                <a href="{{ url_for('add_employee') }}" class="nav-link btn-primary">
+                    + Nouvel employé
+                </a>
+                
+                <div style="display: flex; align-items: center; gap: 10px; margin-left: 12px; padding-left: 12px; border-left: 1px solid #e2e8f0;">
+                    <!-- Notifications bell -->
+                    <a href="{{ url_for('notifications') }}" 
+                       style="position: relative; padding: 4px 8px; text-decoration: none; color: #475569;">
+                        🛎️
+                        {% if unread_notifications and unread_notifications > 0 %}
+                        <span style="position:absolute; top:-2px; right:-2px; background:#dc2626; color:white; font-size:0.65rem; padding:1px 5px; border-radius:999px; font-weight:700;">
+                            {{ unread_notifications }}
+                        </span>
+                        {% endif %}
+                    </a>
+
+                    <span style="font-size: 0.85rem; color: #475569;">
+                        👤 {{ session.get('username', 'Utilisateur') }}
+                        {% if session.get('role') == 'admin' %}
+                        <span style="font-size:0.7rem; background:#e0e7ff; padding:1px 5px; border-radius:3px;">admin</span>
+                        {% endif %}
+                    </span>
+                    <a href="{{ url_for('logout') }}" 
+                       class="nav-link" 
+                       style="padding: 6px 14px; font-size: 0.82rem; background: #fee2e2; color: #991b1b; border-radius: 6px;">
+                        Déconnexion
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <div class="nav-links">
+                <a href="{{ url_for('login') }}" class="nav-link">🔐 Connexion</a>
+                <a href="{{ url_for('register') }}" class="nav-link" 
+                   style="background:#f1f5f9; color:#166534; padding:6px 14px; border-radius:6px;">
+                    📝 S'inscrire
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer>
+        <p>Gestion du Personnel • 2026 • Flask + PostgreSQL</p>
+    </footer>
+</body>
+</html>

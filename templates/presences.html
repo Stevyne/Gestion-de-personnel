@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>🕒 Gestion des Présences</h1>
+        <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('add_presence') }}" class="btn btn-primary">+ Enregistrer / Modifier</a>
+            <a href="{{ url_for('historique') }}" class="btn btn-secondary">📋 Historique complet</a>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Tableau de bord</a>
+        </div>
+    </div>
+
+    <!-- Quick pointage -->
+    <div style="background:#f1f5f9; padding:18px; border-radius:12px; margin-bottom:22px; border:1px solid #e2e8f0;">
+        <div style="margin-bottom:10px;">
+            <strong>⏰ Pointage rapide (aujourd'hui)</strong>
+            <span style="color:#64748b; font-size:0.85rem;"> → Cliquez pour enregistrer l'heure actuelle</span>
+        </div>
+        
+        <form method="post" action="{{ url_for('presences') }}" style="display:flex; gap:12px; align-items:end; flex-wrap:wrap;">
+            <div style="flex:1; min-width:240px;">
+                <label style="font-size:0.78rem; color:#475569; margin-bottom:3px; display:block;">Employé</label>
+                <select name="quick_employe_id" class="form-control" style="padding:9px 12px; font-size:0.95rem;">
+                    {% for emp in employees %}
+                    <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <button type="submit" name="action" value="clock_in" 
+                    class="btn" style="background:#16a34a; color:white; padding:10px 18px; font-weight:600;">
+                ⏰ ENTRÉE
+            </button>
+            
+            <button type="submit" name="action" value="clock_out" 
+                    class="btn" style="background:#ca8a04; color:white; padding:10px 18px; font-weight:600;">
+                ⏱️ SORTIE
+            </button>
+        </form>
+    </div>
+
+    <!-- Alertes retards du jour -->
+    {% set retards = presences | selectattr('retard') | list %}
+    {% if retards %}
+    <div style="background:#fee2e2; border:2px solid #f87171; padding:12px 16px; border-radius:10px; margin-bottom:18px;">
+        <strong style="color:#991b1b;">⚠️ {{ retards|length }} retard(s) aujourd'hui</strong>
+        <span style="margin-left:12px; font-size:0.9rem; color:#7f1d1d;">(retard calculé à partir de 09:00)</span>
+    </div>
+    {% endif %}
+
+    <div class="filters">
+        <form method="get" action="{{ url_for('presences') }}">
+            <input type="text" name="search" placeholder="Rechercher employé..." class="search-input" value="{{ search }}">
+            <input type="date" name="date" class="filter-select" value="{{ date_filter }}">
+            <button type="submit" class="btn btn-secondary">🔍 Filtrer</button>
+            {% if search or date_filter %}
+            <a href="{{ url_for('presences') }}" class="btn btn-secondary">Réinitialiser</a>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Employé</th>
+                    <th>Date</th>
+                    <th>Arrivée</th>
+                    <th>Retard</th>
+                    <th>Départ</th>
+                    <th>Durée</th>
+                    <th>Statut</th>
+                    <th>Commentaire</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in presences %}
+                <tr>
+                    <td><strong>{{ p.prenom }} {{ p.nom }}</strong></td>
+                    <td>{{ p.date }}</td>
+                    <td>
+                        {% if p.heure_arrivee %}
+                            <strong style="color:#166534;">{{ p.heure_arrivee }}</strong>
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.retard %}
+                            <span style="background:#fee2e2; color:#991b1b; padding:3px 9px; border-radius:6px; font-weight:700; font-size:0.85rem;">
+                                +{{ p.retard_minutes }} min
+                            </span>
+                        {% elif p.heure_arrivee %}
+                            <span style="color:#16a34a; font-weight:600; font-size:0.85rem;">À l'heure</span>
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.heure_depart %}
+                            <strong style="color:#854d0e;">{{ p.heure_depart }}</strong>
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.heure_arrivee and p.heure_depart %}
+                            {% set h_arr = p.heure_arrivee.split(':') | map('int') | list %}
+                            {% set h_dep = p.heure_depart.split(':') | map('int') | list %}
+                            {% set mins = (h_dep[0]*60 + h_dep[1]) - (h_arr[0]*60 + h_arr[1]) %}
+                            {% if mins > 0 %}
+                                <span style="font-weight:600;">{{ (mins // 60) }}h{{ '%02d' | format(mins % 60) }}</span>
+                            {% else %}
+                                <span style="color:#94a3b8;">—</span>
+                            {% endif %}
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.statut == 'présent' %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">Présent</span>
+                        {% elif p.statut == 'absent' %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">Absent</span>
+                        {% else %}
+                            <span class="badge">{{ p.statut }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.commentaire %}
+                            <small>{{ p.commentaire }}</small>
+                        {% else %}
+                            <span style="color:#64748b">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="actions" style="gap:4px;">
+                            <form action="{{ url_for('clock_in', employe_id=p.employe_id) }}" method="post" style="display:inline;">
+                                <input type="hidden" name="date" value="{{ p.date }}">
+                                <button type="submit" class="btn" style="padding:3px 8px; font-size:0.65rem; background:#16a34a; color:white;">⏰ Entrée</button>
+                            </form>
+                            <form action="{{ url_for('clock_out', employe_id=p.employe_id) }}" method="post" style="display:inline;">
+                                <input type="hidden" name="date" value="{{ p.date }}">
+                                <button type="submit" class="btn" style="padding:3px 8px; font-size:0.65rem; background:#ca8a04; color:white;">⏱️ Sortie</button>
+                            </form>
+                            <a href="{{ url_for('add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}" 
+                               class="btn btn-secondary" style="padding:3px 8px;font-size:0.7rem;">✏️</a>
+                            <form action="{{ url_for('delete_presence', id=p.id) }}" method="post" style="display:inline;"
+                                  onsubmit="return confirm('Supprimer cette présence ?')">
+                                <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;">🗑️</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" style="text-align:center; padding:40px; color:#64748b;">
+                        Aucune présence enregistrée.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

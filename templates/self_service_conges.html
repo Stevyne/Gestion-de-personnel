@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h1>🏖️ Mes Congés</h1>
+    <div>
+      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">← Retour</a>
+      <a href="{{ url_for('add_conge') }}" class="btn btn-primary">+ Nouvelle demande</a>
+      <a href="{{ url_for('export_conges_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;">📄 PDF</a>
+      <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn" style="background:#15803d;color:white;">📊 Excel</a>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>Type</th><th>Dates</th><th>Jours</th><th>Statut</th></tr></thead>
+    <tbody>
+    {% for c in conges %}
+    <tr>
+      <td>{{ c.type_conge }}</td>
+      <td>{{ c.date_debut }} → {{ c.date_fin }}</td>
+      <td>{{ c.nombre_jours }} j</td>
+      <td>{{ c.statut }}</td>
+    </tr>
+    {% else %}<tr><td colspan="4">Aucune demande.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

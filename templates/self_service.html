@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>👤 Mon Espace Employé (Self-Service)</h1>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Tableau de bord</a>
+    </div>
+    {% if employee %}
+    <div style="margin:20px 0; padding:15px; background:#f0f9ff; border-radius:10px;">
+        <h3 style="margin:0 0 8px;">📋 {{ employee.prenom }} {{ employee.nom }} — {{ employee.poste }}</h3>
+        <p style="margin:0; color:#475569;">{{ employee.departement }} • {{ employee.email or '' }}</p>
+    </div>
+
+    <div style="margin-bottom:30px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <h3 style="margin:0;">🕒 Mes Présences</h3>
+            <div>
+                <a href="{{ url_for('self_service_presences') }}" class="btn btn-secondary" style="font-size:0.8rem;padding:4px 10px;">Tout voir</a>
+                <a href="{{ url_for('export_presences_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;font-size:0.8rem;padding:4px 8px;">📄 PDF</a>
+                <a href="{{ url_for('export_presences_excel', my=1) }}" class="btn" style="background:#15803d;color:white;font-size:0.8rem;padding:4px 8px;">📊 Excel</a>
+            </div>
+        </div>
+        <table style="font-size:0.85rem;">
+            <tr><th>Date</th><th>Arrivée</th><th>Retard</th><th>Départ</th><th>Statut</th></tr>
+            {% for p in my_presences[:8] %}
+            <tr>
+                <td>{{ p.date }}</td>
+                <td>{{ p.heure_arrivee or '—' }}</td>
+                <td>{% if p.retard_minutes > 0 %}<span style="color:#dc2626;font-weight:700">+{{ p.retard_minutes }} min</span>{% else %}—{% endif %}</td>
+                <td>{{ p.heure_depart or '—' }}</td>
+                <td>{{ p.statut }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <h3 style="margin:0;">🏖️ Mes Congés</h3>
+            <div>
+                <a href="{{ url_for('self_service_conges') }}" class="btn btn-secondary" style="font-size:0.8rem;padding:4px 10px;">Gérer</a>
+                <a href="{{ url_for('export_conges_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;font-size:0.8rem;padding:4px 8px;">📄 PDF</a>
+                <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn" style="background:#15803d;color:white;font-size:0.8rem;padding:4px 8px;">📊 Excel</a>
+            </div>
+        </div>
+        <table style="font-size:0.85rem;">
+            <tr><th>Type</th><th>Dates</th><th>Jours</th><th>Statut</th></tr>
+            {% for c in my_conges[:6] %}
+            <tr>
+                <td>{{ c.type_conge }}</td>
+                <td>{{ c.date_debut }} → {{ c.date_fin }}</td>
+                <td>{{ c.nombre_jours }} j</td>
+                <td>{{ c.statut }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <div style="margin-top:12px;">
+            <a href="{{ url_for('add_conge') }}" class="btn btn-primary">+ Nouvelle demande</a>
+        </div>
+    </div>
+    {% else %}
+    <p>Aucun employé lié à votre compte.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div>
+            <h1 style="margin:0;">📅 Calendrier des Congés</h1>
+            <span style="color:#64748b; font-size:0.95rem;">Congés approuvés — Année {{ annee }}</span>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <a href="{{ url_for('conges') }}" class="btn btn-secondary">← Retour</a>
+            <a href="{{ url_for('calendrier_conges', annee=annee-1) }}" class="btn btn-secondary">← {{ annee-1 }}</a>
+            <a href="{{ url_for('calendrier_conges', annee=annee+1) }}" class="btn btn-secondary">{{ annee+1 }} →</a>
+        </div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+        <div style="background:#f0f9ff; padding:12px 18px; border-radius:10px; display:inline-flex; align-items:center; gap:10px; border:1px solid #bae6fd;">
+            <span style="font-size:1.4rem;">📊</span>
+            <div>
+                <strong>{{ total_approuves }}</strong> jours de congés approuvés en {{ annee }}
+            </div>
+        </div>
+    </div>
+
+    <div class="mois-grid">
+        {% for mois in mois_list %}
+        <div class="mois-card">
+            <div class="mois-header">
+                {{ mois.nom }} {{ annee }}
+            </div>
+            <div class="mois-body">
+                {% if mois.conges %}
+                    {% for c in mois.conges %}
+                    <div class="mois-conge">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <div>
+                                <strong>{{ c.prenom }} {{ c.nom }}</strong><br>
+                                <span style="color:#64748b; font-size:0.8rem;">{{ c.date_debut }} → {{ c.date_fin }}</span>
+                            </div>
+                            <span style="background:#dcfce7; color:#166534; padding:1px 9px; border-radius:999px; font-size:0.78rem; font-weight:700; white-space:nowrap;">
+                                {{ c.nombre_jours }} j
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div style="padding:10px 0; color:#94a3b8; font-size:0.85rem; font-style:italic;">
+                        Aucun congé approuvé ce mois.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div style="text-align:center; margin-top:26px; color:#64748b; font-size:0.9rem;">
+        Total annuel : <strong style="color:#166534;">{{ total_approuves }}</strong> jours
+    </div>
+</div>
+{% endblock %}

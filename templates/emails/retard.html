@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<style>
+body { font-family: Arial, sans-serif; color:#333; line-height:1.5; }
+.container { max-width:560px; margin:0 auto; padding:20px; }
+.header { background:#dc2626; color:white; padding:14px; border-radius:8px 8px 0 0; }
+.content { padding:20px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:0 0 8px 8px; }
+.alert { background:#fee2e2; border-left:5px solid #dc2626; padding:12px; margin:15px 0; }
+table { width:100%; }
+td { padding:6px 0; border-bottom:1px solid #f1f5f9; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h2 style="margin:0">⚠️ Retard détecté</h2>
+  </div>
+  <div class="content">
+    <p>Bonjour <strong>{{ prenom }}</strong>,</p>
+    <div class="alert">
+      <strong>Un retard a été enregistré pour vous.</strong>
+    </div>
+    <table>
+      <tr><td><strong>Employé</strong></td><td>{{ nom_complet }}</td></tr>
+      <tr><td><strong>Date</strong></td><td>{{ date_str }}</td></tr>
+      <tr><td><strong>Heure d'arrivée</strong></td><td><strong style="color:#dc2626">{{ heure_arrivee }}</strong></td></tr>
+      <tr><td><strong>Retard</strong></td><td><strong style="color:#dc2626">+{{ retard_minutes }} min</strong></td></tr>
+      <tr><td><strong>Heure attendue</strong></td><td>{{ heure_attendue }}</td></tr>
+    </table>
+    <p style="margin-top:18px">Cordialement,<br><strong>{{ admin_name }}</strong></p>
+  </div>
+</div>
+</body>
+</html>

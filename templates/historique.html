@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>📋 Historique des Pointages</h1>
+        <div>
+            <a href="{{ url_for('presences') }}" class="btn btn-secondary">← Retour aux Présences</a>
+        </div>
+    </div>
+
+    <!-- Filtres avancés -->
+    <div class="filters" style="margin-bottom: 24px;">
+        <form method="get" action="{{ url_for('historique') }}" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+            <div style="min-width: 220px; flex: 1;">
+                <label style="font-size: 0.8rem; display: block; margin-bottom: 4px; color: #475569;">Employé</label>
+                <select name="employe_id" class="filter-select" style="width: 100%;">
+                    <option value="">Tous les employés</option>
+                    {% for emp in employees %}
+                    <option value="{{ emp.id }}" {% if selected_employe == emp.id %}selected{% endif %}>
+                        {{ emp.prenom }} {{ emp.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label style="font-size: 0.8rem; display: block; margin-bottom: 4px; color: #475569;">Date début</label>
+                <input type="date" name="date_debut" class="filter-select" value="{{ date_debut }}">
+            </div>
+
+            <div>
+                <label style="font-size: 0.8rem; display: block; margin-bottom: 4px; color: #475569;">Date fin</label>
+                <input type="date" name="date_fin" class="filter-select" value="{{ date_fin }}">
+            </div>
+
+            <div>
+                <label style="font-size: 0.8rem; display: block; margin-bottom: 4px; color: #475569;">Statut</label>
+                <select name="statut" class="filter-select">
+                    <option value="">Tous</option>
+                    <option value="présent" {% if selected_statut == 'présent' %}selected{% endif %}>Présent</option>
+                    <option value="absent" {% if selected_statut == 'absent' %}selected{% endif %}>Absent</option>
+                    <option value="télétravail" {% if selected_statut == 'télétravail' %}selected{% endif %}>Télétravail</option>
+                    <option value="demi-journée" {% if selected_statut == 'demi-journée' %}selected{% endif %}>Demi-journée</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary">🔍 Filtrer</button>
+            <a href="{{ url_for('historique') }}" class="btn btn-secondary">Réinitialiser</a>
+        </form>
+    </div>
+
+    <!-- Statistiques rapides -->
+    <div class="stats-grid" style="margin-bottom: 24px;">
+        <div class="stat-card">
+            <div class="stat-value">{{ total_pointages }}</div>
+            <div class="stat-label">Pointages trouvés</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ "%.1f"|format(total_heures) }} h</div>
+            <div class="stat-label">Heures totales</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ employes_concernes }}</div>
+            <div class="stat-label">Employés concernés</div>
+        </div>
+    </div>
+
+    <!-- Tableau Historique -->
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Employé</th>
+                    <th>Arrivée</th>
+                    <th>Sortie</th>
+                    <th>Durée</th>
+                    <th>Statut</th>
+                    <th>Commentaire</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in presences %}
+                <tr>
+                    <td><strong>{{ p.date }}</strong></td>
+                    <td>
+                        <div class="employee-name">{{ p.prenom }} {{ p.nom }}</div>
+                    </td>
+                    <td>
+                        {% if p.heure_arrivee %}
+                            <strong style="color:#166534;">{{ p.heure_arrivee }}</strong>
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.heure_depart %}
+                            <strong style="color:#854d0e;">{{ p.heure_depart }}</strong>
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.duree_heures %}
+                            <span style="font-weight:600; background:#f1f5f9; padding:2px 8px; border-radius:4px;">
+                                {{ p.duree_heures }} h
+                            </span>
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.statut == 'présent' %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">Présent</span>
+                        {% elif p.statut == 'absent' %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">Absent</span>
+                        {% else %}
+                            <span class="badge">{{ p.statut }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.commentaire %}
+                            <small>{{ p.commentaire }}</small>
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="actions" style="gap:4px;">
+                            <a href="{{ url_for('add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}" 
+                               class="btn btn-secondary" style="padding:3px 9px; font-size:0.7rem;">✏️ Modifier</a>
+                            <form action="{{ url_for('delete_presence', id=p.id) }}" method="post" style="display:inline;"
+                                  onsubmit="return confirm('Supprimer ce pointage ?')">
+                                <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;">🗑️</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" style="text-align:center; padding:50px; color:#64748b;">
+                        Aucun pointage trouvé avec ces critères.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div style="margin-top: 16px; text-align: center; font-size: 0.85rem; color: #64748b;">
+        {{ presences|length }} enregistrement(s) affichés
+    </div>
+</div>
+{% endblock %}

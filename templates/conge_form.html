@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 720px; margin: 0 auto;">
+    <div class="card-header">
+        <h1>🏖️ Nouvelle demande de congé</h1>
+    </div>
+
+    <form method="POST">
+        <div class="form-group">
+            <label for="employe_id">Employé *</label>
+            <select name="employe_id" id="employe_id" class="form-control" required>
+                {% for emp in employees %}
+                    <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="type_conge">Type de congé *</label>
+            <select name="type_conge" id="type_conge" class="form-control" required>
+                <option value="congé payé">Congé payé</option>
+                <option value="congé sans solde">Congé sans solde</option>
+                <option value="maladie">Maladie</option>
+                <option value="maternité / paternité">Maternité / Paternité</option>
+                <option value="récupération">Récupération</option>
+                <option value="autre">Autre</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="date_debut">Date de début *</label>
+                <input type="date" id="date_debut" name="date_debut" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="date_fin">Date de fin *</label>
+                <input type="date" id="date_fin" name="date_fin" class="form-control" required>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="motif">Motif / Commentaire</label>
+            <textarea name="motif" id="motif" class="form-control" rows="3" 
+                      placeholder="Ex: Vacances d'été, mariage, etc."></textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Soumettre la demande</button>
+            <a href="{{ url_for('conges') }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

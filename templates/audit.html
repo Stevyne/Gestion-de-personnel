@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>📋 Journal d'Audit (Audit Logs)</h1>
+        <div>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Retour</a>
+            <form method="get" action="{{ url_for('audit') }}" style="display:inline; margin-left:10px;">
+                <button type="submit" name="clear" value="1" class="btn btn-danger" 
+                        onclick="return confirm('Garder seulement les 1000 derniers logs ?')"
+                        style="background:#b91c1c; padding:8px 14px; font-size:0.85rem;">
+                    Nettoyer logs
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="filters" style="margin-bottom:20px;">
+        <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+            <div>
+                <label style="font-size:0.8rem; display:block; margin-bottom:4px;">Action</label>
+                <select name="action" class="filter-select" style="padding:8px 12px;">
+                    <option value="">Toutes</option>
+                    <option value="LOGIN">Connexion</option>
+                    <option value="LOGOUT">Déconnexion</option>
+                    <option value="CREATE">Création</option>
+                    <option value="UPDATE">Modification</option>
+                    <option value="DELETE">Suppression</option>
+                    <option value="CLOCK_IN">Pointage entrée</option>
+                    <option value="CLOCK_OUT">Pointage sortie</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:0.8rem; display:block; margin-bottom:4px;">Utilisateur</label>
+                <input type="text" name="username" placeholder="Nom d'utilisateur" class="search-input" style="padding:8px 12px; width:180px;" value="{{ request.args.get('username', '') }}">
+            </div>
+            <div>
+                <label style="font-size:0.8rem; display:block; margin-bottom:4px;">Depuis</label>
+                <input type="date" name="date_from" class="filter-select" value="{{ request.args.get('date_from', '') }}">
+            </div>
+            <div>
+                <button type="submit" class="btn btn-secondary">🔍 Filtrer</button>
+                <a href="{{ url_for('audit') }}" class="btn btn-secondary">Réinitialiser</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date / Heure</th>
+                    <th>Utilisateur</th>
+                    <th>Action</th>
+                    <th>Entité</th>
+                    <th>Détails</th>
+                    <th>IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td><strong>{{ log.timestamp.strftime('%d/%m/%Y %H:%M') if log.timestamp else '—' }}</strong></td>
+                    <td>
+                        {% if log.username %}
+                            <span style="font-weight:600;">{{ log.username }}</span>
+                        {% else %}
+                            <span style="color:#94a3b8;">Système</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% set color = {'LOGIN':'#16a34a','LOGOUT':'#ca8a04','CREATE':'#2563eb','UPDATE':'#7c3aed','DELETE':'#dc2626','CLOCK_IN':'#16a34a','CLOCK_OUT':'#ca8a04'}.get(log.action, '#64748b') %}
+                        <span style="background:{{ color }}; color:white; padding:2px 10px; border-radius:999px; font-size:0.75rem; font-weight:600;">
+                            {{ log.action }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if log.entity_type %}<span class="badge">{{ log.entity_type }}</span>{% if log.entity_id %} #{{ log.entity_id }}{% endif %}{% else %}<span style="color:#94a3b8;">—</span>{% endif %}
+                    </td>
+                    <td><small style="color:#475569;">{{ log.details or '—' }}</small></td>
+                    <td><small style="font-family:monospace; color:#64748b;">{{ log.ip_address or '—' }}</small></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="text-align:center; padding:40px; color:#64748b;">Aucun log trouvé.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div style="margin-top:12px; font-size:0.85rem; color:#64748b;">
+        {{ logs|length }} entrées • Les logs sont conservés en base
+    </div>
+</div>
+{% endblock %}

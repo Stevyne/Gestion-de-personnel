@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>📁 Documents &amp; Pièces jointes</h1>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Retour</a>
+    </div>
+
+    <!-- Upload form -->
+    <div style="background:#f8fafc; padding:22px; border-radius:14px; margin-bottom:28px;">
+        <h4 style="margin:0 0 16px;">Uploader un document</h4>
+        <form method="post" enctype="multipart/form-data">
+            <div class="form-row">
+                <div class="form-group" style="flex:1; min-width:220px;">
+                    <label>Titre du document</label>
+                    <input type="text" name="titre" class="form-control" placeholder="Ex: Contrat 2026" required>
+                </div>
+                
+                {% if current_role in ['admin','rh'] %}
+                <div class="form-group" style="flex:1; min-width:220px;">
+                    <label>Employé</label>
+                    <select name="employe_id" class="form-control">
+                        {% for emp in employees %}
+                        <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label>Fichier (PDF, DOC, XLS, JPG, PNG...)</label>
+                <input type="file" name="fichier" class="form-control" required style="padding:10px;">
+            </div>
+            
+            <div class="form-group">
+                <label>Description (optionnel)</label>
+                <textarea name="description" class="form-control" rows="2" placeholder="Motif ou commentaire"></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">📤 Uploader</button>
+        </form>
+    </div>
+
+    <!-- Liste des documents -->
+    <h3 style="margin-bottom:12px;">Documents récents ({{ documents|length }})</h3>
+    
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Titre</th>
+                    <th>Employé</th>
+                    <th>Date</th>
+                    <th>Fichier</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in documents %}
+                <tr>
+                    <td>
+                        <strong>{{ d.titre }}</strong>
+                        {% if d.description %}<br><small style="color:#64748b;">{{ d.description }}</small>{% endif %}
+                    </td>
+                    <td>{{ d.prenom }} {{ d.nom or '—' }}</td>
+                    <td>{{ d.date_upload.strftime('%d/%m/%Y %H:%M') if d.date_upload else '—' }}</td>
+                    <td>
+                        <a href="{{ url_for('static', filename='uploads/' + d.nom_fichier) }}" target="_blank" class="btn btn-sm" style="background:#1e40af;color:white;padding:4px 11px;font-size:0.8rem;">
+                            📄 Télécharger
+                        </a>
+                    </td>
+                    <td>
+                        {% if current_role in ['admin','rh'] %}
+                        <form method="post" action="{{ url_for('delete_document', doc_id=d.id) }}" style="display:inline;" onsubmit="return confirm('Supprimer ce document ?')">
+                            <button type="submit" class="btn btn-sm btn-danger">🗑️</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align:center; padding:40px; color:#64748b;">Aucun document uploadé.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

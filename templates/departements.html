@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>🏢 Départements ({{ total_depts }})</h1>
+        <a href="{{ url_for('add_departement') }}" class="btn btn-primary">+ Nouveau département</a>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Département</th>
+                    <th>Description</th>
+                    <th>Responsable</th>
+                    <th>Employés</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dept in departements %}
+                <tr>
+                    <td><strong>{{ dept.nom }}</strong></td>
+                    <td>{{ dept.description or '—' }}</td>
+                    <td>{{ dept.responsable or '—' }}</td>
+                    <td>
+                        <span class="badge">{{ dept.nb_employes }} employé(s)</span>
+                    </td>
+                    <td>
+                        <div class="actions">
+                            <a href="{{ url_for('edit_departement', id=dept.id) }}" class="btn btn-secondary" style="padding:4px 10px;font-size:0.75rem;">✏️</a>
+                            <form action="{{ url_for('delete_departement', id=dept.id) }}" method="post" style="display:inline;"
+                                  onsubmit="return confirm('Supprimer le département {{ dept.nom }} ?')">
+                                <button type="submit" class="btn btn-danger" style="padding:4px 10px;font-size:0.75rem;">🗑️</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align:center; padding:40px; color:#64748b;">
+                        Aucun département.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <p style="text-align:center; color:#64748b; font-size:0.85rem; margin-top:10px;">
+        {{ total_employes }} employés au total
+    </p>
+</div>
+{% endblock %}

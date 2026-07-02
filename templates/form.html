@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 750px; margin: 0 auto;">
+    <div class="card-header">
+        <h1>{{ title }}</h1>
+    </div>
+
+    <form method="POST">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="nom">Nom *</label>
+                <input type="text" id="nom" name="nom" class="form-control" 
+                       value="{{ employee.nom if employee else '' }}" required>
+            </div>
+            <div class="form-group">
+                <label for="prenom">Prénom *</label>
+                <input type="text" id="prenom" name="prenom" class="form-control" 
+                       value="{{ employee.prenom if employee else '' }}" required>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="poste">Poste *</label>
+                <input type="text" id="poste" name="poste" class="form-control" 
+                       value="{{ employee.poste if employee else '' }}" required>
+            </div>
+            <div class="form-group">
+                <label for="departement">Département *</label>
+                <input type="text" id="departement" name="departement" class="form-control" 
+                       value="{{ employee.departement if employee else '' }}" required 
+                       list="departments">
+                <datalist id="departments">
+                    {% for dept in depts %}
+                        <option value="{{ dept.nom }}"></option>
+                    {% endfor %}
+                </datalist>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" class="form-control" 
+                       value="{{ employee.email if employee else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="telephone">Téléphone</label>
+                <input type="tel" id="telephone" name="telephone" class="form-control" 
+                       value="{{ employee.telephone if employee else '' }}">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="date_embauche">Date d'embauche</label>
+                <input type="date" id="date_embauche" name="date_embauche" class="form-control" 
+                       value="{{ employee.date_embauche if employee else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="salaire">Salaire annuel (€)</label>
+                <input type="number" id="salaire" name="salaire" step="100" class="form-control" 
+                       value="{{ employee.salaire if employee else '' }}">
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                {% if employee %}Enregistrer les modifications{% else %}Ajouter l'employé{% endif %}
+            </button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>📊 Tableau de Bord</h1>
+        <div>
+            <a href="{{ url_for('presences') }}" class="btn btn-secondary">🕒 Présences</a>
+            <a href="{{ url_for('historique') }}" class="btn btn-secondary">📋 Historique</a>
+        </div>
+    </div>
+
+    <!-- KPI -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ total_employes }}</div>
+            <div class="stat-label">👥 Employés</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ total_departements }}</div>
+            <div class="stat-label">🏢 Départements</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ "%.0f"|format(salaire_moyen) }} €</div>
+            <div class="stat-label">💰 Salaire moyen</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ total_presences_aujourdhui }}</div>
+            <div class="stat-label">📅 Présences aujourd'hui</div>
+        </div>
+    </div>
+
+    <!-- ALERTES RETARDS -->
+    {% if nb_retards > 0 %}
+    <div style="margin: 20px 0; background: #fee2e2; border: 2px solid #f87171; border-radius: 14px; padding: 18px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+            <span style="font-size: 1.8rem;">⚠️</span>
+            <h3 style="margin: 0; color: #991b1b;">Alertes Retards — Aujourd'hui ({{ today }})</h3>
+            <span style="background: #991b1b; color: white; padding: 3px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 700;">
+                {{ nb_retards }} retard(s)
+            </span>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+            {% for r in retards_aujourdhui[:5] %}
+            <div style="background: white; padding: 6px 11px; border-radius: 8px; border: 1px solid #fecaca; font-size: 0.9rem;">
+                <strong>{{ r.prenom }} {{ r.nom }}</strong>
+                <span style="color: #991b1b; font-weight: 700; margin-left: 6px;">+{{ r.retard_minutes }} min</span>
+                <span style="color: #64748b; font-size: 0.8rem;"> ({{ r.heure_arrivee }})</span>
+            </div>
+            {% endfor %}
+            {% if nb_retards > 5 %}
+                <div style="align-self: center; font-size: 0.85rem; color: #7f1d1d;">+ {{ nb_retards - 5 }} autres...</div>
+            {% endif %}
+        </div>
+
+        <div style="font-size: 0.95rem; color: #7f1d1d;">
+            <strong>Total cumulé :</strong> {{ total_retards_minutes }} minutes (≈ {{ "%.1f"|format(total_retards_minutes / 60) }} heures)
+        </div>
+
+        <div style="margin-top: 10px;">
+            <a href="{{ url_for('presences') }}" class="btn" style="background:#991b1b; color:white; padding: 8px 16px; font-size:0.9rem;">
+                Voir les présences du jour →
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <div style="margin: 16px 0; background:#dcfce7; border:1px solid #86efac; padding:12px 16px; border-radius:10px; color:#166534; font-weight:500;">
+        ✅ Aucun retard enregistré aujourd'hui (arrivée standard à 09:00)
+    </div>
+    {% endif %}
+
+    <!-- Présences du jour -->
+    <div style="margin: 20px 0;">
+        <h3 style="margin-bottom:10px;">🕒 Présences du jour</h3>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap:10px;">
+            <div style="background:#dcfce7; padding:12px; border-radius:10px; text-align:center;">
+                <div style="font-size:1.6rem; font-weight:700; color:#166534;">{{ presences_stat.present }}</div>
+                <div style="font-size:0.8rem;">Présent</div>
+            </div>
+            <div style="background:#fee2e2; padding:12px; border-radius:10px; text-align:center;">
+                <div style="font-size:1.6rem; font-weight:700; color:#991b1b;">{{ presences_stat.absent }}</div>
+                <div style="font-size:0.8rem;">Absent</div>
+            </div>
+            <div style="background:#fef9c3; padding:12px; border-radius:10px; text-align:center;">
+                <div style="font-size:1.6rem; font-weight:700; color:#854d0e;">{{ presences_stat.teletravail }}</div>
+                <div style="font-size:0.8rem;">Télétravail</div>
+            </div>
+        </div>
+        <p style="margin-top:8px; font-size:0.9rem; color:#475569;">
+            Taux de présence : <strong>{{ taux_presence }}%</strong>
+        </p>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+        <!-- Congés -->
+        <div class="card" style="padding:16px; margin:0;">
+            <h3 style="margin:0 0 10px 0;">🏖️ Congés</h3>
+            <div style="display:flex; gap:8px;">
+                <div style="flex:1; text-align:center; background:#fef9c3; padding:8px; border-radius:6px;">
+                    <div style="font-size:1.4rem; font-weight:700;">{{ conges_stat.en_attente }}</div>
+                    <div style="font-size:0.75rem;">En attente</div>
+                </div>
+                <div style="flex:1; text-align:center; background:#dcfce7; padding:8px; border-radius:6px;">
+                    <div style="font-size:1.4rem; font-weight:700;">{{ conges_stat.approuve }}</div>
+                    <div style="font-size:0.75rem;">Approuvés</div>
+                </div>
+                <div style="flex:1; text-align:center; background:#fee2e2; padding:8px; border-radius:6px;">
+                    <div style="font-size:1.4rem; font-weight:700;">{{ conges_stat.refuse }}</div>
+                    <div style="font-size:0.75rem;">Refusés</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Heures -->
+        <div class="card" style="padding:16px; margin:0;">
+            <h3 style="margin:0 0 6px 0;">⏱️ Heures totales travaillées</h3>
+            <div style="font-size:2rem; font-weight:700;">{{ "%.1f"|format(heures_totales) }} h</div>
+            <a href="{{ url_for('historique') }}" class="btn btn-secondary" style="margin-top:8px; width:100%;">Voir l'historique</a>
+        </div>
+    </div>
+
+    <!-- Répartition départements -->
+    <div class="card" style="margin-top:18px; padding:16px;">
+        <h3 style="margin-bottom:10px;">🏢 Répartition par département</h3>
+        <table>
+            <thead>
+                <tr><th>Département</th><th>Employés</th><th>%</th></tr>
+            </thead>
+            <tbody>
+                {% for dept in dept_stats %}
+                <tr>
+                    <td><strong>{{ dept.nom }}</strong></td>
+                    <td>{{ dept.nb_employes }}</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <div style="flex:1; background:#e2e8f0; height:6px; border-radius:999px;">
+                                <div style="width:{{ dept.pourcentage }}%; height:100%; background:#2563eb;"></div>
+                            </div>
+                            <span style="font-size:0.8rem;">{{ dept.pourcentage }}%</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Activité récente -->
+    <div class="card" style="margin-top:18px; padding:16px;">
+        <h3 style="margin-bottom:10px;">📅 Activité récente</h3>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+                <strong style="font-size:0.85rem;">Derniers pointages</strong>
+                {% for p in recent_presences %}
+                <div style="padding:4px 0; font-size:0.85rem; border-bottom:1px solid #f1f5f9;">
+                    {{ p.prenom }} {{ p.nom }} — {{ p.date }}
+                </div>
+                {% else %}
+                <div style="color:#94a3b8; font-size:0.85rem;">Aucun</div>
+                {% endfor %}
+            </div>
+            <div>
+                <strong style="font-size:0.85rem;">Dernières demandes de congés</strong>
+                {% for c in recent_conges %}
+                <div style="padding:4px 0; font-size:0.85rem; border-bottom:1px solid #f1f5f9;">
+                    {{ c.prenom }} {{ c.nom }} — {{ c.date_debut }} ({{ c.statut }})
+                </div>
+                {% else %}
+                <div style="color:#94a3b8; font-size:0.85rem;">Aucune</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div style="text-align:center; margin-top:25px;">
+        <a href="{{ url_for('presences') }}" class="btn btn-primary">Gérer les présences</a>
+    </div>
+</div>
+{% endblock %}

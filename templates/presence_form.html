@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 720px; margin: 0 auto;">
+    <div class="card-header">
+        <h1>🕒 Enregistrer / Modifier une présence</h1>
+    </div>
+
+    <form method="POST" action="{{ url_for('add_presence') }}">
+        <div class="form-group">
+            <label for="employe_id">Employé *</label>
+            <select name="employe_id" id="employe_id" class="form-control" required>
+                {% for emp in employees %}
+                    <option value="{{ emp.id }}" {% if request.args.get('employe_id') and request.args.get('employe_id')|int == emp.id %}selected{% endif %}>
+                        {{ emp.prenom }} {{ emp.nom }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="date">Date *</label>
+                <input type="date" id="date" name="date" class="form-control" 
+                       value="{{ request.args.get('date', '') or (request.form.date if request.form else '') }}" required>
+            </div>
+            <div class="form-group">
+                <label for="statut">Statut</label>
+                <select name="statut" id="statut" class="form-control">
+                    <option value="présent">Présent</option>
+                    <option value="absent">Absent</option>
+                    <option value="télétravail">Télétravail</option>
+                    <option value="demi-journée">Demi-journée</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="heure_arrivee">Heure d'arrivée (ENTRÉE)</label>
+                <input type="time" id="heure_arrivee" name="heure_arrivee" class="form-control" 
+                       value="{{ request.args.get('heure_arrivee', '') }}">
+                <small style="color:#64748b;">Laissez vide pour pointer à l'heure actuelle via le bouton rapide</small>
+            </div>
+            <div class="form-group">
+                <label for="heure_depart">Heure de départ (SORTIE)</label>
+                <input type="time" id="heure_depart" name="heure_depart" class="form-control" 
+                       value="{{ request.args.get('heure_depart', '') }}">
+                <small style="color:#64748b;">Laissez vide pour pointer la sortie plus tard</small>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="commentaire">Commentaire</label>
+            <textarea name="commentaire" id="commentaire" class="form-control" rows="2" placeholder="Ex: Arrivée en retard, réunion externe..."></textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Enregistrer la présence</button>
+            <a href="{{ url_for('presences') }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
