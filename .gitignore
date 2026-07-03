@@ -156,3 +156,6 @@ dmypy.json
 # Example: local test data, large files, etc.
 
 agent_git.py
+documents/
+memory.json
+chroma_db

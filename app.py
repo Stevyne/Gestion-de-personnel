@@ -1424,14 +1424,132 @@ def mark_notifications_read():
 def index():
     conn = get_db()
     cur = get_cursor(conn)
+
     cur.execute("SELECT * FROM employes ORDER BY nom, prenom")
     employes = cur.fetchall()
+
     cur.execute("SELECT DISTINCT nom FROM departements ORDER BY nom")
     depts = cur.fetchall()
-    cur.execute("SELECT COUNT(*) as total, AVG(salaire) as avg FROM employes")
+
+    # Requête corrigée avec les bons alias
+    cur.execute("""
+        SELECT 
+            COUNT(*) as total,
+            COALESCE(AVG(salaire), 0) as salaire_moyen,
+            (SELECT COUNT(*) FROM departements) as nb_departements
+        FROM employes
+    """)
     stats = cur.fetchone()
-    cur.close(); conn.close()
-    return render_template('index.html', employes=employes, depts=depts, search='', selected_dept='', stats=stats)
+
+    # Conversion en dict pour éviter les erreurs RealDictRow
+    stats = dict(stats) if stats else {
+        'total': 0,
+        'salaire_moyen': 0,
+        'nb_departements': 0
+    }
+
+    cur.close()
+    conn.close()
+
+    return render_template('index.html',
+                           employes=employes,
+                           depts=depts,
+                           search='',
+                           selected_dept='',
+                           stats=stats)
+
+@app.route('/employes/<int:id>')
+@login_required
+def view_employee(id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("SELECT * FROM employes WHERE id = %s", (id,))
+    employee = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not employee:
+        flash("Employé introuvable", "danger")
+        return redirect(url_for('index'))
+    return render_template('detail.html', employee=employee)
+
+@app.route('/employes/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required('admin', 'rh')
+def edit_employee(id):
+    conn = get_db()
+    cur = get_cursor(conn)
+
+    if request.method == 'POST':
+        nom = request.form.get('nom')
+        prenom = request.form.get('prenom')
+        poste = request.form.get('poste')
+        departement = request.form.get('departement')
+        email = request.form.get('email')
+        telephone = request.form.get('telephone')
+        
+        cur.execute("""
+            UPDATE employes 
+            SET nom=%s, prenom=%s, poste=%s, departement=%s, email=%s, telephone=%s 
+            WHERE id = %s
+        """, (nom, prenom, poste, departement, email, telephone, id))
+        conn.commit()
+        flash("Employé modifié avec succès", "success")
+        cur.close()
+        conn.close()
+        return redirect(url_for('index'))
+
+    cur.execute("SELECT * FROM employes WHERE id = %s", (id,))
+    employee = cur.fetchone()
+    cur.execute("SELECT DISTINCT nom FROM departements ORDER BY nom")
+    depts = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('form.html', employee=employee, depts=depts, title="Modifier l'employé")
+
+@app.route('/employes/<int:id>/delete', methods=['POST'])
+@login_required
+@role_required('admin', 'rh')
+def delete_employee(id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    
+    try:
+        # 1. Supprimer les présences liées
+        cur.execute("DELETE FROM presences WHERE employe_id = %s", (id,))
+        
+        # 2. Supprimer les congés liés
+        cur.execute("DELETE FROM conges WHERE employe_id = %s", (id,))
+        
+        # 3. Supprimer les soldes de congés liés
+        cur.execute("DELETE FROM soldes_conges WHERE employe_id = %s", (id,))
+        
+        # 4. Supprimer les documents liés
+        cur.execute("DELETE FROM documents WHERE employe_id = %s", (id,))
+        
+        # 5. Supprimer les notifications liées (si la table existe)
+        try:
+            cur.execute("DELETE FROM notifications WHERE user_id IN (SELECT id FROM users WHERE employe_id = %s)", (id,))
+        except:
+            pass
+        
+        # 6. Supprimer les utilisateurs liés (clé étrangère principale)
+        cur.execute("DELETE FROM users WHERE employe_id = %s", (id,))
+        
+        # 7. Enfin supprimer l'employé
+        cur.execute("DELETE FROM employes WHERE id = %s", (id,))
+        
+        conn.commit()
+        flash("Employé et toutes ses données associées ont été supprimés avec succès", "success")
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erreur lors de la suppression : {str(e)}", "danger")
+        print("Erreur delete_employee:", e)
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('index'))
 
 # ==================== RAPPORTS AVANCÉS ====================
 @app.route('/rapports')
@@ -1601,9 +1719,40 @@ def register():
     return render_template('register.html')
 
 @app.route('/add_employee', methods=['GET', 'POST'])
+@login_required
 @role_required('admin', 'rh')
 def add_employee():
-    return "Formulaire ajout employé (stub)"
+    conn = get_db()
+    cur = get_cursor(conn)
+
+    if request.method == 'POST':
+        nom = request.form.get('nom')
+        prenom = request.form.get('prenom')
+        poste = request.form.get('poste')
+        departement = request.form.get('departement')
+        email = request.form.get('email')
+        telephone = request.form.get('telephone')
+        salaire = request.form.get('salaire')
+        date_embauche = request.form.get('date_embauche')
+        
+        if nom and prenom and poste:
+            cur.execute("""
+                INSERT INTO employes (nom, prenom, poste, departement, email, telephone, salaire, date_embauche)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (nom, prenom, poste, departement, email, telephone, salaire, date_embauche))
+            conn.commit()
+            flash("Employé ajouté avec succès", "success")
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
+        else:
+            flash("Veuillez remplir les champs obligatoires", "danger")
+
+    cur.execute("SELECT DISTINCT nom FROM departements ORDER BY nom")
+    depts = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('form.html', employee=None, depts=depts, title="Nouvel employé")
 
 # Stub for some other common references
 @app.route('/calendrier-conges')

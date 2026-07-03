@@ -6,6 +6,162 @@
     <title>Gestion du Personnel</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Roboto+Mono&amp;display=swap" rel="stylesheet">
+    <style>
+        /* ===== BEAUTIFUL DELETE CONFIRMATION MODAL ===== */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(6px);
+            z-index: 99999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .modal-backdrop.show {
+            display: flex;
+            animation: fadeInBackdrop 0.2s ease forwards;
+        }
+
+        .delete-modal {
+            background: #ffffff;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 25px 60px -15px rgb(0 0 0 / 0.35);
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+            transform: translateY(15px);
+            animation: modalEnter 0.25s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+        }
+
+        @keyframes modalEnter {
+            from { transform: translateY(30px) scale(0.96); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+
+        .modal-header {
+            text-align: center;
+            padding: 26px 24px 16px;
+        }
+
+        .modal-icon {
+            width: 66px;
+            height: 66px;
+            background: #fee2e2;
+            color: #dc2626;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            margin-bottom: 14px;
+        }
+
+        .modal-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 4px;
+        }
+
+        .modal-subtitle {
+            color: #64748b;
+            font-size: 0.95rem;
+            margin: 0;
+        }
+
+        .modal-body {
+            padding: 8px 24px 20px;
+        }
+
+        .employee-preview {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 18px;
+        }
+
+        .preview-avatar {
+            width: 46px;
+            height: 46px;
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            color: white;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+        }
+
+        .preview-name {
+            font-weight: 700;
+            color: #0f172a;
+            font-size: 1.05rem;
+            line-height: 1.1;
+        }
+
+        .preview-id {
+            font-size: 0.82rem;
+            color: #64748b;
+        }
+
+        .warning-text {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            padding: 13px 15px;
+            font-size: 0.88rem;
+            color: #9f1239;
+            line-height: 1.45;
+        }
+
+        .modal-footer {
+            padding: 16px 24px 24px;
+            background: #f8fafc;
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 11px 24px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            min-width: 118px;
+        }
+
+        .modal-btn.cancel {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .modal-btn.cancel:hover {
+            background: #e2e8f0;
+        }
+
+        .modal-btn.danger {
+            background: #dc2626;
+            color: white;
+            box-shadow: 0 3px 10px rgb(220 38 38 / 0.3);
+        }
+
+        .modal-btn.danger:hover {
+            background: #b91c1c;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -17,66 +173,32 @@
             
             {% if session.get('user_id') %}
             <div class="nav-links">
-                <a href="{{ url_for('dashboard') }}" 
-                   class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
-                    📊 Tableau de Bord
-                </a>
-                <a href="{{ url_for('index') }}" 
-                   class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
-                    👥 Employés
-                </a>
-                <a href="{{ url_for('presences') }}" 
-                   class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">
-                    🕒 Présences
-                </a>
-                <a href="{{ url_for('historique') }}" 
-                   class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">
-                    📋 Historique
-                </a>
-                <a href="{{ url_for('conges') }}" 
-                   class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">
-                    🏖️ Congés
-                </a>
-                <a href="{{ url_for('departements') }}" 
-                   class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">
-                    🏢 Départements
-                </a>
-                <a href="{{ url_for('add_employee') }}" class="nav-link btn-primary">
-                    + Nouvel employé
-                </a>
+                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">📊 Tableau de Bord</a>
+                <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">👥 Employés</a>
+                <a href="{{ url_for('presences') }}" class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">🕒 Présences</a>
+                <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">📋 Historique</a>
+                <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
+                <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
+                <a href="{{ url_for('add_employee') }}" class="nav-link btn-primary">+ Nouvel employé</a>
                 
-                <div style="display: flex; align-items: center; gap: 10px; margin-left: 12px; padding-left: 12px; border-left: 1px solid #e2e8f0;">
-                    <!-- Notifications bell -->
-                    <a href="{{ url_for('notifications') }}" 
-                       style="position: relative; padding: 4px 8px; text-decoration: none; color: #475569;">
+                <div style="display:flex;align-items:center;gap:10px;margin-left:12px;padding-left:12px;border-left:1px solid #e2e8f0;">
+                    <a href="{{ url_for('notifications') }}" style="position:relative;padding:4px 8px;text-decoration:none;color:#475569;">
                         🛎️
                         {% if unread_notifications and unread_notifications > 0 %}
-                        <span style="position:absolute; top:-2px; right:-2px; background:#dc2626; color:white; font-size:0.65rem; padding:1px 5px; border-radius:999px; font-weight:700;">
-                            {{ unread_notifications }}
-                        </span>
+                        <span style="position:absolute;top:-2px;right:-2px;background:#dc2626;color:white;font-size:0.65rem;padding:1px 5px;border-radius:999px;font-weight:700;">{{ unread_notifications }}</span>
                         {% endif %}
                     </a>
-
-                    <span style="font-size: 0.85rem; color: #475569;">
+                    <span style="font-size:0.85rem;color:#475569;">
                         👤 {{ session.get('username', 'Utilisateur') }}
-                        {% if session.get('role') == 'admin' %}
-                        <span style="font-size:0.7rem; background:#e0e7ff; padding:1px 5px; border-radius:3px;">admin</span>
-                        {% endif %}
+                        {% if session.get('role') == 'admin' %}<span style="font-size:0.7rem;background:#e0e7ff;padding:1px 5px;border-radius:3px;">admin</span>{% endif %}
                     </span>
-                    <a href="{{ url_for('logout') }}" 
-                       class="nav-link" 
-                       style="padding: 6px 14px; font-size: 0.82rem; background: #fee2e2; color: #991b1b; border-radius: 6px;">
-                        Déconnexion
-                    </a>
+                    <a href="{{ url_for('logout') }}" class="nav-link" style="padding:6px 14px;font-size:0.82rem;background:#fee2e2;color:#991b1b;border-radius:6px;">Déconnexion</a>
                 </div>
             </div>
             {% else %}
             <div class="nav-links">
                 <a href="{{ url_for('login') }}" class="nav-link">🔐 Connexion</a>
-                <a href="{{ url_for('register') }}" class="nav-link" 
-                   style="background:#f1f5f9; color:#166534; padding:6px 14px; border-radius:6px;">
-                    📝 S'inscrire
-                </a>
+                <a href="{{ url_for('register') }}" class="nav-link" style="background:#f1f5f9;color:#166534;padding:6px 14px;border-radius:6px;">📝 S'inscrire</a>
             </div>
             {% endif %}
         </div>
@@ -86,9 +208,7 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        {{ message }}
-                    </div>
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
@@ -99,5 +219,111 @@
     <footer>
         <p>Gestion du Personnel • 2026 • Flask + PostgreSQL</p>
     </footer>
+
+    <!-- ==================== DELETE CONFIRMATION POPUP ==================== -->
+    <div id="deleteModal" class="modal-backdrop">
+        <div class="delete-modal">
+            <div class="modal-header">
+                <div class="modal-icon">🗑️</div>
+                <h3 class="modal-title">Supprimer cet employé ?</h3>
+                <p class="modal-subtitle">Action irréversible</p>
+            </div>
+
+            <div class="modal-body">
+                <div class="employee-preview" id="modalPreview">
+                    <!-- filled by JS -->
+                </div>
+
+                <div class="warning-text">
+                    <strong>Attention :</strong> Cette suppression entraînera la perte définitive des présences, congés, documents et du compte utilisateur associé.
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="modal-btn cancel" onclick="closeDeleteModal()">Annuler</button>
+                <button type="button" class="modal-btn danger" id="confirmDeleteBtn">Supprimer définitivement</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentForm = null;
+
+        function showDeleteModal(formElement, id, name) {
+            const modal = document.getElementById('deleteModal');
+            const preview = document.getElementById('modalPreview');
+            const confirmBtn = document.getElementById('confirmDeleteBtn');
+
+            // Build preview
+            const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+            
+            preview.innerHTML = `
+                <div class="preview-avatar">${initials}</div>
+                <div>
+                    <div class="preview-name">${name}</div>
+                    <div class="preview-id">Employé #${id}</div>
+                </div>
+            `;
+
+            currentForm = formElement;
+            modal.classList.add('show');
+
+            // Confirm action
+            confirmBtn.onclick = () => {
+                if (currentForm) {
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = 'Suppression...';
+                    currentForm.submit();
+                }
+            };
+
+            // Close handlers
+            modal.onclick = (e) => {
+                if (e.target === modal) closeDeleteModal();
+            };
+
+            document.addEventListener('keydown', function escHandler(e) {
+                if (e.key === "Escape") {
+                    closeDeleteModal();
+                    document.removeEventListener('keydown', escHandler);
+                }
+            }, { once: true });
+        }
+
+        function closeDeleteModal() {
+            const modal = document.getElementById('deleteModal');
+            const confirmBtn = document.getElementById('confirmDeleteBtn');
+            
+            modal.classList.remove('show');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Supprimer définitivement';
+            currentForm = null;
+        }
+
+        // Initialize delete modal for all forms
+        document.addEventListener('DOMContentLoaded', function () {
+            const deleteForms = document.querySelectorAll('form.delete-employee-form');
+
+            deleteForms.forEach(form => {
+                const btn = form.querySelector('button[type="submit"]');
+                if (!btn) return;
+
+                // Prevent default browser confirm if any
+                form.onsubmit = null;
+
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault();
+
+                    const id = form.dataset.employeeId || form.action.match(/\/(\d+)\/delete/)?.[1] || '?';
+                    const name = form.dataset.employeeName || 'cet employé';
+
+                    showDeleteModal(form, id, name);
+                });
+            });
+
+            console.log('%c✅ Delete confirmation modal ready (pop-up enabled)', 'color:#16a34a');
+        });
+    </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>

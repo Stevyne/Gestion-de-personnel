@@ -1,16 +1,26 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header">
-        <h1>👥 Employés ({{ stats.total }})</h1>
-        <a href="{{ url_for('add_employee') }}" class="btn btn-primary">+ Nouvel employé</a>
+<div class="employees-page">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="header-left">
+            <h1>👥 Employés</h1>
+            <div class="header-subtitle">{{ stats.total }} employés • Gestion du personnel</div>
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('add_employee') }}" class="btn btn-primary">
+                <span>+</span> Nouvel employé
+            </a>
+            <a href="{{ url_for('rapports') }}" class="btn btn-secondary">📊 Rapports</a>
+        </div>
     </div>
 
+    <!-- Stats -->
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-value">{{ stats.total }}</div>
-            <div class="stat-label">Employés</div>
+            <div class="stat-label">Employés actifs</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">{{ "%.0f"|format(stats.salaire_moyen) }} €</div>
@@ -22,94 +32,465 @@
         </div>
     </div>
 
-    <div class="filters">
-        <form method="get" action="{{ url_for('index') }}">
-            <input type="text" name="search" placeholder="Rechercher (nom, poste, email...)" 
-                   class="search-input" value="{{ search }}">
+    <!-- Filters -->
+    <div class="card filters-card">
+        <form method="get" action="{{ url_for('index') }}" class="filters-form">
+            <div class="filter-group">
+                <label>Recherche</label>
+                <input type="text" name="search" placeholder="Nom, prénom, poste ou email..." 
+                       class="search-input" value="{{ search }}">
+            </div>
             
-            <select name="departement" class="filter-select">
-                <option value="">Tous les départements</option>
-                {% for dept in depts %}
-                    <option value="{{ dept.nom }}" {% if selected_dept == dept.nom %}selected{% endif %}>
-                        {{ dept.nom }}
-                    </option>
-                {% endfor %}
-            </select>
+            <div class="filter-group">
+                <label>Département</label>
+                <select name="departement" class="filter-select">
+                    <option value="">Tous les départements</option>
+                    {% for dept in depts %}
+                        <option value="{{ dept.nom }}" {% if selected_dept == dept.nom %}selected{% endif %}>
+                            {{ dept.nom }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
             
-            <button type="submit" class="btn btn-secondary">🔍 Filtrer</button>
+            <div class="filter-group">
+                <label>Trier par</label>
+                <select name="sort" class="filter-select">
+                    <option value="nom" {% if sort == 'nom' %}selected{% endif %}>Nom</option>
+                    <option value="salaire" {% if sort == 'salaire' %}selected{% endif %}>Salaire</option>
+                    <option value="date_embauche" {% if sort == 'date_embauche' %}selected{% endif %}>Date d'embauche</option>
+                    <option value="poste" {% if sort == 'poste' %}selected{% endif %}>Poste</option>
+                </select>
+            </div>
             
-            {% if search or selected_dept %}
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">Réinitialiser</a>
-            {% endif %}
+            <div class="filter-group">
+                <label>Ordre</label>
+                <select name="order" class="filter-select">
+                    <option value="asc" {% if order == 'asc' %}selected{% endif %}>Croissant</option>
+                    <option value="desc" {% if order == 'desc' %}selected{% endif %}>Décroissant</option>
+                </select>
+            </div>
+            
+            <div class="filter-actions">
+                <button type="submit" class="btn btn-secondary">Appliquer</button>
+                {% if search or selected_dept %}
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary">Réinitialiser</a>
+                {% endif %}
+            </div>
         </form>
     </div>
 
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Employé</th>
-                    <th>Poste</th>
-                    <th>Département</th>
-                    <th>Salaire</th>
-                    <th>Date d'embauche</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for emp in employes %}
-                <tr>
-                    <td>
-                        <div class="employee-name">{{ emp.prenom }} {{ emp.nom }}</div>
-                        {% if emp.email %}
-                            <small style="color:#64748b;">{{ emp.email }}</small>
-                        {% endif %}
-                    </td>
-                    <td>{{ emp.poste }}</td>
-                    <td>
-                        <span class="badge">{{ emp.departement }}</span>
-                    </td>
-                    <td>
-                        {% if emp.salaire %}
-                            <strong>{{ "%.0f"|format(emp.salaire) }} €</strong>
-                        {% else %}
-                            <span style="color:#64748b;">-</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if emp.date_embauche %}
-                            {{ emp.date_embauche }}
-                        {% else %}
-                            <span style="color:#64748b;">-</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <div class="actions">
-                            <a href="{{ url_for('view_employee', id=emp.id) }}" class="btn btn-secondary" style="padding:6px 11px;font-size:0.75rem;">👁️</a>
-                            <a href="{{ url_for('edit_employee', id=emp.id) }}" class="btn btn-secondary" style="padding:6px 11px;font-size:0.75rem;">✏️</a>
-                            <form action="{{ url_for('delete_employee', id=emp.id) }}" method="post" style="display:inline;" 
-                                  onsubmit="return confirm('Supprimer {{ emp.prenom }} {{ emp.nom }} ?')">
-                                <button type="submit" class="btn btn-danger" style="padding:6px 11px;font-size:0.75rem;">🗑️</button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="6" style="text-align:center; padding:40px; color:#64748b;">
-                        Aucun employé trouvé.
-                        {% if search or selected_dept %}
-                            <a href="{{ url_for('index') }}">Effacer les filtres</a>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <!-- Table -->
+    <div class="card table-card">
+        <div class="table-header">
+            <div>
+                <strong>{{ employes|length }}</strong> résultats
+            </div>
+            <div class="table-meta">
+                {% if sort != 'nom' or order != 'asc' %}
+                    Trié par <strong>{{ sort }}</strong> ({{ '↓' if order == 'desc' else '↑' }})
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table class="professional-table">
+                <thead>
+                    <tr>
+                        <th>Employé</th>
+                        <th>Poste</th>
+                        <th>Département</th>
+                        <th>Salaire</th>
+                        <th>Embauché le</th>
+                        <th>Dernière présence</th>
+                        <th class="actions-col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for emp in employes %}
+                    <tr>
+                        <td>
+                            <div class="employee-cell">
+                                <div class="avatar-small">{{ emp.prenom[0] }}{{ emp.nom[0] }}</div>
+                                <div class="employee-info">
+                                    <div class="employee-name">{{ emp.prenom }} {{ emp.nom }}</div>
+                                    {% if emp.email %}
+                                        <div class="employee-email">{{ emp.email }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge badge-role">{{ emp.poste }}</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-dept">{{ emp.departement or '—' }}</span>
+                        </td>
+                        <td>
+                            {% if emp.salaire %}
+                                <span class="salary">{{ "%.0f"|format(emp.salaire) }} €</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if emp.date_embauche %}
+                                {{ emp.date_embauche }}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if emp.last_presence %}
+                                <div class="last-presence">
+                                    <div class="last-date">{{ emp.last_presence.date }}</div>
+                                    <div class="last-status">
+                                        {% if emp.last_presence.heure_arrivee %}
+                                            <span class="time">{{ emp.last_presence.heure_arrivee }}</span>
+                                        {% endif %}
+                                        {% if emp.last_presence.statut %}
+                                            <span class="status-badge {{ 'present' if emp.last_presence.statut == 'présent' else 'absent' }}">
+                                                {{ emp.last_presence.statut }}
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <span class="text-muted">Aucune</span>
+                            {% endif %}
+                        </td>
+                        <td class="actions-col">
+                            <div class="actions">
+                                <a href="{{ url_for('view_employee', id=emp.id) }}" 
+                                   class="action-btn" title="Voir le profil">👁️</a>
+                                
+                                <a href="{{ url_for('edit_employee', id=emp.id) }}" 
+                                   class="action-btn" title="Modifier">✏️</a>
+                                
+                                <form action="{{ url_for('clock_in', employe_id=emp.id) }}" method="post" style="display:inline;">
+                                    <button type="submit" class="action-btn" title="Pointer arrivée" onclick="return confirm('Pointer l\'arrivée ?')">⏰</button>
+                                </form>
+                                
+                                <form action="{{ url_for('clock_out', employe_id=emp.id) }}" method="post" style="display:inline;">
+                                    <button type="submit" class="action-btn" title="Pointer sortie" onclick="return confirm('Pointer la sortie ?')">🏁</button>
+                                </form>
+                                
+                                <!-- DELETE - triggers beautiful modal popup -->
+                                <form action="{{ url_for('delete_employee', id=emp.id) }}" 
+                                      method="post" 
+                                      class="delete-employee-form"
+                                      data-employee-id="{{ emp.id }}"
+                                      data-employee-name="{{ emp.prenom }} {{ emp.nom }}">
+                                    <button type="submit" class="action-btn danger" title="Supprimer">🗑️</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <div class="empty-icon">📋</div>
+                            <div><strong>Aucun employé trouvé</strong></div>
+                            {% if search or selected_dept %}
+                                <div style="margin-top:8px;">
+                                    <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm">Effacer les filtres</a>
+                                </div>
+                            {% else %}
+                                <a href="{{ url_for('add_employee') }}" class="btn btn-primary btn-sm" style="margin-top:8px;">
+                                    + Ajouter le premier employé
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="table-footer">
+            <span>Affichage de {{ employes|length }} employé(s)</span>
+            <a href="{{ url_for('add_employee') }}" class="btn btn-primary btn-sm">+ Nouvel employé</a>
+        </div>
     </div>
-
-    <p style="text-align:center; color:#64748b; font-size:0.85rem;">
-        {{ employes|length }} résultats affichés
-    </p>
 </div>
+
+<style>
+/* Professional Employees List Styles */
+.employees-page {
+    max-width: 1280px;
+    margin: 0 auto;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.page-header h1 {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+.header-subtitle {
+    color: #64748b;
+    font-size: 0.95rem;
+    margin-top: 3px;
+}
+
+.filters-card {
+    padding: 18px 22px;
+    margin-bottom: 20px;
+}
+
+.filters-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+}
+
+.filter-group {
+    flex: 1;
+    min-width: 160px;
+}
+
+.filter-group label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 5px;
+}
+
+.table-card {
+    padding: 0;
+    overflow: hidden;
+}
+
+.table-header {
+    padding: 14px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.9rem;
+}
+
+.professional-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.professional-table th {
+    background: #f8fafc;
+    font-weight: 700;
+    color: #475569;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 14px 20px;
+    text-align: left;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.professional-table td {
+    padding: 14px 20px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.professional-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.employee-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.avatar-small {
+    width: 38px;
+    height: 38px;
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    color: white;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.employee-info {
+    line-height: 1.15;
+}
+
+.employee-name {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.employee-email {
+    font-size: 0.78rem;
+    color: #64748b;
+}
+
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 9999px;
+}
+
+.badge-role {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.badge-dept {
+    background: #e0e7ff;
+    color: #4338ca;
+}
+
+.salary {
+    font-weight: 700;
+    color: #166534;
+}
+
+.last-presence {
+    font-size: 0.88rem;
+}
+
+.last-date {
+    font-weight: 600;
+    color: #334155;
+}
+
+.last-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 2px;
+}
+
+.time {
+    font-size: 0.82rem;
+    color: #64748b;
+}
+
+.status-badge {
+    font-size: 0.7rem;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.status-badge.present {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.absent {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.actions-col {
+    width: 170px;
+}
+
+.actions {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+}
+
+.action-btn {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.92rem;
+    border: none;
+    background: #f1f5f9;
+    color: #475569;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.1s ease;
+}
+
+.action-btn:hover {
+    background: #e2e8f0;
+    color: #1e2937;
+}
+
+.action-btn.danger {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.action-btn.danger:hover {
+    background: #fecaca;
+}
+
+.table-footer {
+    padding: 14px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    font-size: 0.82rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #64748b;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 50px 20px !important;
+    color: #64748b;
+}
+
+.empty-icon {
+    font-size: 2.1rem;
+    margin-bottom: 10px;
+}
+
+.text-muted {
+    color: #64748b;
+}
+
+@media (max-width: 900px) {
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .filters-form {
+        flex-direction: column;
+    }
+    
+    .filter-group {
+        width: 100%;
+    }
+    
+    .professional-table {
+        font-size: 0.87rem;
+    }
+    
+    .actions-col {
+        width: 140px;
+    }
+}
+</style>
 {% endblock %}

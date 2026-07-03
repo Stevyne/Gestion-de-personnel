@@ -1,55 +1,408 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card" style="max-width: 900px; margin: 0 auto;">
-    <div class="card-header">
+<div class="employee-detail">
+    <!-- Header -->
+    <div class="card employee-header-card">
         <div class="employee-header">
-            <div class="avatar">{{ employee.prenom[0] }}{{ employee.nom[0] }}</div>
-            <div>
-                <h1 style="margin:0;">{{ employee.prenom }} {{ employee.nom }}</h1>
-                <p style="margin:4px 0 0; color:#64748b; font-size:1.1rem;">{{ employee.poste }}</p>
+            <div class="employee-identity">
+                <div class="avatar-large">
+                    {{ employee.prenom[0] }}{{ employee.nom[0] }}
+                </div>
+                <div class="employee-meta">
+                    <h1>{{ employee.prenom }} {{ employee.nom }}</h1>
+                    <div class="employee-title">{{ employee.poste }}</div>
+                    
+                    <div class="employee-badges">
+                        {% if employee.departement %}
+                        <span class="badge badge-dept">{{ employee.departement }}</span>
+                        {% endif %}
+                        
+                        {% if employee.date_embauche %}
+                        <span class="badge badge-info">Embauché le {{ employee.date_embauche }}</span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
-        </div>
-        <div>
-            <a href="{{ url_for('edit_employee', id=employee.id) }}" class="btn btn-secondary">✏️ Modifier</a>
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
+            
+            <!-- Quick actions -->
+            <div class="employee-actions">
+                <a href="{{ url_for('edit_employee', id=employee.id) }}" class="btn btn-secondary">
+                    <span>✏️</span> Modifier
+                </a>
+                
+                <form action="{{ url_for('clock_in', employe_id=employee.id) }}" method="post" style="display:inline;">
+                    <button type="submit" class="btn btn-success">
+                        ⏰ Pointer arrivée
+                    </button>
+                </form>
+                
+                <form action="{{ url_for('clock_out', employe_id=employee.id) }}" method="post" style="display:inline;">
+                    <button type="submit" class="btn btn-warning">
+                        🏁 Pointer sortie
+                    </button>
+                </form>
+                
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    ← Retour
+                </a>
+            </div>
         </div>
     </div>
 
-    <div class="detail-grid">
-        <div class="detail-item">
-            <div class="detail-label">Département</div>
-            <div class="detail-value">{{ employee.departement }}</div>
+    <div class="detail-layout">
+        <!-- Left column: Personal & Employment Info -->
+        <div class="detail-main">
+            <div class="card">
+                <div class="card-header" style="margin-bottom: 12px;">
+                    <h3 style="margin:0; font-size:1.1rem;">📋 Informations personnelles</h3>
+                </div>
+                
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Email</div>
+                        <div class="info-value">
+                            {% if employee.email %}
+                                <a href="mailto:{{ employee.email }}">{{ employee.email }}</a>
+                            {% else %}
+                                <span class="text-muted">Non renseigné</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Téléphone</div>
+                        <div class="info-value">
+                            {% if employee.telephone %}
+                                <a href="tel:{{ employee.telephone }}">{{ employee.telephone }}</a>
+                            {% else %}
+                                <span class="text-muted">Non renseigné</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Département</div>
+                        <div class="info-value">{{ employee.departement or '—' }}</div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Poste</div>
+                        <div class="info-value">{{ employee.poste }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Employment details -->
+            <div class="card">
+                <div class="card-header" style="margin-bottom: 12px;">
+                    <h3 style="margin:0; font-size:1.1rem;">💼 Détails professionnels</h3>
+                </div>
+                
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Salaire annuel</div>
+                        <div class="info-value">
+                            {% if employee.salaire %}
+                                <span style="color:#166534; font-weight:700; font-size:1.25rem;">
+                                    {{ "%.0f"|format(employee.salaire) }} €
+                                </span>
+                            {% else %}
+                                <span class="text-muted">Non renseigné</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Date d'embauche</div>
+                        <div class="info-value">
+                            {% if employee.date_embauche %}
+                                <strong>{{ employee.date_embauche }}</strong>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">ID employé</div>
+                        <div class="info-value">#{{ employee.id }}</div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="detail-item">
-            <div class="detail-label">Email</div>
-            <div class="detail-value">{{ employee.email or '—' }}</div>
-        </div>
-        <div class="detail-item">
-            <div class="detail-label">Téléphone</div>
-            <div class="detail-value">{{ employee.telephone or '—' }}</div>
-        </div>
-        <div class="detail-item">
-            <div class="detail-label">Date d'embauche</div>
-            <div class="detail-value">{{ employee.date_embauche or '—' }}</div>
-        </div>
-        <div class="detail-item">
-            <div class="detail-label">Salaire annuel</div>
-            <div class="detail-value">
-                {% if employee.salaire %}
-                    {{ "%.0f"|format(employee.salaire) }} €
+
+        <!-- Right sidebar: Presence & Actions -->
+        <div class="detail-sidebar">
+            <!-- Latest presence -->
+            <div class="card">
+                <div class="card-header" style="margin-bottom:10px;">
+                    <h3 style="margin:0; font-size:1.05rem;">📍 Dernière présence</h3>
+                </div>
+                
+                {% if last_presence %}
+                    <div class="presence-card">
+                        <div class="presence-date">
+                            <strong>{{ last_presence.date }}</strong>
+                        </div>
+                        
+                        <div class="presence-details">
+                            {% if last_presence.heure_arrivee %}
+                            <div class="presence-time">
+                                <span class="time-label">Arrivée</span>
+                                <span class="time-value">⏰ {{ last_presence.heure_arrivee }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if last_presence.heure_depart %}
+                            <div class="presence-time">
+                                <span class="time-label">Départ</span>
+                                <span class="time-value">🏁 {{ last_presence.heure_depart }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if last_presence.statut %}
+                            <div style="margin-top:6px;">
+                                <span class="badge {% if last_presence.statut == 'présent' %}badge-success{% else %}badge-danger{% endif %}">
+                                    {{ last_presence.statut }}
+                                </span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
                 {% else %}
-                    —
+                    <div class="presence-empty">
+                        <p>Aucune présence enregistrée.</p>
+                        <a href="{{ url_for('add_presence') }}" class="btn btn-sm btn-secondary">Enregistrer une présence</a>
+                    </div>
                 {% endif %}
             </div>
+
+            <!-- Quick actions -->
+            <div class="card">
+                <div class="card-header" style="margin-bottom:8px;">
+                    <h3 style="margin:0; font-size:1.05rem;">⚡ Actions rapides</h3>
+                </div>
+                
+                <div class="quick-actions-list">
+                    <a href="{{ url_for('presences') }}?employe_id={{ employee.id }}" class="quick-link">
+                        🕒 Voir toutes les présences
+                    </a>
+                    <a href="{{ url_for('add_presence') }}" class="quick-link">
+                        📝 Ajouter une présence manuelle
+                    </a>
+                    
+                    <a href="{{ url_for('conges') }}" class="quick-link">
+                        🏖️ Gérer les congés
+                    </a>
+                    
+                    <hr style="margin:12px 0; border-color:#f1f5f9;">
+                    
+                    <form action="{{ url_for('delete_employee', id=employee.id) }}" 
+                          method="post" 
+                          class="delete-employee-form"
+                          data-employee-id="{{ employee.id }}"
+                          data-employee-name="{{ employee.prenom }} {{ employee.nom }}">
+                        <button type="submit" class="btn btn-danger btn-sm" style="width:100%;">
+                            🗑️ Supprimer l'employé
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
-
-    <div style="margin-top: 30px; text-align: right;">
-        <form action="{{ url_for('delete_employee', id=employee.id) }}" method="post" style="display: inline;"
-              onsubmit="return confirm('Supprimer définitivement cet employé ?')">
-            <button type="submit" class="btn btn-danger">🗑️ Supprimer l'employé</button>
-        </form>
-    </div>
 </div>
+
+<style>
+.employee-detail {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.employee-header-card {
+    padding: 20px 28px;
+    margin-bottom: 24px;
+}
+
+.employee-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.employee-identity {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.avatar-large {
+    width: 78px;
+    height: 78px;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    color: white;
+    font-size: 2.1rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgb(37 99 235 / 0.25);
+}
+
+.employee-meta h1 {
+    font-size: 1.95rem;
+    margin: 0;
+    line-height: 1.05;
+    color: #0f172a;
+}
+
+.employee-title {
+    font-size: 1.1rem;
+    color: #64748b;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+.employee-badges {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.badge-dept {
+    background: #e0e7ff;
+    color: #4338ca;
+    font-weight: 600;
+}
+
+.employee-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.detail-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+}
+
+@media (max-width: 860px) {
+    .detail-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #64748b;
+    min-width: 120px;
+}
+
+.info-value {
+    font-weight: 500;
+    color: #1e2937;
+    text-align: right;
+    flex: 1;
+}
+
+.presence-card {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 14px 18px;
+    border: 1px solid #e2e8f0;
+}
+
+.presence-date {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #334155;
+}
+
+.presence-time {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3px;
+}
+
+.time-label {
+    font-size: 0.78rem;
+    color: #64748b;
+}
+
+.time-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.presence-empty {
+    text-align: center;
+    padding: 14px;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.quick-actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.quick-link {
+    display: block;
+    padding: 9px 13px;
+    color: #334155;
+    text-decoration: none;
+    font-size: 0.93rem;
+    border-radius: 8px;
+    transition: background 0.1s;
+}
+
+.quick-link:hover {
+    background: #f1f5f9;
+    color: #1e2937;
+}
+
+.btn-success {
+    background: #16a34a;
+    color: white;
+}
+
+.btn-warning {
+    background: #ca8a04;
+    color: white;
+}
+
+.text-muted {
+    color: #64748b;
+    font-style: italic;
+}
+</style>
 {% endblock %}
