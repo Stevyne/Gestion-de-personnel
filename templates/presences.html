@@ -147,8 +147,13 @@
                             </form>
                             <a href="{{ url_for('add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}" 
                                class="btn btn-secondary" style="padding:3px 8px;font-size:0.7rem;">✏️</a>
+                            
                             <form action="{{ url_for('delete_presence', id=p.id) }}" method="post" style="display:inline;"
-                                  onsubmit="return confirm('Supprimer cette présence ?')">
+                                  class="confirm-form"
+                                  data-confirm-title="Supprimer ce pointage ?"
+                                  data-confirm-subtitle="Action irréversible"
+                                  data-confirm-icon="🕒"
+                                  data-confirm-warning="Cette présence sera définitivement supprimée.">
                                 <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;">🗑️</button>
                             </form>
                         </div>

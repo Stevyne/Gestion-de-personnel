@@ -8,7 +8,16 @@
             <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Retour</a>
             <form method="get" action="{{ url_for('audit') }}" style="display:inline; margin-left:10px;">
                 <button type="submit" name="clear" value="1" class="btn btn-danger" 
-                        onclick="return confirm('Garder seulement les 1000 derniers logs ?')"
+                        onclick="event.preventDefault(); 
+              const form = this.closest('form');
+              form.classList.add('confirm-form');
+              form.dataset.confirmTitle = 'Nettoyer les logs ?';
+              form.dataset.confirmSubtitle = 'Action irréversible';
+              form.dataset.confirmIcon = '🧹';
+              form.dataset.confirmWarning = 'Seuls les 1000 derniers logs seront conservés.';
+              // trigger the modal
+              const e = new MouseEvent('click', { bubbles: true });
+              form.dispatchEvent(e);"
                         style="background:#b91c1c; padding:8px 14px; font-size:0.85rem;">
                     Nettoyer logs
                 </button>

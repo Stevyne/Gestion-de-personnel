@@ -57,7 +57,11 @@
                         {% endif %}
                         
                         <form action="{{ url_for('delete_conge', id=c.id) }}" method="post" style="display:inline;"
-                              onsubmit="return confirm('Supprimer cette demande ?')">
+                              class="confirm-form"
+                              data-confirm-title="Supprimer cette demande de congé ?"
+                              data-confirm-subtitle="Action irréversible"
+                              data-confirm-icon="📅"
+                              data-confirm-warning="Le solde de congés ne sera pas automatiquement rétabli.">
                             <button type="submit" class="btn btn-danger" style="padding:4px 7px;font-size:0.7rem;">🗑️</button>
                         </form>
                     </td>

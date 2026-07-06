@@ -277,72 +277,9 @@ def get_current_employee():
         return None
 
 # ==================== SOLDES DE CONGÉS (Phase 2) ====================
+
 def get_solde_conges(employe_id, annee=None):
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("SELECT * FROM soldes_conges WHERE employe_id = %s AND annee = %s", (employe_id, annee))
-        solde = cur.fetchone()
-        if not solde:
-            cur.execute("INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises) VALUES (%s, %s, 25, 0) RETURNING *", (employe_id, annee))
-            solde = cur.fetchone()
-            conn.commit()
-        cur.close()
-        conn.close()
-        acquis = float(solde.get('jours_acquis', 25) or 25)
-        utilises = float(solde.get('jours_utilises', 0) or 0)
-        return {'jours_acquis': acquis, 'jours_utilises': utilises, 'jours_restants': round(acquis - utilises, 1), 'annee': annee}
-    except:
-        return {'jours_acquis': 25, 'jours_utilises': 0, 'jours_restants': 25, 'annee': annee}
-
-def mettre_a_jour_solde(employe_id, jours_delta, annee=None):
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) 
-            DO UPDATE SET jours_utilises = GREATEST(0, soldes_conges.jours_utilises + %s)
-        """, (employe_id, annee, jours_delta, jours_delta))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True
-    except:
-        return False
-
-def recalculer_solde(employe_id, annee=None):
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT COALESCE(SUM(nombre_jours), 0) as total
-            FROM conges 
-            WHERE employe_id = %s AND statut = 'approuvé' AND EXTRACT(YEAR FROM date_debut) = %s
-        """, (employe_id, annee))
-        total = float(cur.fetchone()['total'] or 0)
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) DO UPDATE SET jours_utilises = %s
-        """, (employe_id, annee, total, total))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return total
-    except:
-        return 0
-
-# ==================== GESTION DES SOLDES DE CONGÉS (Phase 2) ====================
-def get_solde_conges(employe_id, annee=None):
-    """Retourne le solde de congés pour un employé"""
+    """Retourne le solde de congés d'un employé (jours acquis, utilisés, restants)"""
     if annee is None:
         annee = datetime.now().year
     try:
@@ -366,8 +303,8 @@ def get_solde_conges(employe_id, annee=None):
         cur.close()
         conn.close()
 
-        acquis = float(solde.get('jours_acquis', 25) or 25)
-        utilises = float(solde.get('jours_utilises', 0) or 0)
+        acquis = float(solde.get('jours_acquis') or 25)
+        utilises = float(solde.get('jours_utilises') or 0)
         return {
             'jours_acquis': acquis,
             'jours_utilises': utilises,
@@ -378,8 +315,9 @@ def get_solde_conges(employe_id, annee=None):
         print("Erreur get_solde_conges:", e)
         return {'jours_acquis': 25, 'jours_utilises': 0, 'jours_restants': 25, 'annee': annee}
 
+
 def mettre_a_jour_solde(employe_id, jours_delta, annee=None):
-    """Ajoute ou retire des jours du solde (appelé à l'approbation)"""
+    """Ajoute ou soustrait des jours du solde (appelé lors de l'approbation/refus)"""
     if annee is None:
         annee = datetime.now().year
     try:
@@ -398,6 +336,7 @@ def mettre_a_jour_solde(employe_id, jours_delta, annee=None):
     except Exception as e:
         print("Erreur mise à jour solde:", e)
         return False
+
 
 def recalculer_solde(employe_id, annee=None):
     """Recalcule automatiquement les jours utilisés depuis les congés approuvés"""
@@ -415,364 +354,6 @@ def recalculer_solde(employe_id, annee=None):
         """, (employe_id, annee))
         total = float(cur.fetchone()['total'] or 0)
 
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) 
-            DO UPDATE SET jours_utilises = %s
-        """, (employe_id, annee, total, total))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return total
-    except Exception as e:
-        print("Erreur recalcul solde:", e)
-        return 0
-
-# ==================== SOLDES DE CONGÉS (Phase 2) ====================
-def get_solde_conges(employe_id, annee=None):
-    """Retourne le solde de congés d'un employé"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT * FROM soldes_conges 
-            WHERE employe_id = %s AND annee = %s
-        """, (employe_id, annee))
-        solde = cur.fetchone()
-
-        if not solde:
-            cur.execute("""
-                INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-                VALUES (%s, %s, 25, 0)
-                RETURNING *
-            """, (employe_id, annee))
-            solde = cur.fetchone()
-            conn.commit()
-
-        cur.close()
-        conn.close()
-
-        acquis = float(solde.get('jours_acquis', 25) or 25)
-        utilises = float(solde.get('jours_utilises', 0) or 0)
-        return {
-            'jours_acquis': acquis,
-            'jours_utilises': utilises,
-            'jours_restants': round(acquis - utilises, 1),
-            'annee': annee
-        }
-    except Exception as e:
-        print("Erreur get_solde_conges:", e)
-        return {'jours_acquis': 25, 'jours_utilises': 0, 'jours_restants': 25, 'annee': annee}
-
-def mettre_a_jour_solde(employe_id, jours_delta, annee=None):
-    """Met à jour le solde lors de l'approbation/refus"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) 
-            DO UPDATE SET jours_utilises = GREATEST(0, soldes_conges.jours_utilises + %s)
-        """, (employe_id, annee, jours_delta, jours_delta))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True
-    except Exception as e:
-        print("Erreur mise à jour solde:", e)
-        return False
-
-def recalculer_solde(employe_id, annee=None):
-    """Recalcule les jours utilisés à partir des congés approuvés"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT COALESCE(SUM(nombre_jours), 0) as total
-            FROM conges 
-            WHERE employe_id = %s 
-              AND statut = 'approuvé'
-              AND EXTRACT(YEAR FROM date_debut) = %s
-        """, (employe_id, annee))
-        total = float(cur.fetchone()['total'] or 0)
-
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) 
-            DO UPDATE SET jours_utilises = %s
-        """, (employe_id, annee, total, total))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return total
-    except Exception as e:
-        print("Erreur recalcul solde:", e)
-        return 0
-
-# ==================== GESTION DES SOLDES DE CONGÉS (Phase 2) ====================
-def get_solde_conges(employe_id, annee=None):
-    """Retourne le solde de congés d'un employé pour une année"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT * FROM soldes_conges 
-            WHERE employe_id = %s AND annee = %s
-        """, (employe_id, annee))
-        solde = cur.fetchone()
-
-        if not solde:
-            # Création automatique du solde par défaut
-            cur.execute("""
-                INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-                VALUES (%s, %s, 25, 0)
-                RETURNING *
-            """, (employe_id, annee))
-            solde = cur.fetchone()
-            conn.commit()
-
-        cur.close()
-        conn.close()
-
-        acquis = float(solde.get('jours_acquis', 25) or 25)
-        utilises = float(solde.get('jours_utilises', 0) or 0)
-        return {
-            'jours_acquis': acquis,
-            'jours_utilises': utilises,
-            'jours_restants': round(acquis - utilises, 1),
-            'annee': annee
-        }
-    except Exception as e:
-        print("Erreur get_solde_conges:", e)
-        return {'jours_acquis': 25, 'jours_utilises': 0, 'jours_restants': 25, 'annee': annee}
-
-def mettre_a_jour_solde(employe_id, jours_delta, annee=None):
-    """Ajoute/soustrait des jours au solde (appelé lors de l'approbation)"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) 
-            DO UPDATE SET jours_utilises = GREATEST(0, soldes_conges.jours_utilises + %s)
-        """, (employe_id, annee, jours_delta, jours_delta))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True
-    except Exception as e:
-        print("Erreur mise à jour solde:", e)
-        return False
-
-def recalculer_solde(employe_id, annee=None):
-    """Recalcule les jours utilisés à partir des congés approuvés"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT COALESCE(SUM(nombre_jours), 0) as total
-            FROM conges 
-            WHERE employe_id = %s 
-              AND statut = 'approuvé'
-              AND EXTRACT(YEAR FROM date_debut) = %s
-        """, (employe_id, annee))
-        total = float(cur.fetchone()['total'] or 0)
-
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) 
-            DO UPDATE SET jours_utilises = %s
-        """, (employe_id, annee, total, total))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return total
-    except Exception as e:
-        print("Erreur recalcul solde:", e)
-        return 0
-
-# ==================== SOLDES DE CONGÉS (Phase 2) ====================
-def get_solde_conges(employe_id, annee=None):
-    """Retourne le solde de congés pour un employé"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT * FROM soldes_conges 
-            WHERE employe_id = %s AND annee = %s
-        """, (employe_id, annee))
-        solde = cur.fetchone()
-        
-        if not solde:
-            cur.execute("""
-                INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-                VALUES (%s, %s, 25, 0)
-                RETURNING *
-            """, (employe_id, annee))
-            solde = cur.fetchone()
-            conn.commit()
-        
-        cur.close()
-        conn.close()
-        
-        acquis = float(solde['jours_acquis'] or 25)
-        utilises = float(solde['jours_utilises'] or 0)
-        return {
-            'jours_acquis': acquis,
-            'jours_utilises': utilises,
-            'jours_restants': round(acquis - utilises, 1),
-            'annee': annee
-        }
-    except Exception as e:
-        print("Erreur get_solde_conges:", e)
-        return {'jours_acquis': 25, 'jours_utilises': 0, 'jours_restants': 25, 'annee': annee}
-
-def mettre_a_jour_solde(employe_id, jours_delta, annee=None):
-    """Ajoute ou soustrait des jours au solde (utilisé lors d'approbation)"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) 
-            DO UPDATE SET jours_utilises = GREATEST(0, soldes_conges.jours_utilises + %s)
-            RETURNING *
-        """, (employe_id, annee, jours_delta, jours_delta))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True
-    except Exception as e:
-        print("Erreur mise à jour solde:", e)
-        return False
-
-def recalculer_solde(employe_id, annee=None):
-    """Recalcule les jours utilisés à partir des congés approuvés"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT COALESCE(SUM(nombre_jours), 0) as total
-            FROM conges 
-            WHERE employe_id = %s 
-              AND statut = 'approuvé'
-              AND EXTRACT(YEAR FROM date_debut) = %s
-        """, (employe_id, annee))
-        total = float(cur.fetchone()['total'] or 0)
-        
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) 
-            DO UPDATE SET jours_utilises = %s
-        """, (employe_id, annee, total, total))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return total
-    except Exception as e:
-        print("Erreur recalcul solde:", e)
-        return 0
-
-# ==================== SOLDES DE CONGÉS (Phase 2) ====================
-def get_solde_conges(employe_id, annee=None):
-    """Retourne le solde de congés pour un employé"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT * FROM soldes_conges 
-            WHERE employe_id = %s AND annee = %s
-        """, (employe_id, annee))
-        solde = cur.fetchone()
-        
-        if not solde:
-            # Créer un solde par défaut si inexistant
-            cur.execute("""
-                INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-                VALUES (%s, %s, 25, 0)
-                RETURNING *
-            """, (employe_id, annee))
-            solde = cur.fetchone()
-            conn.commit()
-        
-        cur.close()
-        conn.close()
-        
-        jours_restants = (solde['jours_acquis'] or 0) - (solde['jours_utilises'] or 0)
-        return {
-            'jours_acquis': solde['jours_acquis'] or 25,
-            'jours_utilises': solde['jours_utilises'] or 0,
-            'jours_restants': round(jours_restants, 1),
-            'annee': annee
-        }
-    except Exception as e:
-        print("Erreur get_solde_conges:", e)
-        return {'jours_acquis': 25, 'jours_utilises': 0, 'jours_restants': 25, 'annee': annee}
-
-def mettre_a_jour_solde(employe_id, jours_utilises_delta, annee=None):
-    """Met à jour le solde (appelé lors de l'approbation de congés)"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
-            ON CONFLICT (employe_id, annee) 
-            DO UPDATE SET jours_utilises = soldes_conges.jours_utilises + %s
-        """, (employe_id, annee, jours_utilises_delta, jours_utilises_delta))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True
-    except Exception as e:
-        print("Erreur mise à jour solde:", e)
-        return False
-
-def recalculer_jours_utilises(employe_id, annee=None):
-    """Recalcule les jours utilisés à partir des congés approuvés"""
-    if annee is None:
-        annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT COALESCE(SUM(nombre_jours), 0) as total
-            FROM conges 
-            WHERE employe_id = %s 
-              AND statut = 'approuvé'
-              AND EXTRACT(YEAR FROM date_debut) = %s
-        """, (employe_id, annee))
-        total = cur.fetchone()['total'] or 0
-        
         cur.execute("""
             INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
             VALUES (%s, %s, 25, %s)
@@ -1413,18 +994,97 @@ def conges():
     cur.execute("SELECT c.*, e.nom, e.prenom FROM conges c JOIN employes e ON c.employe_id = e.id ORDER BY c.date_demande DESC")
     conges_list = cur.fetchall()
     
+    # Always fetch employees (needed for the "+ Nouvelle demande" button)
+    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+    employees = cur.fetchall()
+    
     # Soldes de congés pour les rôles privilégiés (admin/rh/manager)
     soldes = {}
     annee_courante = datetime.now().year
     if session.get('role') in ['admin', 'rh', 'manager']:
-        cur.execute("SELECT id, prenom, nom FROM employes ORDER BY nom")
-        for emp in cur.fetchall():
+        for emp in employees:
             s = get_solde_conges(emp['id'], annee_courante)
             s['nom'] = f"{emp['prenom']} {emp['nom']}"
             soldes[emp['id']] = s
     
+    cur.close()
+    conn.close()
+    return render_template('conges.html', conges=conges_list, employees=employees, soldes=soldes, annee_courante=annee_courante)
+
+@app.route('/conges/add', methods=['GET', 'POST'])
+@login_required
+def add_conge():
+    conn = get_db()
+    cur = get_cursor(conn)
+    
+    if request.method == 'POST':
+        employe_id = request.form.get('employe_id')
+        type_conge = request.form.get('type_conge')
+        date_debut = request.form.get('date_debut')
+        date_fin = request.form.get('date_fin')
+        motif = request.form.get('motif', '')
+        
+        if employe_id and type_conge and date_debut and date_fin:
+            # Calculate days
+            from datetime import datetime
+            d1 = datetime.strptime(date_debut, '%Y-%m-%d')
+            d2 = datetime.strptime(date_fin, '%Y-%m-%d')
+            nombre_jours = (d2 - d1).days + 1
+            
+            cur.execute("""
+                INSERT INTO conges (employe_id, type_conge, date_debut, date_fin, nombre_jours, motif, statut)
+                VALUES (%s, %s, %s, %s, %s, %s, 'en attente')
+            """, (employe_id, type_conge, date_debut, date_fin, nombre_jours, motif))
+            conn.commit()
+            flash("Demande de congé soumise avec succès", "success")
+            cur.close(); conn.close()
+            return redirect(url_for('conges'))
+        else:
+            flash("Veuillez remplir tous les champs obligatoires", "danger")
+    
+    # GET: load employees
+    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+    employees = cur.fetchall()
     cur.close(); conn.close()
-    return render_template('conges.html', conges=conges_list, employees=[], soldes=soldes, annee_courante=annee_courante)
+    return render_template('conge_form.html', employees=employees)
+
+@app.route('/conges/update/<int:id>', methods=['POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def update_conge(id):
+    action = request.form.get('action')
+    conn = get_db()
+    cur = get_cursor(conn)
+    
+    if action == 'approuver':
+        cur.execute("UPDATE conges SET statut = 'approuvé' WHERE id = %s", (id,))
+        # Update solde
+        cur.execute("SELECT employe_id, nombre_jours, date_debut FROM conges WHERE id = %s", (id,))
+        conge = cur.fetchone()
+        if conge:
+            from datetime import datetime
+            annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
+            mettre_a_jour_solde(conge['employe_id'], -int(conge['nombre_jours']), annee)
+            flash("Congé approuvé et solde mis à jour", "success")
+    elif action == 'refuser':
+        cur.execute("UPDATE conges SET statut = 'refusé' WHERE id = %s", (id,))
+        flash("Congé refusé", "info")
+    
+    conn.commit()
+    cur.close(); conn.close()
+    return redirect(url_for('conges'))
+
+@app.route('/conges/delete/<int:id>', methods=['POST'])
+@login_required
+def delete_conge(id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("DELETE FROM conges WHERE id = %s", (id,))
+    conn.commit()
+    cur.close(); conn.close()
+    flash("Demande de congé supprimée", "success")
+    return redirect(url_for('conges'))
+
 
 @app.route('/audit')
 @role_required('admin', 'rh')
@@ -1736,8 +1396,106 @@ def delete_document(doc_id):
 @app.route('/historique')
 @login_required
 def historique():
-    return render_template('historique.html', presences=[], employees=[], total_pointages=0, total_heures=0, employes_concernes=0)
+    conn = get_db()
+    cur = get_cursor(conn)
 
+    # Récupérer les filtres
+    selected_employe = request.args.get('employe_id', '').strip()
+    date_debut = request.args.get('date_debut', '').strip()
+    date_fin = request.args.get('date_fin', '').strip()
+    selected_statut = request.args.get('statut', '').strip()
+
+    # Construction de la requête
+    query = """
+        SELECT p.*, e.nom, e.prenom 
+        FROM presences p 
+        JOIN employes e ON p.employe_id = e.id 
+    """
+    params = []
+    conditions = []
+
+    if selected_employe:
+        conditions.append("p.employe_id = %s")
+        params.append(int(selected_employe))
+
+    if date_debut:
+        conditions.append("p.date >= %s")
+        params.append(date_debut)
+
+    if date_fin:
+        conditions.append("p.date <= %s")
+        params.append(date_fin)
+
+    if selected_statut:
+        conditions.append("p.statut = %s")
+        params.append(selected_statut)
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    query += " ORDER BY p.date DESC, p.heure_arrivee DESC LIMIT 500"
+
+    cur.execute(query, params)
+    presences_list = cur.fetchall()
+
+    # Traitement des données + calculs
+    total_pointages = len(presences_list)
+    total_heures = 0.0
+    employes_set = set()
+
+    for p in presences_list:
+        # Normaliser les heures
+        if p.get('heure_arrivee'):
+            p['heure_arrivee'] = str(p['heure_arrivee'])[:5]
+        if p.get('heure_depart'):
+            p['heure_depart'] = str(p['heure_depart'])[:5]
+
+        employes_set.add(p.get('employe_id'))
+
+        # Calcul durée
+        try:
+            if p.get('heure_arrivee') and p.get('heure_depart'):
+                ha_parts = str(p['heure_arrivee']).split(':')[:2]
+                hd_parts = str(p['heure_depart']).split(':')[:2]
+                ha_min = int(ha_parts[0]) * 60 + int(ha_parts[1])
+                hd_min = int(hd_parts[0]) * 60 + int(hd_parts[1])
+                mins = hd_min - ha_min
+                if mins > 0:
+                    duree = round(mins / 60, 1)
+                    p['duree_heures'] = duree
+                    total_heures += duree
+                else:
+                    p['duree_heures'] = None
+            else:
+                p['duree_heures'] = None
+        except Exception:
+            p['duree_heures'] = None
+
+        # Retard (pour cohérence)
+        p['retard_minutes'] = calculer_retard(p.get('heure_arrivee'))
+        p['retard'] = p['retard_minutes'] > 0
+
+    employes_concernes = len(employes_set)
+
+    # Liste employés pour le filtre
+    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
+    employees = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        'historique.html',
+        presences=presences_list,
+        employees=employees,
+        total_pointages=total_pointages,
+        total_heures=round(total_heures, 1),
+        employes_concernes=employes_concernes,
+        selected_employe=selected_employe,
+        date_debut=date_debut,
+        date_fin=date_fin,
+        selected_statut=selected_statut
+    )
 @app.route('/departements')
 @login_required
 def departements():

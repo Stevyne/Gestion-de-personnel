@@ -31,7 +31,11 @@
                         <div class="actions">
                             <a href="{{ url_for('edit_departement', id=dept.id) }}" class="btn btn-secondary" style="padding:4px 10px;font-size:0.75rem;">✏️</a>
                             <form action="{{ url_for('delete_departement', id=dept.id) }}" method="post" style="display:inline;"
-                                  onsubmit="return confirm('Supprimer le département {{ dept.nom }} ?')">
+                                  class="confirm-form"
+                                  data-confirm-title="Supprimer le département ?"
+                                  data-confirm-subtitle="Action irréversible"
+                                  data-confirm-icon="🏢"
+                                  data-confirm-warning="Les employés associés ne seront pas supprimés.">
                                 <button type="submit" class="btn btn-danger" style="padding:4px 10px;font-size:0.75rem;">🗑️</button>
                             </form>
                         </div>

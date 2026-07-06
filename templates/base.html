@@ -7,12 +7,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Roboto+Mono&amp;display=swap" rel="stylesheet">
     <style>
-        /* ===== BEAUTIFUL DELETE CONFIRMATION MODAL ===== */
+        /* ===== BEAUTIFUL GENERIC CONFIRMATION MODAL ===== */
         .modal-backdrop {
             position: fixed;
             inset: 0;
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(6px);
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
             z-index: 99999;
             display: none;
             align-items: center;
@@ -25,11 +25,11 @@
             animation: fadeInBackdrop 0.2s ease forwards;
         }
 
-        .delete-modal {
+        .confirm-modal {
             background: #ffffff;
             border-radius: 16px;
             width: 100%;
-            max-width: 420px;
+            max-width: 440px;
             box-shadow: 0 25px 60px -15px rgb(0 0 0 / 0.35);
             border: 1px solid #e2e8f0;
             overflow: hidden;
@@ -44,24 +44,34 @@
 
         .modal-header {
             text-align: center;
-            padding: 26px 24px 16px;
+            padding: 28px 24px 12px;
         }
 
         .modal-icon {
-            width: 66px;
-            height: 66px;
+            width: 68px;
+            height: 68px;
             background: #fee2e2;
             color: #dc2626;
             border-radius: 50%;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 30px;
+            font-size: 32px;
             margin-bottom: 14px;
         }
 
+        .modal-icon.warning {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .modal-icon.info {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
         .modal-title {
-            font-size: 1.4rem;
+            font-size: 1.35rem;
             font-weight: 700;
             color: #0f172a;
             margin: 0 0 4px;
@@ -77,20 +87,20 @@
             padding: 8px 24px 20px;
         }
 
-        .employee-preview {
+        .preview-box {
             display: flex;
             align-items: center;
             gap: 14px;
             background: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 12px;
-            padding: 12px 16px;
-            margin-bottom: 18px;
+            padding: 13px 16px;
+            margin-bottom: 16px;
         }
 
         .preview-avatar {
-            width: 46px;
-            height: 46px;
+            width: 44px;
+            height: 44px;
             background: linear-gradient(135deg, #2563eb, #3b82f6);
             color: white;
             border-radius: 999px;
@@ -98,23 +108,27 @@
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             flex-shrink: 0;
         }
 
-        .preview-name {
+        .preview-content {
+            flex: 1;
+        }
+
+        .preview-title {
             font-weight: 700;
             color: #0f172a;
-            font-size: 1.05rem;
+            font-size: 1.02rem;
             line-height: 1.1;
         }
 
-        .preview-id {
+        .preview-subtitle {
             font-size: 0.82rem;
             color: #64748b;
         }
 
-        .warning-text {
+        .warning-box {
             background: #fef2f2;
             border: 1px solid #fecaca;
             border-radius: 10px;
@@ -179,7 +193,6 @@
                 <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">📋 Historique</a>
                 <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
-                <a href="{{ url_for('add_employee') }}" class="nav-link btn-primary">+ Nouvel employé</a>
                 
                 <div style="display:flex;align-items:center;gap:10px;margin-left:12px;padding-left:12px;border-left:1px solid #e2e8f0;">
                     <a href="{{ url_for('notifications') }}" style="position:relative;padding:4px 8px;text-decoration:none;color:#475569;">
@@ -198,7 +211,11 @@
             {% else %}
             <div class="nav-links">
                 <a href="{{ url_for('login') }}" class="nav-link">🔐 Connexion</a>
-                <a href="{{ url_for('register') }}" class="nav-link" style="background:#f1f5f9;color:#166534;padding:6px 14px;border-radius:6px;">📝 S'inscrire</a>
+                {% if current_role == 'admin' %}
+                <a href="{{ url_for('register') }}" class="nav-link" style="background:#e0e7ff;color:#1e40af;padding:6px 14px;border-radius:6px;font-weight:600;">
+                    👤 Inscrire
+                </a>
+                {% endif %}
             </div>
             {% endif %}
         </div>
@@ -220,110 +237,169 @@
         <p>Gestion du Personnel • 2026 • Flask + PostgreSQL</p>
     </footer>
 
-    <!-- ==================== DELETE CONFIRMATION POPUP ==================== -->
-    <div id="deleteModal" class="modal-backdrop">
-        <div class="delete-modal">
+    <!-- ==================== GENERIC CONFIRMATION MODAL ==================== -->
+    <div id="confirmModal" class="modal-backdrop">
+        <div class="confirm-modal">
             <div class="modal-header">
-                <div class="modal-icon">🗑️</div>
-                <h3 class="modal-title">Supprimer cet employé ?</h3>
-                <p class="modal-subtitle">Action irréversible</p>
+                <div class="modal-icon" id="modalIcon">🗑️</div>
+                <h3 class="modal-title" id="modalTitle">Confirmer l'action ?</h3>
+                <p class="modal-subtitle" id="modalSubtitle">Cette action est irréversible</p>
             </div>
 
             <div class="modal-body">
-                <div class="employee-preview" id="modalPreview">
-                    <!-- filled by JS -->
+                <div class="preview-box" id="modalPreview" style="display: none;">
+                    <!-- JS fills this -->
                 </div>
 
-                <div class="warning-text">
-                    <strong>Attention :</strong> Cette suppression entraînera la perte définitive des présences, congés, documents et du compte utilisateur associé.
+                <div class="warning-box" id="modalWarning">
+                    <!-- JS fills this -->
                 </div>
             </div>
 
             <div class="modal-footer">
-                <button type="button" class="modal-btn cancel" onclick="closeDeleteModal()">Annuler</button>
-                <button type="button" class="modal-btn danger" id="confirmDeleteBtn">Supprimer définitivement</button>
+                <button type="button" class="modal-btn cancel" onclick="closeConfirmModal()">Annuler</button>
+                <button type="button" class="modal-btn danger" id="confirmBtn">Confirmer</button>
             </div>
         </div>
     </div>
 
     <script>
-        let currentForm = null;
+        let currentConfirmForm = null;
 
-        function showDeleteModal(formElement, id, name) {
-            const modal = document.getElementById('deleteModal');
+        // Generic beautiful confirmation modal
+        function showConfirmModal(formElement, options = {}) {
+            const modal = document.getElementById('confirmModal');
+            const icon = document.getElementById('modalIcon');
+            const title = document.getElementById('modalTitle');
+            const subtitle = document.getElementById('modalSubtitle');
             const preview = document.getElementById('modalPreview');
-            const confirmBtn = document.getElementById('confirmDeleteBtn');
+            const warning = document.getElementById('modalWarning');
+            const confirmBtn = document.getElementById('confirmBtn');
 
-            // Build preview
-            const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-            
-            preview.innerHTML = `
-                <div class="preview-avatar">${initials}</div>
-                <div>
-                    <div class="preview-name">${name}</div>
-                    <div class="preview-id">Employé #${id}</div>
-                </div>
-            `;
+            // Defaults
+            const iconEmoji = options.icon || '🗑️';
+            const iconClass = options.iconClass || '';
+            const modalTitle = options.title || 'Confirmer l\'action ?';
+            const modalSubtitle = options.subtitle || 'Cette action est irréversible.';
+            const previewHTML = options.previewHTML || '';
+            const warningText = options.warning || 'Êtes-vous sûr de vouloir continuer ?';
 
-            currentForm = formElement;
+            // Apply content
+            icon.innerHTML = iconEmoji;
+            icon.className = 'modal-icon ' + iconClass;
+
+            title.textContent = modalTitle;
+            subtitle.textContent = modalSubtitle;
+
+            if (previewHTML) {
+                preview.innerHTML = previewHTML;
+                preview.style.display = 'flex';
+            } else {
+                preview.style.display = 'none';
+            }
+
+            warning.innerHTML = `<strong>Attention :</strong> ${warningText}`;
+
+            currentConfirmForm = formElement;
             modal.classList.add('show');
 
-            // Confirm action
+            // Confirm handler
             confirmBtn.onclick = () => {
-                if (currentForm) {
+                if (currentConfirmForm) {
                     confirmBtn.disabled = true;
-                    confirmBtn.textContent = 'Suppression...';
-                    currentForm.submit();
+                    confirmBtn.textContent = 'Traitement...';
+                    currentConfirmForm.submit();
                 }
             };
 
             // Close handlers
             modal.onclick = (e) => {
-                if (e.target === modal) closeDeleteModal();
+                if (e.target === modal) closeConfirmModal();
             };
 
             document.addEventListener('keydown', function escHandler(e) {
                 if (e.key === "Escape") {
-                    closeDeleteModal();
+                    closeConfirmModal();
                     document.removeEventListener('keydown', escHandler);
                 }
             }, { once: true });
         }
 
-        function closeDeleteModal() {
-            const modal = document.getElementById('deleteModal');
-            const confirmBtn = document.getElementById('confirmDeleteBtn');
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirmModal');
+            const confirmBtn = document.getElementById('confirmBtn');
             
             modal.classList.remove('show');
             confirmBtn.disabled = false;
-            confirmBtn.textContent = 'Supprimer définitivement';
-            currentForm = null;
+            confirmBtn.textContent = 'Confirmer';
+            currentConfirmForm = null;
         }
 
-        // Initialize delete modal for all forms
+        // Initialize all confirmation forms
         document.addEventListener('DOMContentLoaded', function () {
-            const deleteForms = document.querySelectorAll('form.delete-employee-form');
-
-            deleteForms.forEach(form => {
+            // 1. Employee delete (already using data attrs)
+            const employeeForms = document.querySelectorAll('form.delete-employee-form');
+            employeeForms.forEach(form => {
                 const btn = form.querySelector('button[type="submit"]');
                 if (!btn) return;
 
-                // Prevent default browser confirm if any
                 form.onsubmit = null;
 
                 btn.addEventListener('click', function (e) {
                     e.preventDefault();
 
-                    const id = form.dataset.employeeId || form.action.match(/\/(\d+)\/delete/)?.[1] || '?';
+                    const id = form.dataset.employeeId || '?';
                     const name = form.dataset.employeeName || 'cet employé';
 
-                    showDeleteModal(form, id, name);
+                    const initials = name.split(' ').map(w => w[0] || '').join('').toUpperCase().slice(0, 2);
+
+                    showConfirmModal(form, {
+                        icon: '🗑️',
+                        title: 'Supprimer cet employé ?',
+                        subtitle: 'Action irréversible',
+                        previewHTML: `
+                            <div class="preview-avatar">${initials}</div>
+                            <div class="preview-content">
+                                <div class="preview-title">${name}</div>
+                                <div class="preview-subtitle">Employé #${id}</div>
+                            </div>
+                        `,
+                        warning: 'Cette suppression entraînera la perte définitive des présences, congés, documents et du compte utilisateur associé.'
+                    });
                 });
             });
 
-            console.log('%c✅ Delete confirmation modal ready (pop-up enabled)', 'color:#16a34a');
+            // 2. Generic confirmation forms (new system)
+            const genericForms = document.querySelectorAll('form.confirm-form');
+            genericForms.forEach(form => {
+                const btn = form.querySelector('button[type="submit"]');
+                if (!btn) return;
+
+                form.onsubmit = null;
+
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault();
+
+                    const title = form.dataset.confirmTitle || 'Confirmer ?';
+                    const subtitle = form.dataset.confirmSubtitle || 'Cette action est irréversible.';
+                    const warning = form.dataset.confirmWarning || 'Êtes-vous sûr de vouloir continuer ?';
+                    const icon = form.dataset.confirmIcon || '🗑️';
+                    const iconClass = form.dataset.confirmIconClass || '';
+                    const preview = form.dataset.confirmPreview || '';
+
+                    showConfirmModal(form, {
+                        icon: icon,
+                        iconClass: iconClass,
+                        title: title,
+                        subtitle: subtitle,
+                        previewHTML: preview,
+                        warning: warning
+                    });
+                });
+            });
+
+            console.log('%c✅ Beautiful confirmation modal system ready (all deletes + generic)', 'color:#16a34a');
         });
     </script>
-<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
