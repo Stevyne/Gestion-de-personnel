@@ -1263,13 +1263,45 @@ def dashboard():
         recent_conges=recent_conges
     )
 
-@app.route('/presences')
+@app.route('/presences', methods=['GET', 'POST'])
 @login_required
 def presences():
     conn = get_db()
     cur = get_cursor(conn)
     cur.execute("SELECT p.*, e.nom, e.prenom FROM presences p JOIN employes e ON p.employe_id = e.id ORDER BY p.date DESC LIMIT 60")
     presences_list = cur.fetchall()
+
+    # === Gestion du pointage rapide (POST) ===
+    if request.method == 'POST':
+        action = request.form.get('action')
+        employe_id = request.form.get('quick_employe_id')
+        date_val = datetime.now().strftime('%Y-%m-%d')
+        
+        if action and employe_id:
+            employe_id = int(employe_id)
+            
+            if action == 'clock_in':
+                cur.execute("""
+                    INSERT INTO presences (employe_id, date, heure_arrivee, statut)
+                    VALUES (%s, %s, CURRENT_TIME, 'présent')
+                    ON CONFLICT (employe_id, date) 
+                    DO UPDATE SET heure_arrivee = CURRENT_TIME
+                """, (employe_id, date_val))
+                conn.commit()
+                flash('Entrée pointée', 'success')
+            
+            elif action == 'clock_out':
+                cur.execute("""
+                    INSERT INTO presences (employe_id, date, heure_depart)
+                    VALUES (%s, %s, CURRENT_TIME)
+                    ON CONFLICT (employe_id, date) 
+                    DO UPDATE SET heure_depart = CURRENT_TIME
+                """, (employe_id, date_val))
+                conn.commit()
+                flash('Sortie pointée', 'success')
+            
+            cur.close(); conn.close()
+            return redirect(url_for('presences'))
 
     for p in presences_list:
         # Convert datetime.time → string (ex: "09:15")
@@ -1714,8 +1746,60 @@ def departements():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        flash('Inscription simulée (mode test)', 'info')
-        return redirect(url_for('login'))
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        
+        # Validation
+        if not username or not password:
+            flash("Veuillez remplir tous les champs obligatoires.", "danger")
+            return render_template('register.html')
+        
+        if len(username) < 3:
+            flash("Le nom d'utilisateur doit contenir au moins 3 caractères.", "danger")
+            return render_template('register.html')
+        
+        if len(password) < 6:
+            flash("Le mot de passe doit contenir au moins 6 caractères.", "danger")
+            return render_template('register.html')
+        
+        if password != confirm_password:
+            flash("Les mots de passe ne correspondent pas.", "danger")
+            return render_template('register.html')
+        
+        conn = get_db()
+        cur = get_cursor(conn)
+        
+        try:
+            # Check if username already exists
+            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+            if cur.fetchone():
+                flash("Ce nom d'utilisateur est déjà utilisé.", "danger")
+                cur.close()
+                conn.close()
+                return render_template('register.html')
+            
+            # Create the user (default role = 'employe')
+            password_hash = generate_password_hash(password)
+            cur.execute(
+                "INSERT INTO users (username, password_hash, role, employe_id) VALUES (%s, %s, %s, %s)",
+                (username, password_hash, 'employe', None)
+            )
+            conn.commit()
+            
+            flash("Compte créé avec succès ! Vous pouvez maintenant vous connecter.", "success")
+            cur.close()
+            conn.close()
+            return redirect(url_for('login'))
+            
+        except Exception as e:
+            conn.rollback()
+            flash(f"Une erreur est survenue lors de la création du compte : {str(e)}", "danger")
+            print("Erreur register:", e)
+        finally:
+            cur.close()
+            conn.close()
+    
     return render_template('register.html')
 
 @app.route('/add_employee', methods=['GET', 'POST'])
