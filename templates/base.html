@@ -206,6 +206,9 @@
                         {% if session.get('role') == 'admin' %}<span style="font-size:0.7rem;background:#e0e7ff;padding:1px 5px;border-radius:3px;">admin</span>{% endif %}
                     </span>
                     <a href="{{ url_for('logout') }}" class="nav-link" style="padding:6px 14px;font-size:0.82rem;background:#fee2e2;color:#991b1b;border-radius:6px;">Déconnexion</a>
+                    {% if session.get('role') == 'admin' %}
+                    <a href="{{ url_for('register') }}" class="nav-link" style="padding:6px 14px;font-size:0.82rem;background:#e0e7ff;color:#1e40af;border-radius:6px;">Ajouter utilisateur</a>
+                    {% endif %}
                 </div>
             </div>
             {% else %}

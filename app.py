@@ -1756,6 +1756,8 @@ def delete_departement(id):
 
 
 @app.route('/register', methods=['GET', 'POST'])
+@login_required
+@role_required('admin', 'rh')
 def register():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
