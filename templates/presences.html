@@ -19,6 +19,8 @@
         </div>
         
         <form method="post" action="{{ url_for('presences') }}" style="display:flex; gap:12px; align-items:end; flex-wrap:wrap;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
             <div style="flex:1; min-width:240px;">
                 <label style="font-size:0.78rem; color:#475569; margin-bottom:3px; display:block;">Employé</label>
                 <select name="quick_employe_id" class="form-control" style="padding:9px 12px; font-size:0.95rem;">
@@ -54,13 +56,14 @@
             <input type="text" name="search" placeholder="Rechercher employé..." class="search-input" value="{{ search }}">
             <input type="date" name="date" class="filter-select" value="{{ date_filter }}">
             <button type="submit" class="btn btn-secondary">🔍 Filtrer</button>
-            {% if search or date_filter %}
+            
             <a href="{{ url_for('presences') }}" class="btn btn-secondary">Réinitialiser</a>
-            {% endif %}
+            
         </form>
     </div>
 
     <div class="table-container">
+
         <table>
             <thead>
                 <tr>
@@ -137,11 +140,14 @@
                     </td>
                     <td>
                         <div class="actions" style="gap:4px;">
+                        
                             <form action="{{ url_for('clock_in', employe_id=p.employe_id) }}" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="date" value="{{ p.date }}">
                                 <button type="submit" class="btn" style="padding:3px 8px; font-size:0.65rem; background:#16a34a; color:white;">⏰ Entrée</button>
                             </form>
                             <form action="{{ url_for('clock_out', employe_id=p.employe_id) }}" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="date" value="{{ p.date }}">
                                 <button type="submit" class="btn" style="padding:3px 8px; font-size:0.65rem; background:#ca8a04; color:white;">⏱️ Sortie</button>
                             </form>
@@ -154,6 +160,7 @@
                                   data-confirm-subtitle="Action irréversible"
                                   data-confirm-icon="🕒"
                                   data-confirm-warning="Cette présence sera définitivement supprimée.">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;">🗑️</button>
                             </form>
                         </div>

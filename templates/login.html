@@ -9,6 +9,8 @@
 
     <div style="padding: 30px 28px;">
         <form method="POST" action="{{ url_for('login') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
             <div class="form-group" style="margin-bottom: 18px;">
                 <label for="username" style="font-weight: 600; display: block; margin-bottom: 6px;">Identifiant</label>
                 <input type="text" id="username" name="username" class="form-control" 
@@ -29,10 +31,6 @@
             </button>
         </form>
 
-        <div style="margin-top: 22px; text-align: center; font-size: 0.85rem; color: #64748b;">
-            <p style="margin: 0;">Compte de démonstration :</p>
-            <strong style="color: #334155;">admin</strong> / <strong style="color: #334155;">admin123</strong>
-        </div>
     </div>
 </div>
 

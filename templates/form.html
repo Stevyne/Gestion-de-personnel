@@ -7,6 +7,8 @@
     </div>
 
     <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
         <div class="form-row">
             <div class="form-group">
                 <label for="nom">Nom *</label>
@@ -56,7 +58,7 @@
             <div class="form-group">
                 <label for="date_embauche">Date d'embauche</label>
                 <input type="date" id="date_embauche" name="date_embauche" class="form-control" 
-                       value="{{ employee.date_embauche if employee else '' }}">
+                       value="{{ employee.date_embauche.strftime('%Y-%m-%d') if employee and employee.date_embauche else '' }}">
             </div>
             <div class="form-group">
                 <label for="salaire">Salaire annuel (€)</label>

@@ -1,4 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_limiter.util import get_remote_address
+from flask_talisman import Talisman
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import psycopg2
@@ -22,6 +27,16 @@ from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 app.secret_key = 'secret-key-gestion-personnel-2026-auth'
+
+# === CONFIGURATION SÉCURITÉ ===
+app.config['SECRET_KEY'] = app.secret_key
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+app.config['PERMANENT_SESSION_LIFETIME'] = int(os.environ.get('PERMANENT_SESSION_LIFETIME', 3600))
+
+# Limiter les uploads
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://postgres:Stevyne123@localhost:5432/gestion_personnel')
 
@@ -57,6 +72,36 @@ def get_admin_email():
     return app.config.get('ADMIN_EMAIL') or 'admin@entreprise.fr'
 
 mail = Mail(app)
+
+# === INITIALISATION SÉCURITÉ ===
+csrf = CSRFProtect(app)
+
+# Rate limiter
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Headers de sécurité (Talisman)
+csp = {
+    'default-src': "'self'",
+    'script-src': ["'self'", "'unsafe-inline'"],  # pour les scripts inline actuels
+    'style-src': ["'self'", "'unsafe-inline'"],
+    'img-src': ["'self'", "data:"],
+}
+talisman = Talisman(
+    app,
+    force_https=False,                    # passez à True en production HTTPS
+    frame_options='DENY',
+    content_security_policy=csp,
+    referrer_policy='strict-origin-when-cross-origin',
+    session_cookie_secure=app.config['SESSION_COOKIE_SECURE']
+)
+print("✅ Sécurité activée : CSRF + RateLimit + Talisman")
+
+
 
 # ==================== HTML EMAIL ====================
 def send_html_email(recipients, subject, html_template, **context):
@@ -473,7 +518,7 @@ def login():
             log_action(user_id=user['id'], username=user['username'], action="LOGIN")
             flash(f'Bienvenue, {user["username"]} !', 'success')
             return redirect(url_for('dashboard'))
-        flash('Identifiants incorrects.', 'danger')
+        flash('Identifiants ou mot de passe incorrects.', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')
@@ -852,6 +897,8 @@ def presences():
     cur.execute("SELECT p.*, e.nom, e.prenom FROM presences p JOIN employes e ON p.employe_id = e.id ORDER BY p.date DESC LIMIT 60")
     presences_list = cur.fetchall()
 
+    
+
     # === Gestion du pointage rapide (POST) ===
     if request.method == 'POST':
         action = request.form.get('action')
@@ -883,6 +930,31 @@ def presences():
             
             cur.close(); conn.close()
             return redirect(url_for('presences'))
+
+    # Normal GET: display the page with filters
+    search = request.args.get('search', '').strip().lower()
+    date_filter = request.args.get('date', '').strip()
+
+    # Construction requête filtrée
+    q = "SELECT p.*, e.nom, e.prenom FROM presences p JOIN employes e ON p.employe_id = e.id "
+    params = []
+    conditions = []
+
+    if search:
+        conditions.append("(LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)")
+        params.extend([f"%{search}%", f"%{search}%"])
+
+    if date_filter:
+        conditions.append("p.date = %s")
+        params.append(date_filter)
+
+    if conditions:
+        q += " WHERE " + " AND ".join(conditions)
+
+    q += " ORDER BY p.date DESC, p.heure_arrivee DESC LIMIT 100"
+
+    cur.execute(q, params)
+    presences_list = cur.fetchall()
 
     for p in presences_list:
         # Convert datetime.time → string (ex: "09:15")
@@ -1120,6 +1192,60 @@ def index():
     cur.execute("SELECT * FROM employes ORDER BY nom, prenom")
     employes = cur.fetchall()
 
+    search = request.args.get('search', '').strip()
+    selected_dept = request.args.get('departement', '').strip()
+    sort = request.args.get('sort', 'nom')
+    order = request.args.get('order', 'asc')
+    
+    # Dynamic filter query
+    query = "SELECT * FROM employes WHERE 1=1"
+    params = []
+    
+    if search:
+        query += """ AND (
+            LOWER(nom) LIKE %s OR 
+            LOWER(prenom) LIKE %s OR 
+            LOWER(poste) LIKE %s OR 
+            LOWER(email) LIKE %s
+        )"""
+        s = f"%{search.lower()}%"
+        params.extend([s, s, s, s])
+    
+    if selected_dept:
+        query += " AND departement = %s"
+        params.append(selected_dept)
+    
+    # Sorting
+    sort_map = {
+        'nom': 'nom, prenom',
+        'salaire': 'COALESCE(salaire, 0)',
+        'date_embauche': 'date_embauche',
+        'poste': 'poste'
+    }
+    sort_col = sort_map.get(sort, 'nom, prenom')
+    direction = 'DESC' if order.lower() == 'desc' else 'ASC'
+    query += f" ORDER BY {sort_col} {direction}"
+    
+    cur.execute(query, params)
+    employes = cur.fetchall()
+    
+        # Enrich with last presence info (for better view)
+    for emp in employes:
+        cur.execute("""
+            SELECT date, heure_arrivee, statut 
+            FROM presences 
+            WHERE employe_id = %s 
+            ORDER BY date DESC 
+            LIMIT 1
+        """, (emp['id'],))
+        last = cur.fetchone()
+        if last:
+            emp['last_presence'] = dict(last)
+            if emp['last_presence'].get('heure_arrivee'):
+                emp['last_presence']['heure_arrivee'] = str(emp['last_presence']['heure_arrivee'])[:5]
+        else:
+            emp['last_presence'] = None
+
     cur.execute("SELECT DISTINCT nom FROM departements ORDER BY nom")
     depts = cur.fetchall()
 
@@ -1178,12 +1304,13 @@ def edit_employee(id):
         departement = request.form.get('departement')
         email = request.form.get('email')
         telephone = request.form.get('telephone')
+        salaire = request.form.get('salaire')
         
         cur.execute("""
             UPDATE employes 
-            SET nom=%s, prenom=%s, poste=%s, departement=%s, email=%s, telephone=%s 
+            SET nom=%s, prenom=%s, poste=%s, departement=%s, email=%s, telephone=%s, salaire=%s
             WHERE id = %s
-        """, (nom, prenom, poste, departement, email, telephone, id))
+        """, (nom, prenom, poste, departement, email, telephone, salaire, id))
         conn.commit()
         flash("Employé modifié avec succès", "success")
         cur.close()
@@ -1499,7 +1626,134 @@ def historique():
 @app.route('/departements')
 @login_required
 def departements():
-    return render_template('departements.html', departements=[])
+    conn = get_db()
+    cur = get_cursor(conn)
+    
+    # Get departments with employee count
+    cur.execute("""
+        SELECT 
+            d.id, 
+            d.nom, 
+            COALESCE(d.description, '') as description, 
+            COALESCE(d.responsable, '') as responsable, 
+            COUNT(e.id) as nb_employes 
+        FROM departements d 
+        LEFT JOIN employes e ON e.departement = d.nom 
+        GROUP BY d.id, d.nom, d.description, d.responsable 
+        ORDER BY d.nom
+    """)
+    departements = cur.fetchall()
+    
+    # Get totals
+    cur.execute("SELECT COUNT(*) as total FROM departements")
+    total_depts = cur.fetchone()['total'] or 0
+    
+    cur.execute("SELECT COUNT(*) as total FROM employes")
+    total_employes = cur.fetchone()['total'] or 0
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('departements.html', 
+                          departements=departements,
+                          total_depts=total_depts,
+                          total_employes=total_employes)
+
+
+@app.route('/departements/add', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def add_departement():
+    if request.method == 'POST':
+        nom = request.form.get('nom', '').strip()
+        description = request.form.get('description', '').strip()
+        responsable = request.form.get('responsable', '').strip()
+        
+        if not nom:
+            flash("Le nom du département est obligatoire", "danger")
+        else:
+            conn = get_db()
+            cur = get_cursor(conn)
+            try:
+                cur.execute("""
+                    INSERT INTO departements (nom, description, responsable)
+                    VALUES (%s, %s, %s)
+                """, (nom, description or None, responsable or None))
+                conn.commit()
+                flash(f"Département '{nom}' créé avec succès", "success")
+                cur.close()
+                conn.close()
+                return redirect(url_for('departements'))
+            except Exception as e:
+                conn.rollback()
+                if "unique" in str(e).lower():
+                    flash("Ce nom de département existe déjà", "danger")
+                else:
+                    flash(f"Erreur : {str(e)}", "danger")
+                cur.close()
+                conn.close()
+    
+    return render_template('dept_form.html', dept=None, title="Nouveau département")
+
+@app.route('/departements/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def edit_departement(id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    
+    if request.method == 'POST':
+        nom = request.form.get('nom', '').strip()
+        description = request.form.get('description', '').strip()
+        responsable = request.form.get('responsable', '').strip()
+        
+        if not nom:
+            flash("Le nom du département est obligatoire", "danger")
+        else:
+            try:
+                cur.execute("""
+                    UPDATE departements 
+                    SET nom=%s, description=%s, responsable=%s 
+                    WHERE id=%s
+                """, (nom, description or None, responsable or None, id))
+                conn.commit()
+                flash("Département mis à jour", "success")
+                cur.close()
+                conn.close()
+                return redirect(url_for('departements'))
+            except Exception as e:
+                conn.rollback()
+                flash(f"Erreur : {str(e)}", "danger")
+    
+    # GET: load current department
+    cur.execute("SELECT * FROM departements WHERE id = %s", (id,))
+    dept = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not dept:
+        flash("Département introuvable", "danger")
+        return redirect(url_for('departements'))
+    
+    return render_template('dept_form.html', dept=dept, title="Modifier le département")
+
+@app.route('/departements/delete/<int:id>', methods=['POST'])
+@login_required
+@role_required('admin')
+def delete_departement(id):
+    conn = get_db()
+    cur = get_cursor(conn)
+    try:
+        cur.execute("DELETE FROM departements WHERE id = %s", (id,))
+        conn.commit()
+        flash("Département supprimé", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erreur lors de la suppression : {str(e)}", "danger")
+    cur.close()
+    conn.close()
+    return redirect(url_for('departements'))
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():

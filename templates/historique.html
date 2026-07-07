@@ -12,6 +12,8 @@
     <!-- Filtres avancés -->
     <div class="filters" style="margin-bottom: 24px;">
         <form method="get" action="{{ url_for('historique') }}" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
             <div style="min-width: 220px; flex: 1;">
                 <label style="font-size: 0.8rem; display: block; margin-bottom: 4px; color: #475569;">Employé</label>
                 <select name="employe_id" class="filter-select" style="width: 100%;">
@@ -137,6 +139,7 @@
                                   data-confirm-subtitle="Action irréversible"
                                   data-confirm-icon="🕒"
                                   data-confirm-warning="Cette présence sera définitivement supprimée.">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;">🗑️</button>
                             </form>
                         </div>

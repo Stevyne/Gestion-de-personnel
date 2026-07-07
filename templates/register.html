@@ -15,7 +15,7 @@
         <!-- Form Body -->
         <div class="auth-body">
             <form method="POST" action="{{ url_for('register') }}" id="registerForm">
-                
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <!-- Username -->
                 <div class="form-row">
                     <label for="username">Identifiant</label>

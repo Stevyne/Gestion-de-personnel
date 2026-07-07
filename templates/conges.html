@@ -47,10 +47,12 @@
                     <td>
                         {% if c.statut == 'en attente' %}
                             <form action="{{ url_for('update_conge', id=c.id) }}" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="action" value="approuver">
                                 <button type="submit" class="btn btn-secondary" style="padding:4px 8px;font-size:0.7rem;background:#16a34a;color:white;">✓ Approuver</button>
                             </form>
                             <form action="{{ url_for('update_conge', id=c.id) }}" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="action" value="refuser">
                                 <button type="submit" class="btn btn-danger" style="padding:4px 8px;font-size:0.7rem;">✗ Refuser</button>
                             </form>
@@ -62,6 +64,7 @@
                               data-confirm-subtitle="Action irréversible"
                               data-confirm-icon="📅"
                               data-confirm-warning="Le solde de congés ne sera pas automatiquement rétabli.">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-danger" style="padding:4px 7px;font-size:0.7rem;">🗑️</button>
                         </form>
                     </td>

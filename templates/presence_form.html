@@ -7,6 +7,8 @@
     </div>
 
     <form method="POST" action="{{ url_for('add_presence') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        
         <div class="form-group">
             <label for="employe_id">Employé *</label>
             <select name="employe_id" id="employe_id" class="form-control" required>

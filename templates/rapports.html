@@ -10,6 +10,7 @@
     </div>
 
     <form method="get" class="filters" style="margin-bottom: 24px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <select name="type" class="filter-select">
             <option value="presences" {% if type_rapport == 'presences' %}selected{% endif %}>Présences</option>
             <option value="conges" {% if type_rapport == 'conges' %}selected{% endif %}>Congés</option>
@@ -101,9 +102,9 @@
 
     <div style="margin-top:20px; text-align:right;">
         {% if presences %}
-        <a href="{{ url_for('export_presences_excel') }}?my=0" class="btn" style="background:#15803d;color:white;">📊 Exporter Excel</a>
+        <a href="{{ url_for('export_presences_excel') }}?my=0" class="btn" style="background:#15803d;color:white;">📊 Excel</a>
         {% elif conges %}
-        <a href="{{ url_for('export_conges_excel') }}" class="btn" style="background:#15803d;color:white;">📊 Exporter Excel</a>
+        <a href="{{ url_for('export_conges_excel') }}" class="btn" style="background:#15803d;color:white;">📊 Excel</a>
         {% endif %}
     </div>
 </div>

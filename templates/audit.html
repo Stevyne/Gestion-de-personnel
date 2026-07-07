@@ -27,6 +27,8 @@
 
     <div class="filters" style="margin-bottom:20px;">
         <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
             <div>
                 <label style="font-size:0.8rem; display:block; margin-bottom:4px;">Action</label>
                 <select name="action" class="filter-select" style="padding:8px 12px;">
