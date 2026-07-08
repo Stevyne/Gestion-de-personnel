@@ -19,6 +19,7 @@
     --radius-lg: 16px;
 }
 
+/* ===== BASE ===== */
 * {
     margin: 0;
     padding: 0;
@@ -188,6 +189,294 @@ body {
     background: #fecaca !important;
 }
 
+/* ===== MOBILE HAMBURGER BUTTON (improved + always clickable) ===== */
+.nav-toggle {
+    display: none;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: 1.68rem;
+    color: #475569;
+    cursor: pointer;
+    padding: 8px 14px;
+    line-height: 1;
+    border-radius: 12px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 1500;          /* very high so it never gets covered */
+    pointer-events: auto !important;
+}
+
+.nav-toggle:hover {
+    background: #e2e8f0;
+    color: #1e2937;
+    border-color: #cbd5e1;
+    transform: scale(1.04);
+}
+
+.nav-toggle:active {
+    transform: scale(0.96);
+}
+
+/* Desktop nav visible by default */
+.desktop-nav {
+    display: flex;
+}
+
+/* Hide desktop nav + show hamburger on mobile */
+@media (max-width: 768px) {
+    .desktop-nav {
+        display: none !important;
+    }
+    
+    .nav-toggle {
+        display: inline-flex;
+    }
+}
+
+/* ===== MOBILE DRAWER - CONSOLIDATED (anti-blur + tap fixes) ===== */
+.nav-drawer {
+    position: fixed !important;
+    top: 0;
+    right: 0;
+    width: min(295px, 82vw);
+    height: 100vh;
+    background: #ffffff;
+    box-shadow: -18px 0 55px rgba(15, 23, 42, 0.25);
+    z-index: 1310; /* higher than overlay (1250) */
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.38s cubic-bezier(0.25, 1, 0.3, 1);
+    will-change: transform;
+    overflow: hidden;
+    -webkit-overflow-scrolling: touch;
+    
+    /* Strong anti-blur / GPU acceleration fixes for phones */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.nav-drawer.open {
+    transform: translateX(0) !important;
+}
+
+/* Ensure drawer and all its children are always interactive */
+.nav-drawer,
+.nav-drawer * {
+    pointer-events: auto !important;
+}
+
+/* Drawer header */
+.drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 19px 22px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    flex-shrink: 0;
+}
+
+.drawer-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: #0f172a;
+}
+
+.drawer-close {
+    background: none;
+    border: none;
+    font-size: 2.15rem;
+    color: #64748b;
+    cursor: pointer;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    line-height: 1;
+}
+
+.drawer-close:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+    transform: rotate(90deg);
+}
+
+/* Scrollable links */
+.drawer-links {
+    padding: 8px 0 16px;
+    overflow-y: auto;
+    flex: 1;
+    -webkit-overflow-scrolling: touch;
+}
+
+.drawer-links .nav-link {
+    display: flex;
+    align-items: center;
+    padding: 15px 22px;
+    margin: 2px 12px;
+    border-radius: 12px;
+    font-size: 1.02rem;
+    font-weight: 500;
+    color: #475569;
+    text-decoration: none;
+    gap: 14px;
+    transition: all 0.15s ease;
+}
+
+.drawer-links .nav-link:hover {
+    background: #f1f5f9;
+    color: #1e2937;
+    transform: translateX(4px);
+}
+
+.drawer-links .nav-link.active {
+    background: #e0e7ff;
+    color: #1e40af;
+    font-weight: 600;
+}
+
+/* Primary button inside drawer */
+.drawer-links .nav-link.btn-primary {
+    background: linear-gradient(135deg, #2563eb, #1e40af);
+    color: white !important;
+    margin: 14px 20px 8px;
+    justify-content: center;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+    transition: all 0.2s ease;
+}
+
+.drawer-links .nav-link.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.4);
+}
+
+/* User section in drawer */
+.drawer-user-section {
+    padding: 16px 20px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    flex-shrink: 0;
+}
+
+.drawer-user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+}
+
+.drawer-user-info .user-name {
+    font-weight: 600;
+    color: #334155;
+}
+
+.drawer-user-info .user-role {
+    font-size: 0.7rem;
+    background: #e0e7ff;
+    color: #4338ca;
+    padding: 1px 7px;
+    border-radius: 999px;
+    margin-left: 5px;
+}
+
+.drawer-logout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.drawer-logout:hover {
+    background: #fecaca;
+    transform: translateY(-1px);
+}
+
+/* ===== OVERLAY (NO BLUR + CONTROLLED POINTER EVENTS) ===== */
+.nav-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.48);
+    z-index: 1250;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    /* IMPORTANT: start disabled so it doesn't steal the opening tap */
+    pointer-events: none;
+    /* No blur ever */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    filter: none !important;
+}
+
+.nav-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Only allow clicks on overlay after the delay (prevents instant close) */
+.nav-overlay.enabled {
+    pointer-events: auto !important;
+}
+
+/* Mobile overrides */
+@media (max-width: 768px) {
+    .nav-overlay {
+        background: rgba(15, 23, 42, 0.55);
+    }
+}
+
+/* Desktop hide */
+@media (min-width: 769px) {
+    .nav-drawer,
+    .nav-overlay {
+        display: none !important;
+    }
+}
+
+/* ===== MOBILE DRAWER - HAMBURGER ALWAYS CLICKABLE (FIX) ===== */
+.nav-toggle,
+#navToggle {
+    position: relative;
+    z-index: 1600 !important;
+    pointer-events: auto !important;
+}
+
+/* When drawer is open, hamburger is the highest element */
+body.drawer-open .nav-toggle,
+body.drawer-open #navToggle {
+    z-index: 3500 !important;
+    pointer-events: auto !important;
+    background: #f8fafc !important;
+}
+
+/* Drawer X button */
+.drawer-close {
+    z-index: 3600 !important;
+    pointer-events: auto !important;
+}
+
 /* ===== CONTAINER & LAYOUT ===== */
 .container {
     max-width: 1280px;
@@ -216,6 +505,8 @@ body {
     margin-bottom: 24px;
     padding-bottom: 18px;
     border-bottom: 1px solid #f1f5f9;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .card-header h1 {
@@ -362,7 +653,7 @@ body {
     border-color: #fecaca;
 }
 
-/* ===== TABLES ===== */
+/* ===== TABLES - RESPONSIVE ===== */
 .table-container {
     overflow-x: auto;
     background: white;
@@ -370,12 +661,14 @@ body {
     box-shadow: var(--card-shadow);
     border: 1px solid #f1f5f9;
     margin-bottom: 30px;
+    -webkit-overflow-scrolling: touch;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.95rem;
+    min-width: 700px; /* desktop default */
 }
 
 th, td {
@@ -393,6 +686,7 @@ th {
     letter-spacing: 0.65px;
     padding-top: 14px;
     padding-bottom: 14px;
+    white-space: nowrap;
 }
 
 tbody tr {
@@ -601,7 +895,7 @@ tbody tr:last-child td {
     border-bottom: none;
 }
 
-/* ===== UPLOADS / DOCUMENTS (future) ===== */
+/* ===== UPLOADS / DOCUMENTS ===== */
 .upload-zone {
     border: 2px dashed #cbd5e1;
     border-radius: 12px;
@@ -638,7 +932,7 @@ footer {
     margin-top: 40px;
 }
 
-/* ===== RESPONSIVE ===== */
+/* ===== RESPONSIVE - MOBILE FIRST IMPROVEMENTS ===== */
 @media (max-width: 992px) {
     .nav-container {
         padding: 0 16px;
@@ -663,30 +957,7 @@ footer {
         font-size: 1.25rem;
     }
     
-    .nav-links {
-        gap: 2px;
-        flex-wrap: wrap;
-        width: 100%;
-        justify-content: flex-start;
-        margin-top: 8px;
-    }
-    
-    .nav-link {
-        padding: 6px 11px;
-        font-size: 0.82rem;
-    }
-    
-    .nav-user-section {
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 6px;
-        padding-left: 10px;
-        margin-left: 6px;
-    }
-    
-    .user-info {
-        display: none; /* hide username on small screens to save space */
-    }
+    /* Mobile navigation already handled above */
     
     .card {
         padding: 16px;
@@ -730,15 +1001,57 @@ footer {
     
     .table-container {
         margin-bottom: 20px;
+        border-radius: 12px;
     }
     
+    /* ===== RESPONSIVE TABLES - STACKED CARDS ON MOBILE ===== */
     table {
+        min-width: 100%;
         font-size: 0.82rem;
-        min-width: 620px; /* force scroll on small screens */
     }
     
-    th, td {
-        padding: 9px 10px;
+    table thead {
+        display: none;
+    }
+    
+    table tr {
+        display: block;
+        margin-bottom: 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        background: white;
+        overflow: hidden;
+    }
+    
+    table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px;
+        border-bottom: 1px solid #f1f5f9;
+        text-align: right;
+        min-height: 42px;
+    }
+    
+    table td:last-child {
+        border-bottom: none;
+    }
+    
+    table td:before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #475569;
+        text-transform: uppercase;
+        font-size: 0.72rem;
+        letter-spacing: 0.5px;
+        flex: 0 0 42%;
+        text-align: left;
+        padding-right: 12px;
+    }
+    
+    .actions {
+        justify-content: flex-end;
     }
     
     .btn {
@@ -766,6 +1079,14 @@ footer {
     .solde-value {
         font-size: 1.8rem;
     }
+    
+    .quick-actions {
+        flex-direction: column;
+    }
+    
+    .quick-actions .btn {
+        width: 100%;
+    }
 }
 
 @media (max-width: 480px) {
@@ -790,23 +1111,23 @@ footer {
         font-size: 0.78rem;
     }
     
-    table {
-        font-size: 0.78rem;
-        min-width: 540px;
+    table td {
+        padding: 9px 12px;
+        font-size: 0.82rem;
     }
     
     .card-header h1 {
         font-size: 1.25rem;
     }
     
-    .quick-actions {
-        flex-direction: column;
-        width: 100%;
+    .form-control {
+        padding: 11px 14px;
+        font-size: 0.95rem;
     }
     
-    .quick-actions .btn {
-        width: 100%;
-        justify-content: center;
+    .btn {
+        padding: 10px 18px;
+        font-size: 0.9rem;
     }
 }
 
@@ -831,11 +1152,12 @@ footer {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-/* Table action buttons polish */
+/* Table action buttons */
 .actions {
     display: flex;
     gap: 6px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 /* Calendar navigation */
@@ -848,4 +1170,42 @@ footer {
 
 .calendar-nav .btn {
     padding: 8px 18px;
+}
+
+/* ===== FINAL TOUCH: BETTER MOBILE TABLES ===== */
+@media (max-width: 768px) {
+    .table-container {
+        box-shadow: none;
+        border: 1px solid #e2e8f0;
+    }
+    
+    table tr {
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
+    
+    .employee-name {
+        font-weight: 700;
+    }
+}
+
+/* ============================================= */
+/* CLEANED MOBILE DRAWER STYLES (final) */
+/* ============================================= */
+
+/* Mobile specific tweaks */
+@media (max-width: 768px) {
+    .nav-drawer {
+        width: min(285px, 80vw);
+        box-shadow: -14px 0 44px rgba(15, 23, 42, 0.32);
+    }
+    
+    /* Bigger reliable tap targets */
+    .drawer-links .nav-link {
+        padding: 18px 22px;
+        font-size: 1.06rem;
+    }
+    
+    .nav-overlay {
+        background: rgba(15, 23, 42, 0.55);
+    }
 }

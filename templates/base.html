@@ -5,14 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestion du Personnel</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Roboto+Mono&amp;display=swap" rel="stylesheet">
     <style>
-        /* ===== BEAUTIFUL GENERIC CONFIRMATION MODAL ===== */
+        /* ===== BEAUTIFUL DELETE CONFIRMATION MODAL ===== */
         .modal-backdrop {
             position: fixed;
             inset: 0;
-            background: rgba(15, 23, 42, 0.75);
-            backdrop-filter: blur(8px);
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(6px);
             z-index: 99999;
             display: none;
             align-items: center;
@@ -25,11 +24,11 @@
             animation: fadeInBackdrop 0.2s ease forwards;
         }
 
-        .confirm-modal {
+        .delete-modal {
             background: #ffffff;
             border-radius: 16px;
             width: 100%;
-            max-width: 440px;
+            max-width: 420px;
             box-shadow: 0 25px 60px -15px rgb(0 0 0 / 0.35);
             border: 1px solid #e2e8f0;
             overflow: hidden;
@@ -44,34 +43,24 @@
 
         .modal-header {
             text-align: center;
-            padding: 28px 24px 12px;
+            padding: 26px 24px 16px;
         }
 
         .modal-icon {
-            width: 68px;
-            height: 68px;
+            width: 66px;
+            height: 66px;
             background: #fee2e2;
             color: #dc2626;
             border-radius: 50%;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 32px;
+            font-size: 30px;
             margin-bottom: 14px;
         }
 
-        .modal-icon.warning {
-            background: #fef3c7;
-            color: #d97706;
-        }
-
-        .modal-icon.info {
-            background: #dbeafe;
-            color: #2563eb;
-        }
-
         .modal-title {
-            font-size: 1.35rem;
+            font-size: 1.4rem;
             font-weight: 700;
             color: #0f172a;
             margin: 0 0 4px;
@@ -87,20 +76,20 @@
             padding: 8px 24px 20px;
         }
 
-        .preview-box {
+        .employee-preview {
             display: flex;
             align-items: center;
             gap: 14px;
             background: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 12px;
-            padding: 13px 16px;
-            margin-bottom: 16px;
+            padding: 12px 16px;
+            margin-bottom: 18px;
         }
 
         .preview-avatar {
-            width: 44px;
-            height: 44px;
+            width: 46px;
+            height: 46px;
             background: linear-gradient(135deg, #2563eb, #3b82f6);
             color: white;
             border-radius: 999px;
@@ -108,27 +97,23 @@
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 1.1rem;
+            font-size: 1.15rem;
             flex-shrink: 0;
         }
 
-        .preview-content {
-            flex: 1;
-        }
-
-        .preview-title {
+        .preview-name {
             font-weight: 700;
             color: #0f172a;
-            font-size: 1.02rem;
+            font-size: 1.05rem;
             line-height: 1.1;
         }
 
-        .preview-subtitle {
+        .preview-id {
             font-size: 0.82rem;
             color: #64748b;
         }
 
-        .warning-box {
+        .warning-text {
             background: #fef2f2;
             border: 1px solid #fecaca;
             border-radius: 10px;
@@ -185,34 +170,43 @@
                 <span class="brand-text">Gestion du Personnel</span>
             </div>
             
+            <!-- Hamburger button for mobile -->
+            <button class="nav-toggle" id="navToggle" aria-label="Ouvrir le menu">
+                ☰
+            </button>
+            
             {% if session.get('user_id') %}
-            <div class="nav-links">
+            <!-- Desktop navigation -->
+            <div class="nav-links desktop-nav">
                 <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">📊 Tableau de Bord</a>
                 <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">👥 Employés</a>
                 <a href="{{ url_for('presences') }}" class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">🕒 Présences</a>
                 <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">📋 Historique</a>
                 <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
-                
-                <div style="display:flex;align-items:center;gap:10px;margin-left:12px;padding-left:12px;border-left:1px solid #e2e8f0;">
-                    <a href="{{ url_for('notifications') }}" style="position:relative;padding:4px 8px;text-decoration:none;color:#475569;">
+                {% if session.get('role') == 'admin' %}
+                <a href="{{ url_for('add_employee') }}" class="nav-link btn-primary">+ Nouvel employé</a>
+                {% endif %}
+                <div class="nav-user-section">
+                    <a href="{{ url_for('notifications') }}" class="nav-notif" style="position:relative;">
                         🛎️
                         {% if unread_notifications and unread_notifications > 0 %}
-                        <span style="position:absolute;top:-2px;right:-2px;background:#dc2626;color:white;font-size:0.65rem;padding:1px 5px;border-radius:999px;font-weight:700;">{{ unread_notifications }}</span>
+                        <span class="notif-badge">{{ unread_notifications }}</span>
                         {% endif %}
                     </a>
-                    <span style="font-size:0.85rem;color:#475569;">
-                        👤 {{ session.get('username', 'Utilisateur') }}
-                        {% if session.get('role') == 'admin' %}<span style="font-size:0.7rem;background:#e0e7ff;padding:1px 5px;border-radius:3px;">admin</span>{% endif %}
-                    </span>
-                    <a href="{{ url_for('logout') }}" class="nav-link" style="padding:6px 14px;font-size:0.82rem;background:#fee2e2;color:#991b1b;border-radius:6px;">Déconnexion</a>
-                    {% if session.get('role') == 'admin' %}
-                    <a href="{{ url_for('register') }}" class="nav-link" style="padding:6px 14px;font-size:0.82rem;background:#e0e7ff;color:#1e40af;border-radius:6px;">Ajouter utilisateur</a>
-                    {% endif %}
+                    
+                    <div class="user-info">
+                        <span class="user-name">{{ session.get('username', 'Utilisateur') }}</span>
+                        {% if session.get('role') == 'admin' %}
+                        <span class="user-role">admin</span>
+                        {% endif %}
+                    </div>
+                    
+                    <a href="{{ url_for('logout') }}" class="nav-link logout-btn">Déconnexion</a>
                 </div>
             </div>
             {% else %}
-            <div class="nav-links">
+            <div class="nav-links desktop-nav">
                 <a href="{{ url_for('login') }}" class="nav-link">🔐 Connexion</a>
                 {% if current_role == 'admin' %}
                 <a href="{{ url_for('register') }}" class="nav-link" style="background:#e0e7ff;color:#1e40af;padding:6px 14px;border-radius:6px;font-weight:600;">
@@ -222,7 +216,65 @@
             </div>
             {% endif %}
         </div>
+        
     </nav>
+    
+    <!-- MOBILE DRAWER (compartiment) - Moved outside navbar for proper stacking -->
+    <div id="navDrawer" class="nav-drawer">
+        <div class="drawer-header">
+            <div class="drawer-brand">
+                <span class="logo">👥</span>
+                <span class="brand-text">Menu</span>
+            </div>
+            <button class="drawer-close" id="drawerClose" aria-label="Fermer le menu">×</button>
+        </div>
+        
+        <div class="drawer-links">
+            {% if session.get('user_id') %}
+                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">📊 Tableau de Bord</a>
+                <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">👥 Employés</a>
+                <a href="{{ url_for('presences') }}" class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">🕒 Présences</a>
+                <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">📋 Historique</a>
+                <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
+                <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
+                {% if session.get('role') == 'admin' %}
+                    <a href="{{ url_for('add_employee') }}" class="nav-link btn-primary">+ Nouvel employé</a>
+                {% endif %}
+                
+                <!-- User section -->
+                <div class="drawer-user-section">
+                    <div class="drawer-user-info">
+                        <span>👤</span>
+                        <span class="user-name">{{ session.get('username', 'Utilisateur') }}</span>
+                        {% if session.get('role') == 'admin' %}
+                            <span class="user-role">admin</span>
+                        {% endif %}
+                    </div>
+                    
+                    <a href="{{ url_for('notifications') }}" class="nav-link" style="padding: 10px 16px; margin: 0 0 8px 0;">
+                        🛎️ Notifications 
+                        {% if unread_notifications and unread_notifications > 0 %}
+                            <span style="background:#dc2626;color:white;font-size:0.7rem;padding:1px 6px;border-radius:999px;margin-left:4px;">{{ unread_notifications }}</span>
+                        {% endif %}
+                    </a>
+                    
+                    <a href="{{ url_for('logout') }}" class="drawer-logout">
+                        Déconnexion
+                    </a>
+                </div>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="nav-link">🔐 Connexion</a>
+                {% if current_role == 'admin' %}
+                <a href="{{ url_for('register') }}" class="nav-link" style="background:#e0e7ff;color:#1e40af;padding:12px 20px;border-radius:10px;margin:8px 20px;justify-content:center;font-weight:600;">
+                    👤 Inscrire
+                </a>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Backdrop overlay for mobile drawer -->
+    <div id="navOverlay" class="nav-overlay"></div>
 
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -240,168 +292,237 @@
         <p>Gestion du Personnel • 2026 • Flask + PostgreSQL</p>
     </footer>
 
-    <!-- ==================== GENERIC CONFIRMATION MODAL ==================== -->
-    <div id="confirmModal" class="modal-backdrop">
-        <div class="confirm-modal">
+    <!-- ==================== DELETE CONFIRMATION POPUP ==================== -->
+    <div id="deleteModal" class="modal-backdrop">
+        <div class="delete-modal">
             <div class="modal-header">
-                <div class="modal-icon" id="modalIcon">🗑️</div>
-                <h3 class="modal-title" id="modalTitle">Confirmer l'action ?</h3>
-                <p class="modal-subtitle" id="modalSubtitle">Cette action est irréversible</p>
+                <div class="modal-icon">🗑️</div>
+                <h3 class="modal-title">Supprimer cet employé ?</h3>
+                <p class="modal-subtitle">Action irréversible</p>
             </div>
 
             <div class="modal-body">
-                <div class="preview-box" id="modalPreview" style="display: none;">
-                    <!-- JS fills this -->
+                <div class="employee-preview" id="modalPreview">
+                    <!-- filled by JS -->
                 </div>
 
-                <div class="warning-box" id="modalWarning">
-                    <!-- JS fills this -->
+                <div class="warning-text">
+                    <strong>Attention :</strong> Cette suppression entraînera la perte définitive des présences, congés, documents et du compte utilisateur associé.
                 </div>
             </div>
 
             <div class="modal-footer">
-                <button type="button" class="modal-btn cancel" onclick="closeConfirmModal()">Annuler</button>
-                <button type="button" class="modal-btn danger" id="confirmBtn">Confirmer</button>
+                <button type="button" class="modal-btn cancel" onclick="closeDeleteModal()">Annuler</button>
+                <button type="button" class="modal-btn danger" id="confirmDeleteBtn">Supprimer définitivement</button>
             </div>
         </div>
     </div>
 
     <script>
-        let currentConfirmForm = null;
+        // ===== ROBUST MOBILE DRAWER (no blur + no tap-through + clickable) =====
+        const navToggle = document.getElementById('navToggle');
+        const navDrawer = document.getElementById('navDrawer');
+        const navOverlay = document.getElementById('navOverlay');
+        const drawerClose = document.getElementById('drawerClose');
 
-        // Generic beautiful confirmation modal
-        function showConfirmModal(formElement, options = {}) {
-            const modal = document.getElementById('confirmModal');
-            const icon = document.getElementById('modalIcon');
-            const title = document.getElementById('modalTitle');
-            const subtitle = document.getElementById('modalSubtitle');
-            const preview = document.getElementById('modalPreview');
-            const warning = document.getElementById('modalWarning');
-            const confirmBtn = document.getElementById('confirmBtn');
+        let isDrawerOpen = false;
+        let enableOverlayTimer = null;
 
-            // Defaults
-            const iconEmoji = options.icon || '🗑️';
-            const iconClass = options.iconClass || '';
-            const modalTitle = options.title || 'Confirmer l\'action ?';
-            const modalSubtitle = options.subtitle || 'Cette action est irréversible.';
-            const previewHTML = options.previewHTML || '';
-            const warningText = options.warning || 'Êtes-vous sûr de vouloir continuer ?';
+        function openDrawer() {
+            if (!navDrawer || isDrawerOpen) return;
 
-            // Apply content
-            icon.innerHTML = iconEmoji;
-            icon.className = 'modal-icon ' + iconClass;
+            if (enableOverlayTimer) clearTimeout(enableOverlayTimer);
 
-            title.textContent = modalTitle;
-            subtitle.textContent = modalSubtitle;
+            // Open drawer
+            navDrawer.classList.add('open');
+            document.body.classList.add('drawer-open');
 
-            if (previewHTML) {
-                preview.innerHTML = previewHTML;
-                preview.style.display = 'flex';
-            } else {
-                preview.style.display = 'none';
+            if (navOverlay) {
+                navOverlay.classList.add('show');
+                navOverlay.classList.remove('enabled');
             }
 
-            warning.innerHTML = `<strong>Attention :</strong> ${warningText}`;
+            document.body.style.overflow = 'hidden';
+            isDrawerOpen = true;
 
-            currentConfirmForm = formElement;
+            if (navToggle) {
+                navToggle.style.pointerEvents = 'auto';
+                navToggle.style.zIndex = '3500';
+            }
+
+            if (navigator.vibrate) navigator.vibrate(6);
+
+            // Allow overlay to close after short safe delay
+            enableOverlayTimer = setTimeout(() => {
+                if (navOverlay && navDrawer.classList.contains('open')) {
+                    navOverlay.classList.add('enabled');
+                }
+                enableOverlayTimer = null;
+            }, 320);
+        }
+
+        function closeDrawer(fast = false) {
+            if (!navDrawer || !isDrawerOpen) return;
+
+            if (enableOverlayTimer) {
+                clearTimeout(enableOverlayTimer);
+                enableOverlayTimer = null;
+            }
+
+            // Aggressive cleanup
+            navDrawer.classList.remove('open');
+            document.body.classList.remove('drawer-open');
+
+            if (navOverlay) {
+                navOverlay.classList.remove('show');
+                navOverlay.classList.remove('enabled');
+            }
+
+            document.body.style.overflow = '';
+
+            const delay = fast ? 30 : 120;
+            setTimeout(() => {
+                isDrawerOpen = false;
+                // Extra safety: force icon back
+                if (navToggle) navToggle.innerHTML = '☰';
+            }, delay);
+        }
+
+        // === HAMBURGER TOGGLE (very robust) ===
+        if (navToggle) {
+            navToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+
+                if (isDrawerOpen) {
+                    closeDrawer(true);
+                } else {
+                    openDrawer();
+                }
+
+                setTimeout(() => {
+                    if (navToggle && navDrawer) {
+                        navToggle.innerHTML = navDrawer.classList.contains('open') ? '✕' : '☰';
+                    }
+                }, 20);
+            }, { passive: false });
+        }
+
+        // === DRAWER CLOSE BUTTON (X) - very reliable ===
+        if (drawerClose) {
+            // Primary event listener
+            drawerClose.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                closeDrawer(true);
+            }, { passive: false });
+
+            // Fallback inline onclick (for extra safety on phones)
+            drawerClose.onclick = function(e) {
+                if (e) e.stopImmediatePropagation();
+                closeDrawer(true);
+            };
+        }
+
+        // Overlay click: only when enabled + target exactly overlay
+        if (navOverlay) {
+            function safeOverlayClose(e) {
+                // Must be enabled first (prevents instant close)
+                if (!navOverlay.classList.contains('enabled')) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    return;
+                }
+                // Close ONLY if the user tapped the overlay background itself
+                if (e.target === navOverlay || e.target === navOverlay) {
+                    e.stopImmediatePropagation();
+                    closeDrawer();
+                }
+            }
+
+            // Attach multiple reliable listeners for phones
+            navOverlay.addEventListener('click', safeOverlayClose, { passive: false, capture: true });
+            navOverlay.addEventListener('touchend', safeOverlayClose, { passive: false });
+
+            // Prevent early taps
+            navOverlay.addEventListener('touchstart', function(e) {
+                if (!navOverlay.classList.contains('enabled')) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                }
+            }, { passive: false });
+        }
+
+        // Full event isolation for drawer contents
+        function guardEvents(el) {
+            if (!el) return;
+            ['click','touchstart','touchend','pointerdown'].forEach(t => {
+                el.addEventListener(t, e => e.stopImmediatePropagation(), { passive: false });
+            });
+        }
+        if (navDrawer) {
+            guardEvents(navDrawer);
+            ['.drawer-header','.drawer-links','.drawer-user-section'].forEach(s => guardEvents(navDrawer.querySelector(s)));
+            navDrawer.querySelectorAll('a,button,.nav-link,.drawer-logout').forEach(el => {
+                el.addEventListener('click', e => e.stopImmediatePropagation(), { passive: false });
+                el.addEventListener('touchstart', e => e.stopImmediatePropagation(), { passive: false });
+            });
+        }
+
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && isDrawerOpen) closeDrawer(); });
+
+        function setupAutoClose() {
+            document.querySelectorAll('.nav-drawer a, .nav-drawer .nav-link, .drawer-logout').forEach(link => {
+                link.addEventListener('click', e => {
+                    e.stopImmediatePropagation();
+                    setTimeout(() => closeDrawer(true), 90);
+                }, { passive: false });
+            });
+        }
+
+        function setupHamburgerIcon() {
+            if (navDrawer && navToggle) {
+                navDrawer.addEventListener('transitionend', () => {
+                    navToggle.innerHTML = navDrawer.classList.contains('open') ? '✕' : '☰';
+                });
+            }
+        }
+
+        let currentForm = null;
+        function showDeleteModal(formElement, id, name) {
+            const modal = document.getElementById('deleteModal');
+            const preview = document.getElementById('modalPreview');
+            const btn = document.getElementById('confirmDeleteBtn');
+            const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+            preview.innerHTML = `<div class="preview-avatar">${initials}</div><div><div class="preview-name">${name}</div><div class="preview-id">Employé #${id}</div></div>`;
+            currentForm = formElement;
             modal.classList.add('show');
-
-            // Confirm handler
-            confirmBtn.onclick = () => {
-                if (currentConfirmForm) {
-                    confirmBtn.disabled = true;
-                    confirmBtn.textContent = 'Traitement...';
-                    currentConfirmForm.submit();
-                }
-            };
-
-            // Close handlers
-            modal.onclick = (e) => {
-                if (e.target === modal) closeConfirmModal();
-            };
-
-            document.addEventListener('keydown', function escHandler(e) {
-                if (e.key === "Escape") {
-                    closeConfirmModal();
-                    document.removeEventListener('keydown', escHandler);
-                }
-            }, { once: true });
+            btn.onclick = () => { if (currentForm) { btn.disabled = true; btn.textContent = 'Suppression...'; currentForm.submit(); } };
+            modal.onclick = e => { if (e.target === modal) closeDeleteModal(); };
         }
-
-        function closeConfirmModal() {
-            const modal = document.getElementById('confirmModal');
-            const confirmBtn = document.getElementById('confirmBtn');
-            
+        function closeDeleteModal() {
+            const modal = document.getElementById('deleteModal');
+            const btn = document.getElementById('confirmDeleteBtn');
             modal.classList.remove('show');
-            confirmBtn.disabled = false;
-            confirmBtn.textContent = 'Confirmer';
-            currentConfirmForm = null;
+            btn.disabled = false;
+            btn.textContent = 'Supprimer définitivement';
+            currentForm = null;
         }
 
-        // Initialize all confirmation forms
-        document.addEventListener('DOMContentLoaded', function () {
-            // 1. Employee delete (already using data attrs)
-            const employeeForms = document.querySelectorAll('form.delete-employee-form');
-            employeeForms.forEach(form => {
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('form.delete-employee-form').forEach(form => {
                 const btn = form.querySelector('button[type="submit"]');
                 if (!btn) return;
-
                 form.onsubmit = null;
-
-                btn.addEventListener('click', function (e) {
+                btn.addEventListener('click', e => {
                     e.preventDefault();
-
-                    const id = form.dataset.employeeId || '?';
-                    const name = form.dataset.employeeName || 'cet employé';
-
-                    const initials = name.split(' ').map(w => w[0] || '').join('').toUpperCase().slice(0, 2);
-
-                    showConfirmModal(form, {
-                        icon: '🗑️',
-                        title: 'Supprimer cet employé ?',
-                        subtitle: 'Action irréversible',
-                        previewHTML: `
-                            <div class="preview-avatar">${initials}</div>
-                            <div class="preview-content">
-                                <div class="preview-title">${name}</div>
-                                <div class="preview-subtitle">Employé #${id}</div>
-                            </div>
-                        `,
-                        warning: 'Cette suppression entraînera la perte définitive des présences, congés, documents et du compte utilisateur associé.'
-                    });
+                    showDeleteModal(form, form.dataset.employeeId || '?', form.dataset.employeeName || 'cet employé');
                 });
             });
-
-            // 2. Generic confirmation forms (new system)
-            const genericForms = document.querySelectorAll('form.confirm-form');
-            genericForms.forEach(form => {
-                const btn = form.querySelector('button[type="submit"]');
-                if (!btn) return;
-
-                form.onsubmit = null;
-
-                btn.addEventListener('click', function (e) {
-                    e.preventDefault();
-
-                    const title = form.dataset.confirmTitle || 'Confirmer ?';
-                    const subtitle = form.dataset.confirmSubtitle || 'Cette action est irréversible.';
-                    const warning = form.dataset.confirmWarning || 'Êtes-vous sûr de vouloir continuer ?';
-                    const icon = form.dataset.confirmIcon || '🗑️';
-                    const iconClass = form.dataset.confirmIconClass || '';
-                    const preview = form.dataset.confirmPreview || '';
-
-                    showConfirmModal(form, {
-                        icon: icon,
-                        iconClass: iconClass,
-                        title: title,
-                        subtitle: subtitle,
-                        previewHTML: preview,
-                        warning: warning
-                    });
-                });
-            });
-
-            console.log('%c✅ Beautiful confirmation modal system ready (all deletes + generic)', 'color:#16a34a');
+            setupAutoClose();
+            setupHamburgerIcon();
+            window.addEventListener('resize', () => { if (window.innerWidth > 768 && isDrawerOpen) closeDrawer(true); });
+            console.log('%c✅ Super fluid animation + auto-close + responsive ready', 'color:#16a34a');
         });
     </script>
 </body>
