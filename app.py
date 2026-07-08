@@ -417,7 +417,15 @@ def init_db():
     conn = get_db()
     cur = get_cursor(conn)
 
-    cur.execute('''CREATE TABLE IF NOT EXISTS departements (id SERIAL PRIMARY KEY, nom VARCHAR(100) UNIQUE)''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS departements (
+        id SERIAL PRIMARY KEY,
+        nom VARCHAR(100) UNIQUE,
+        description TEXT,
+        responsable VARCHAR(150)
+    )''')
+    # Migration : ajoute les colonnes si la table existait déjà sans elles
+    cur.execute("ALTER TABLE departements ADD COLUMN IF NOT EXISTS description TEXT")
+    cur.execute("ALTER TABLE departements ADD COLUMN IF NOT EXISTS responsable VARCHAR(150)")
     cur.execute('''CREATE TABLE IF NOT EXISTS employes (id SERIAL PRIMARY KEY, nom VARCHAR(100) NOT NULL, prenom VARCHAR(100) NOT NULL, poste VARCHAR(150), departement VARCHAR(100), email VARCHAR(150), telephone VARCHAR(20), date_embauche DATE, salaire NUMERIC(10,2))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS presences (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), date DATE, heure_arrivee TIME, heure_depart TIME, statut VARCHAR(30) DEFAULT 'présent', commentaire TEXT, UNIQUE(employe_id, date))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS conges (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), type_conge VARCHAR(50), date_debut DATE, date_fin DATE, nombre_jours INTEGER, motif TEXT, statut VARCHAR(20) DEFAULT 'en attente', date_demande DATE DEFAULT CURRENT_DATE)''')
@@ -1136,10 +1144,18 @@ def update_conge(id):
         if conge:
             from datetime import datetime
             annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
-            mettre_a_jour_solde(conge['employe_id'], -int(conge['nombre_jours']), annee)
+            # recalculer_solde() fait la somme exacte des congés approuvés
+            # (plus fiable qu'un delta manuel qui pouvait désynchroniser le solde)
+            recalculer_solde(conge['employe_id'], annee)
             flash("Congé approuvé et solde mis à jour", "success")
     elif action == 'refuser':
         cur.execute("UPDATE conges SET statut = 'refusé' WHERE id = %s", (id,))
+        cur.execute("SELECT employe_id, date_debut FROM conges WHERE id = %s", (id,))
+        conge = cur.fetchone()
+        if conge:
+            from datetime import datetime
+            annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
+            recalculer_solde(conge['employe_id'], annee)
         flash("Congé refusé", "info")
     
     conn.commit()

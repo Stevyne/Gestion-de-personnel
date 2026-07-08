@@ -20,6 +20,7 @@
                 <a href="{{ url_for('export_presences_excel', my=1) }}" class="btn" style="background:#15803d;color:white;font-size:0.8rem;padding:4px 8px;">📊 Excel</a>
             </div>
         </div>
+        <div class="table-container">
         <table style="font-size:0.85rem;">
             <tr><th>Date</th><th>Arrivée</th><th>Retard</th><th>Départ</th><th>Statut</th></tr>
             {% for p in my_presences[:8] %}
@@ -32,6 +33,7 @@
             </tr>
             {% endfor %}
         </table>
+        </div>
     </div>
 
     <div>
@@ -43,6 +45,7 @@
                 <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn" style="background:#15803d;color:white;font-size:0.8rem;padding:4px 8px;">📊 Excel</a>
             </div>
         </div>
+        <div class="table-container">
         <table style="font-size:0.85rem;">
             <tr><th>Type</th><th>Dates</th><th>Jours</th><th>Statut</th></tr>
             {% for c in my_conges[:6] %}
@@ -54,6 +57,7 @@
             </tr>
             {% endfor %}
         </table>
+        </div>
         <div style="margin-top:12px;">
             <a href="{{ url_for('add_conge') }}" class="btn btn-primary">+ Nouvelle demande</a>
         </div>

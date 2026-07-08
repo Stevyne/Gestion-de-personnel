@@ -453,19 +453,18 @@
             }, { passive: false });
         }
 
-        // Full event isolation for drawer contents
         function guardEvents(el) {
             if (!el) return;
             ['click','touchstart','touchend','pointerdown'].forEach(t => {
-                el.addEventListener(t, e => e.stopImmediatePropagation(), { passive: false });
+                el.addEventListener(t, e => e.stopPropagation(), { passive: false });
             });
         }
         if (navDrawer) {
             guardEvents(navDrawer);
             ['.drawer-header','.drawer-links','.drawer-user-section'].forEach(s => guardEvents(navDrawer.querySelector(s)));
             navDrawer.querySelectorAll('a,button,.nav-link,.drawer-logout').forEach(el => {
-                el.addEventListener('click', e => e.stopImmediatePropagation(), { passive: false });
-                el.addEventListener('touchstart', e => e.stopImmediatePropagation(), { passive: false });
+                el.addEventListener('click', e => e.stopPropagation(), { passive: false });
+                el.addEventListener('touchstart', e => e.stopPropagation(), { passive: false });
             });
         }
 

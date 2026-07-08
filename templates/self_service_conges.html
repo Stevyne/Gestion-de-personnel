@@ -10,6 +10,7 @@
       <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn" style="background:#15803d;color:white;">📊 Excel</a>
     </div>
   </div>
+  <div class="table-container">
   <table>
     <thead><tr><th>Type</th><th>Dates</th><th>Jours</th><th>Statut</th></tr></thead>
     <tbody>
@@ -23,5 +24,6 @@
     {% else %}<tr><td colspan="4">Aucune demande.</td></tr>{% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% endblock %}
