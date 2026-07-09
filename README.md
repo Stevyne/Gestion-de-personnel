@@ -1,70 +1,67 @@
 # 👥 Gestion du Personnel
 
-**Application RH complète en Flask + PostgreSQL**  
-Système de gestion du personnel moderne, multi-utilisateur et professionnel.
+**Application RH complète en Flask + PostgreSQL**
+Système de gestion du personnel multi-utilisateur avec suivi des présences, congés, documents et notifications.
 
-> **Interface entièrement en français** • Support réel de plusieurs utilisateurs simultanés • Notifications persistantes par utilisateur
+> Interface entièrement en français • Multi-utilisateur réel (isolation par `user_id`) • Sécurité CSRF / rate limiting / headers HTTP
 
 ---
 
 ## ✨ Fonctionnalités principales
 
 ### 👤 Gestion des employés
-- CRUD complet des employés
-- Affectation aux départements
+- CRUD complet des employés (`/employes`, ajout via `/employes/add` ou `/add_employee`)
+- Affectation aux départements (CRUD départements via `/departements`)
 - Historique des salaires et dates d'embauche
+- Page `/historique` dédiée
 
 ### 🕒 Gestion des présences
-- Pointage entrée / sortie
-- Calcul automatique des retards (basé sur 09:00)
-- Historique détaillé
-- Envoi automatique d'emails HTML en cas de retard
+- Pointage entrée / sortie (`/presences/clock_in`, `/presences/clock_out`)
+- Calcul automatique des retards (seuil configurable, `HEURE_ARRIVEE_ATTENDUE = "09:00"` dans `app.py`)
+- Envoi automatique d'emails HTML en cas de retard (mode démo si pas de credentials mail)
 
 ### 🏖️ Gestion des congés
-- Demandes de congés (self-service)
-- Approbation / refus par admin/RH
-- **Soldes de congés** (25 jours par défaut, recalcul automatique)
-- Calendrier des congés
+- Demandes de congés en self-service (`/self-service/conges`)
+- Approbation / refus par admin ou RH
+- Soldes de congés (25 jours acquis par défaut, table `soldes_conges`, recalcul automatique)
+- Calendrier des congés (`/calendrier-conges`)
 
 ### 📁 Documents & Rapports
 - Upload de documents (PDF, Excel, images...)
-- Rapports avancés avec filtres (présences / congés)
-- Exports **PDF** et **Excel** (présences et congés)
+- Rapports avancés avec filtres (`/rapports`)
+- Exports PDF (ReportLab) et Excel (Openpyxl) pour présences et congés
 
 ### 🔔 Notifications
-- Notifications persistantes en base de données
-- **Support multi-utilisateur réel** (filtrage par `user_id`)
-- Badge de notifications non lues dans la navigation
-- Page dédiée `/notifications`
+- Notifications persistantes en base, filtrées par `user_id`
+- Badge de notifications non lues, page dédiée `/notifications`
 
 ### 🔐 Sécurité & Rôles
-- Authentification par session
+- Authentification par session (Werkzeug pour le hash des mots de passe)
 - 4 rôles : `admin`, `rh`, `manager`, `employe`
-- Self-service pour les employés (`/mon-espace`)
-- Logs d'audit complets
-
-### 📧 Emails
-- Emails HTML pour les retards
-- Configuration via variables d'environnement (Gmail, etc.)
-- Mode démo si pas de credentials
+- Self-service pour les employés (`/self-service` ou `/mon-espace`)
+- Logs d'audit (`/audit`, réservé à `admin`/`rh`)
+- Protection CSRF (Flask-WTF), rate limiting (Flask-Limiter), headers de sécurité (Flask-Talisman)
+- Formulaire d'inscription (`/register`)
 
 ---
 
 ## 🛠️ Technologies
 
-- **Backend** : Flask 3.0
-- **Base de données** : PostgreSQL (psycopg2 + RealDictCursor)
-- **Exports** : ReportLab (PDF) + Openpyxl (Excel)
-- **Emails** : Flask-Mail
-- **Frontend** : HTML + CSS responsive (mobile-first)
-- **Auth** : Werkzeug (hashage sécurisé)
+| Catégorie      | Choix                                              |
+|----------------|-----------------------------------------------------|
+| Backend        | Flask 3.0.3                                          |
+| Base de données| PostgreSQL (psycopg2-binary, RealDictCursor)         |
+| Sécurité       | Flask-WTF (CSRF), Flask-Limiter, Flask-Talisman, python-dotenv |
+| Emails         | Flask-Mail                                           |
+| Exports        | ReportLab (PDF), Openpyxl (Excel)                    |
+| Frontend       | HTML + CSS responsive mobile-first (pas de framework JS) |
+| Auth           | Werkzeug (hash des mots de passe)                    |
 
 ---
 
 ## 📦 Installation
 
 ### 1. Prérequis
-
 ```bash
 # Python 3.10+
 python3 --version
@@ -75,20 +72,16 @@ sudo apt install postgresql postgresql-contrib
 ```
 
 ### 2. Cloner et installer les dépendances
-
 ```bash
-cd /gestion_personnel
-
+git clone https://github.com/Stevyne/Gestion-de-personnel.git
+cd Gestion-de-personnel
 pip install -r requirements.txt
 ```
 
 ### 3. Configuration de la base de données
-
 ```bash
-# Créer la base
 sudo -u postgres psql
 ```
-
 Dans psql :
 ```sql
 CREATE DATABASE gestion_personnel;
@@ -97,116 +90,123 @@ GRANT ALL PRIVILEGES ON DATABASE gestion_personnel TO postgres;
 \q
 ```
 
-### 4. Variables d'environnement (optionnel)
-
+### 4. Variables d'environnement
+Copiez `.env.example` en `.env` et adaptez les valeurs :
 ```bash
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/gestion_personnel"
-
-# Emails (optionnel)
-export MAIL_USERNAME="votre@gmail.com"
-export MAIL_PASSWORD="votre_app_password"
-export MAIL_DEFAULT_SENDER="gestion.personnel@entreprise.fr"
+cp .env.example .env
 ```
+
+| Variable | Description |
+|---|---|
+| `SECRET_KEY` | Clé secrète Flask — à générer avec `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `DATABASE_URL` | Chaîne de connexion PostgreSQL |
+| `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS` | Config SMTP |
+| `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_DEFAULT_SENDER` | Identifiants email (optionnel, mode démo sinon) |
+| `ADMIN_EMAIL` | Destinataire des alertes admin |
+| `FLASK_ENV`, `FLASK_DEBUG` | Mode d'exécution |
+| `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_HTTPONLY`, `SESSION_COOKIE_SAMESITE` | Sécurité des cookies de session |
+
+> ⚠️ **À corriger avant mise en production** : `app.secret_key` est actuellement codé en dur dans `app.py` (ligne 29) et n'est pas lu depuis `SECRET_KEY` malgré le `.env.example`. De même, `app.run(debug=True, ...)` est en dur en fin de fichier. Les deux doivent être basculés sur les variables d'environnement avant tout déploiement.
 
 ---
 
 ## 🚀 Lancement
 
 ```bash
-cd /gestion_personnel
-
-# Initialisation automatique de la base + données de démo
 python app.py
 ```
 
-L'application démarre sur : **http://0.0.0.0:5000**
+L'application démarre sur **http://0.0.0.0:5000**
 
-> **Note** : La première exécution crée automatiquement les tables et les utilisateurs par défaut.
+> La première exécution crée automatiquement les tables et les utilisateurs par défaut.
 
----
-
-## 👤 Utilisateurs par défaut
-
-| Utilisateur | Mot de passe | Rôle       | Description              |
-|-------------|--------------|------------|--------------------------|
-| `admin`     | `admin123`   | admin      | Accès complet            |
-| `rh`        | `rh123`      | rh         | Ressources Humaines      |
-| `manager`   | `manager123` | manager    | Chef de projet           |
-| `employe`   | `user123`    | employe    | Employé classique        |
-
----
-
-## 📍 Routes principales
-
-| Route                        | Description                          | Accès          |
-|-----------------------------|--------------------------------------|----------------|
-| `/`                         | Tableau de bord                      | Connecté       |
-| `/employes`                 | Liste des employés                   | Tous           |
-| `/presences`                | Pointages + Clock in/out             | Tous           |
-| `/conges`                   | Gestion des congés + soldes          | Tous           |
-| `/rapports`                 | Rapports avancés + filtres           | Tous           |
-| `/documents`                | Upload et gestion de documents       | Tous           |
-| `/notifications`            | Centre de notifications              | Tous           |
-| `/self-service` ou `/mon-espace` | Espace personnel (self-service) | Tous           |
-| `/audit`                    | Logs d'audit                         | admin, rh      |
-| `/export/.../pdf` et `/excel` | Exports                              | Connecté       |
-
----
-
-## 🔄 Support Multi-Utilisateur (Concurrent)
-
-L'application est conçue pour un usage **réel multi-utilisateur** :
-
-- Utilisation de `threaded=True` dans Flask
-- Toutes les notifications sont stockées en base avec un `user_id`
-- Filtrage systématique : `WHERE user_id = %s`
-- Sessions Flask isolées par utilisateur
-- Pas de variables globales partagées (`NOTIFICATIONS = []` supprimé)
-
-**Recommandation production** :
+**En production**, ne pas utiliser le serveur de développement Flask :
 ```bash
 gunicorn -w 4 -b 0.0.0.0:5000 app:app
 ```
 
 ---
 
+## 👤 Utilisateurs par défaut
+
+| Utilisateur | Mot de passe | Rôle    | Description         |
+|-------------|---------------|---------|----------------------|
+| `admin`     | `admin123`    | admin   | Accès complet        |
+| `rh`        | `rh123`       | rh      | Ressources Humaines  |
+| `manager`   | `manager123`  | manager | Chef de projet       |
+| `employe`   | `user123`     | employe | Employé classique    |
+
+> À changer immédiatement en environnement réel — ces identifiants sont créés automatiquement par `init_db()`.
+
+---
+
+## 📍 Routes principales
+
+| Route | Description | Accès |
+|---|---|---|
+| `/` | Tableau de bord | Connecté |
+| `/login`, `/logout`, `/register` | Authentification et inscription | Public / Connecté |
+| `/employes`, `/employes/add`, `/employes/<id>`, `/employes/<id>/edit`, `/employes/<id>/delete` | Gestion des employés | Tous / selon rôle |
+| `/departements`, `/departements/add`, `/departements/edit/<id>`, `/departements/delete/<id>` | Gestion des départements | Selon rôle |
+| `/presences`, `/presences/clock_in/<id>`, `/presences/clock_out/<id>`, `/presences/add`, `/presences/delete/<id>` | Pointages | Tous / selon rôle |
+| `/conges`, `/conges/add`, `/conges/update/<id>`, `/conges/delete/<id>` | Congés | Tous / selon rôle |
+| `/calendrier-conges` | Calendrier des congés | Tous |
+| `/rapports` | Rapports avancés + filtres | Tous |
+| `/documents`, `/documents/delete/<id>` | Documents | Tous |
+| `/historique` | Historique salaires / embauches | Tous |
+| `/notifications`, `/notifications/mark-read` | Centre de notifications | Tous |
+| `/self-service`, `/mon-espace`, `/self-service/presences`, `/self-service/conges` | Espace personnel | Tous |
+| `/audit` | Logs d'audit | admin, rh |
+| `/export/presences/pdf`, `/export/presences/excel`, `/export/conges/pdf`, `/export/conges/excel` | Exports | Connecté |
+
+---
+
+## 🔄 Support multi-utilisateur (concurrent)
+
+- `threaded=True` dans Flask
+- Notifications stockées en base avec `user_id`, filtrage systématique `WHERE user_id = %s`
+- Sessions Flask isolées par utilisateur
+- Pas de variable globale partagée pour les notifications
+
+---
+
 ## 📁 Structure du projet
 
 ```
-gestion_personnel/
-├── app.py                  # Application principale (1436 lignes)
+Gestion-de-personnel/
+├── app.py                  # Application principale (~1900 lignes)
 ├── requirements.txt
+├── .env.example
 ├── static/
-│   ├── style.css
-│   └── uploads/            # Fichiers uploadés
-├── templates/              # 22 templates (tous en français)
+│   └── style.css
+├── templates/               # 22 templates, tous en français
 │   ├── base.html
-│   ├── notifications.html
+│   ├── index.html
+│   ├── dashboard.html
+│   ├── presences.html
 │   ├── conges.html
-│   ├── rapports.html
+│   ├── calendrier_conges.html
+│   ├── departements.html
 │   ├── documents.html
-│   └── ...
+│   ├── historique.html
+│   ├── rapports.html
+│   ├── notifications.html
+│   ├── audit.html
+│   ├── register.html / login.html
+│   ├── self_service*.html
+│   └── emails/
 └── README.md
 ```
 
 ---
 
-## 🧪 Tests & Qualité
-
-- Toutes les fonctionnalités critiques sont testées via le client Flask
-- Isolation complète des données par utilisateur
-- Syntaxe Python validée
-- Pas de données globales non thread-safe
-
----
-
 ## 📌 Notes importantes
 
-- La base de données est **exclusivement PostgreSQL**
-- Les soldes de congés sont recalculés automatiquement
-- Les retards sont calculés en minutes à partir de 09:00
+- Base de données exclusivement PostgreSQL
+- Les soldes de congés sont recalculés automatiquement (25 jours acquis par défaut)
+- Les retards sont calculés en minutes par rapport à `HEURE_ARRIVEE_ATTENDUE` (09:00 par défaut)
 - Les exports incluent le calcul des retards
-- Le projet est prêt pour un usage professionnel
+- Sécurité applicative activée (CSRF, rate limiting, headers) mais **clé secrète et mode debug à externaliser avant tout déploiement**
 
 ---
 
@@ -217,5 +217,4 @@ Projet interne – 2026
 ---
 
 **Développé avec ❤️ en Flask + PostgreSQL**
-
 Pour toute question ou contribution, contactez l'administrateur système.
