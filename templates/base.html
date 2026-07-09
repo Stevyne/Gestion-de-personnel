@@ -185,7 +185,7 @@
                 <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
                 {% if session.get('role') == 'admin' %}
-                <a href="{{ url_for('add_employee') }}" class="nav-link btn-primary">+ Nouvel employé</a>
+                <a href="{{ url_for('register') }}" class="nav-link btn-primary">+ Nouvel utilisateur</a>
                 {% endif %}
                 <div class="nav-user-section">
                     <a href="{{ url_for('notifications') }}" class="nav-notif" style="position:relative;">
@@ -238,7 +238,7 @@
                 <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
                 {% if session.get('role') == 'admin' %}
-                    <a href="{{ url_for('add_employee') }}" class="nav-link btn-primary">+ Nouvel employé</a>
+                    <a href="{{ url_for('register') }}" class="nav-link btn-primary">+ Nouvel utilisateur</a>
                 {% endif %}
                 
                 <!-- User section -->
