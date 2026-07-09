@@ -174,7 +174,7 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 
 ```
 Gestion-de-personnel/
-├── app.py                  # Application principale (~1900 lignes)
+├── app.py                  # Application principale
 ├── requirements.txt
 ├── .env.example
 ├── static/
