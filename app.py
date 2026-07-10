@@ -1879,11 +1879,42 @@ def add_employee():
     conn.close()
     return render_template('form.html', employee=None, depts=depts, title="Nouvel employé")
 
-# Stub for some other common references
 @app.route('/calendrier-conges')
 @login_required
 def calendrier_conges():
-    return render_template('calendrier_conges.html', conges=[])
+    annee = request.args.get('annee', type=int) or datetime.now().year
+
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("""
+        SELECT c.date_debut, c.date_fin, c.nombre_jours, c.statut,
+               e.prenom, e.nom
+        FROM conges c
+        JOIN employes e ON c.employe_id = e.id
+        WHERE c.statut = 'approuvé'
+          AND EXTRACT(YEAR FROM c.date_debut) = %s
+        ORDER BY c.date_debut
+    """, (annee,))
+    conges = cur.fetchall()
+    cur.close(); conn.close()
+
+    # Total des jours approuvés sur l'année
+    total_approuves = sum((c['nombre_jours'] or 0) for c in conges)
+
+    # Répartition par mois (1..12)
+    mois_noms = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+    mois_list = [{'nom': mois_noms[m - 1], 'conges': []} for m in range(1, 13)]
+    for c in conges:
+        debut = c['date_debut']
+        # date (objet datetime.date) ou chaîne 'YYYY-MM-DD'
+        mois = debut.month if hasattr(debut, 'month') else int(str(debut)[5:7])
+        mois_list[mois - 1]['conges'].append(c)
+
+    return render_template('calendrier_conges.html',
+                           annee=annee,
+                           total_approuves=total_approuves,
+                           mois_list=mois_list)
 
 @app.route('/employes/add', methods=['GET','POST'])
 @role_required('admin')

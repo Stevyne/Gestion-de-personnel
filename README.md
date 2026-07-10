@@ -24,7 +24,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Demandes de congés en self-service (`/self-service/conges`)
 - Approbation / refus par admin ou RH
 - Soldes de congés (25 jours acquis par défaut, table `soldes_conges`, recalcul automatique)
-- Calendrier des congés (`/calendrier-conges`)
+- Calendrier des congés : vue mensuelle des congés **approuvés** (`/calendrier-conges`)
 
 ### 📁 Documents & Rapports
 - Upload de documents (PDF, Excel, images...)
@@ -106,7 +106,14 @@ cp .env.example .env
 | `FLASK_ENV`, `FLASK_DEBUG` | Mode d'exécution |
 | `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_HTTPONLY`, `SESSION_COOKIE_SAMESITE` | Sécurité des cookies de session |
 
-> ⚠️ **À corriger avant mise en production** : `app.secret_key` est actuellement codé en dur dans `app.py` (ligne 29) et n'est pas lu depuis `SECRET_KEY` malgré le `.env.example`. De même, `app.run(debug=True, ...)` est en dur en fin de fichier. Les deux doivent être basculés sur les variables d'environnement avant tout déploiement.
+> ✅ **Bonnes nouvelles** : `SECRET_KEY` et `FLASK_DEBUG` sont **déjà lus depuis l'environnement** (aucune valeur sensible codée en dur dans `app.py`). En production, l'absence de `SECRET_KEY` lève une erreur (`RuntimeError`), et `FLASK_DEBUG=true` combiné à `FLASK_ENV=production` est bloqué.
+>
+> ⚠️ **Points à vérifier avant mise en production** :
+> - `DATABASE_URL` a un fallback avec un mot de passe en clair (`Stevyne123`) : ne vous y fiez jamais, renseignez toujours la variable d'environnement.
+> - Le rate limiter utilise `storage_uri="memory://"` (compteur **par processus**). Avec `gunicorn -w 4`, les quotas ne sont **pas partagés** entre workers → passez sur Redis/Memcached dès que vous dépassez 1 worker.
+> - `Talisman(force_https=False)` et `SESSION_COOKIE_SECURE` (défaut `false`) : passez-les à `True` en HTTPS.
+> - `.env.example` livre `FLASK_DEBUG=true` / `FLASK_ENV=development` : mettez-les à `false` / `production` pour la prod.
+> - Les uploads ne valident que l'extension de fichier : ajoutez une vérification du type MIME côté serveur.
 
 ---
 
@@ -170,16 +177,38 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 
 ---
 
+## 🧪 Tests
+
+Les tests s'appuient sur une **vraie base PostgreSQL** de test (pas de mock), configurée dans `tests/conftest.py`.
+
+```bash
+# 1. Créer la base de test
+createdb gestion_personnel_test
+
+# 2. Installer les dépendances de dev
+pip install -r requirements-dev.txt
+
+# 3. Lancer les tests
+pytest
+```
+
+> Surchargez la base avec la variable `TEST_DATABASE_URL` si besoin (CI, autre machine). Le CSRF et le rate limiting sont désactivés pendant les tests (`conftest.py`).
+
+---
+
 ## 📁 Structure du projet
 
 ```
 Gestion-de-personnel/
-├── app.py                  # Application principale
-├── requirements.txt
+├── app.py                  # Application principale (routes, modèles, exports)
+├── requirements.txt        # Dépendances production
+├── requirements-dev.txt    # Dépendances dev (pytest)
+├── pytest.ini
 ├── .env.example
 ├── static/
-│   └── style.css
-├── templates/               # 22 templates, tous en français
+│   ├── style.css
+│   └── uploads/            # Fichiers uploadés (ignorés par git)
+├── templates/              # Templates, tous en français
 │   ├── base.html
 │   ├── index.html
 │   ├── dashboard.html
@@ -195,6 +224,7 @@ Gestion-de-personnel/
 │   ├── register.html / login.html
 │   ├── self_service*.html
 │   └── emails/
+├── tests/                  # Tests pytest (conftest + test_*.py)
 └── README.md
 ```
 
@@ -206,7 +236,8 @@ Gestion-de-personnel/
 - Les soldes de congés sont recalculés automatiquement (25 jours acquis par défaut)
 - Les retards sont calculés en minutes par rapport à `HEURE_ARRIVEE_ATTENDUE` (09:00 par défaut)
 - Les exports incluent le calcul des retards
-- Sécurité applicative activée (CSRF, rate limiting, headers) mais **clé secrète et mode debug à externaliser avant tout déploiement**
+- Sécurité applicative activée (CSRF, rate limiting, headers HTTP via Talisman) ; `SECRET_KEY` et `FLASK_DEBUG` sont lus depuis l'environnement
+- En production : prévoir un stockage de rate limiting partagé (Redis), activer HTTPS (`force_https` + `SESSION_COOKIE_SECURE`) et valider le type MIME des uploads
 
 ---
 
