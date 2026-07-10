@@ -68,7 +68,7 @@
                     <td>{{ d.prenom }} {{ d.nom or '—' }}</td>
                     <td>{{ d.date_upload.strftime('%d/%m/%Y %H:%M') if d.date_upload else '—' }}</td>
                     <td>
-                        <a href="{{ url_for('static', filename='uploads/' + d.nom_fichier) }}" target="_blank" class="btn btn-sm" style="background:#1e40af;color:white;padding:4px 11px;font-size:0.8rem;">
+                        <a href="{{ url_for('download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;padding:4px 11px;font-size:0.8rem;">
                             📄 Télécharger
                         </a>
                     </td>

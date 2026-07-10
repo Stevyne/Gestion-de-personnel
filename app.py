@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, send_file
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
@@ -57,7 +57,16 @@ app.config['PERMANENT_SESSION_LIFETIME'] = int(os.environ.get('PERMANENT_SESSION
 # Limiter les uploads
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://postgres:Stevyne123@localhost:5432/gestion_personnel')
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    if os.environ.get('FLASK_ENV') == 'production':
+        raise RuntimeError(
+            "DATABASE_URL doit être défini dans l'environnement en production. "
+            "Exemple: postgresql://utilisateur:motdepasse@hote:5432/gestion_personnel"
+        )
+    # Fallback de développement local — aucun mot de passe sensible codé en dur
+    DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/gestion_personnel'
+    logger.warning("DATABASE_URL absente de l'environnement, utilisation du fallback de dev local (postgres/postgres).")
 
 # ==================== UPLOADS (Documents) ====================
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
@@ -69,6 +78,46 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# Correspondance magic-bytes -> extensions cohérentes autorisées
+_MAGIC_EXT = {
+    b'%PDF': {'pdf'},
+    b'\x89PNG\r\n\x1a\n': {'png'},
+    b'\xff\xd8\xff': {'jpg', 'jpeg'},
+    b'PK\x03\x04': {'docx', 'xlsx'},                 # Office Open XML (ZIP)
+    b'PK\x05\x06': {'docx', 'xlsx'},                 # ZIP vide
+    b'PK\x07\x08': {'docx', 'xlsx'},
+    b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1': {'doc', 'xls'},  # OLE2 (anciens .doc/.xls)
+}
+
+def detect_file_type(fichier):
+    """Détecte le vrai type du fichier via ses magic-bytes et renvoie
+    l'extension (sans '.') cohérente avec le contenu parmi les types autorisés,
+    ou None si le contenu ne correspond à rien de sûr."""
+    stream = fichier.stream
+    head = stream.read(8)
+    stream.seek(0)
+    candidates = None
+    if head.startswith(b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'):
+        candidates = {'doc', 'xls'}
+    else:
+        for magic, exts in _MAGIC_EXT.items():
+            if head.startswith(magic):
+                candidates = exts
+                break
+    if candidates is None:
+        # Pas de magic connue : on accepte uniquement du texte UTF-8/ASCII
+        try:
+            chunk = stream.read(1024)
+            stream.seek(0)
+            chunk.decode('utf-8')
+            candidates = {'txt'}
+        except (UnicodeDecodeError, Exception):
+            stream.seek(0)
+            return None
+    declared = fichier.filename.rsplit('.', 1)[-1].lower() if '.' in fichier.filename else ''
+    return declared if declared in candidates else None
+
 
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
@@ -1492,22 +1541,28 @@ def documents():
             return redirect(url_for('documents'))
         
         if fichier and allowed_file(fichier.filename):
-            filename = secure_filename(fichier.filename)
-            # Unique filename
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"{timestamp}_{filename}"
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            fichier.save(filepath)
-            
-            # Insert into DB
-            cur.execute("""
-                INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (employe_id, titre or filename, filename, filepath, 
-                  filename.rsplit('.', 1)[1].lower(), os.path.getsize(filepath), description))
-            conn.commit()
-            log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", None, f"{titre} ({filename})")
-            flash('Document uploadé avec succès', 'success')
+            # Validation du CONTENU (pas seulement de l'extension) pour éviter
+            # qu'un fichier malveillant ne se déguise en image/document.
+            detected = detect_file_type(fichier)
+            if detected is None:
+                flash('Le contenu du fichier ne correspond pas à son extension (type non autorisé).', 'danger')
+            else:
+                filename = secure_filename(fichier.filename)
+                # Unique filename
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"{timestamp}_{filename}"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                fichier.save(filepath)
+
+                # Insert into DB
+                cur.execute("""
+                    INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (employe_id, titre or filename, filename, filepath,
+                      filename.rsplit('.', 1)[1].lower(), os.path.getsize(filepath), description))
+                conn.commit()
+                log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", None, f"{titre} ({filename})")
+                flash('Document uploadé avec succès', 'success')
         else:
             flash('Type de fichier non autorisé', 'danger')
     
@@ -1543,6 +1598,29 @@ def delete_document(doc_id):
         flash('Document supprimé', 'success')
     cur.close(); conn.close()
     return redirect(url_for('documents'))
+
+@app.route('/documents/file/<int:doc_id>')
+@login_required
+def download_document(doc_id):
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT nom_fichier FROM documents WHERE id = %s", (doc_id,))
+        doc = cur.fetchone()
+    if not doc:
+        flash('Document introuvable.', 'danger')
+        return redirect(url_for('documents'))
+    filename = secure_filename(doc['nom_fichier'])
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    # Anti-path-traversal : on ne sert que depuis le dossier uploads autorisé
+    if os.path.dirname(os.path.abspath(filepath)) != os.path.abspath(app.config['UPLOAD_FOLDER']):
+        flash('Accès refusé.', 'danger')
+        return redirect(url_for('documents'))
+    if not os.path.isfile(filepath):
+        flash('Fichier indisponible sur le serveur.', 'danger')
+        return redirect(url_for('documents'))
+    resp = send_file(filepath, as_attachment=True, download_name=filename)
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    return resp
+
 
 # ==================== MAIN ====================
 
