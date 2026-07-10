@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -9,11 +8,20 @@ from werkzeug.utils import secure_filename
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+import logging
 from datetime import datetime, timedelta
 from functools import wraps
 import io
 
 from flask_mail import Mail, Message
+
+# ==================== LOGGING ====================
+logging.basicConfig(
+    level=getattr(logging, os.environ.get('LOG_LEVEL', 'INFO').upper(), logging.INFO),
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+)
+logger = logging.getLogger('gestion_personnel')
+
 
 # ==================== EXPORTS (PDF + EXCEL) ====================
 from reportlab.lib import colors
@@ -26,9 +34,20 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
-app.secret_key = 'secret-key-gestion-personnel-2026-auth'
 
 # === CONFIGURATION SÉCURITÉ ===
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    if os.environ.get('FLASK_ENV') == 'production':
+        raise RuntimeError(
+            "SECRET_KEY doit être défini dans l'environnement en production. "
+            "Générez-en une avec: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    # Fallback uniquement pour le développement local
+    SECRET_KEY = 'dev-only-insecure-key-do-not-use-in-production'
+    logger.warning("SECRET_KEY absente de l'environnement, utilisation d'une clé de dev non sécurisée.")
+
+app.secret_key = SECRET_KEY
 app.config['SECRET_KEY'] = app.secret_key
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -99,7 +118,7 @@ talisman = Talisman(
     referrer_policy='strict-origin-when-cross-origin',
     session_cookie_secure=app.config['SESSION_COOKIE_SECURE']
 )
-print("✅ Sécurité activée : CSRF + RateLimit + Talisman")
+logger.info("Sécurité activée : CSRF + RateLimit + Talisman")
 
 
 
@@ -107,17 +126,17 @@ print("✅ Sécurité activée : CSRF + RateLimit + Talisman")
 def send_html_email(recipients, subject, html_template, **context):
     try:
         if not app.config.get('MAIL_USERNAME'):
-            print(f"[HTML EMAIL DEMO] → {recipients} | {subject}")
+            logger.info(f"[HTML EMAIL DEMO] → {recipients} | {subject}")
             return True
         html_body = render_template(html_template, **context)
         admin = get_admin_email()
         msg = Message(subject=subject, recipients=[recipients] if isinstance(recipients, str) else recipients, cc=[admin], sender=admin)
         msg.html = html_body
         mail.send(msg)
-        print("✅ HTML email envoyé")
+        logger.info("HTML email envoyé")
         return True
     except Exception as e:
-        print("Erreur HTML email:", e)
+        logger.error("Erreur HTML email: %s", e, exc_info=True)
         return False
 
 HEURE_ARRIVEE_ATTENDUE = "09:00"
@@ -157,7 +176,7 @@ def create_notification(user_id, title, message, type_="info"):
         conn.close()
         return True
     except Exception as e:
-        print("Erreur create_notification DB:", e)
+        logger.error("Erreur create_notification DB: %s", e, exc_info=True)
         return False
 
 def get_unread_notifications(user_id=None):
@@ -182,24 +201,20 @@ def get_unread_notifications(user_id=None):
         conn.close()
         return notifs
     except Exception as e:
-        print("Erreur get_unread_notifications:", e)
+        logger.error("Erreur get_unread_notifications: %s", e, exc_info=True)
         return []
 
 def mark_all_read(user_id=None):
     """Marque les notifications comme lues"""
     try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        if user_id is not None:
-            cur.execute("UPDATE notifications SET is_read = TRUE WHERE user_id = %s", (user_id,))
-        else:
-            cur.execute("UPDATE notifications SET is_read = TRUE")
-        conn.commit()
-        cur.close()
-        conn.close()
+        with db_cursor(commit=True) as (conn, cur):
+            if user_id is not None:
+                cur.execute("UPDATE notifications SET is_read = TRUE WHERE user_id = %s", (user_id,))
+            else:
+                cur.execute("UPDATE notifications SET is_read = TRUE")
         return True
     except Exception as e:
-        print("Erreur mark_all_read:", e)
+        logger.error("Erreur mark_all_read: %s", e, exc_info=True)
         return False
 
 def get_all_notifications(user_id=None, limit=30):
@@ -222,7 +237,7 @@ def get_all_notifications(user_id=None, limit=30):
         conn.close()
         return notifs
     except Exception as e:
-        print("Erreur get_all_notifications:", e)
+        logger.error("Erreur get_all_notifications: %s", e, exc_info=True)
         return []
 
 @app.context_processor
@@ -242,7 +257,7 @@ def inject_context():
 def send_retard_email(employee_name, employee_email, retard_minutes, date_str, heure_arrivee):
     admin_email = get_admin_email()
     if not app.config.get('MAIL_USERNAME'):
-        print(f"[EMAIL DEMO] De: {admin_email} → {employee_name} +{retard_minutes} min")
+        logger.info(f"[EMAIL DEMO] De: {admin_email} → {employee_name} +{retard_minutes} min")
         return True
     try:
         subject = f"⚠️ Retard détecté - {employee_name}"
@@ -266,12 +281,31 @@ def send_retard_email(employee_name, employee_email, retard_minutes, date_str, h
         mail.send(msg)
         return True
     except Exception as e:
-        print("Erreur retard email:", e)
+        logger.error("Erreur retard email: %s", e, exc_info=True)
         return False
 
 # ==================== DB ====================
 def get_db():
     return psycopg2.connect(DATABASE_URL)
+
+from contextlib import contextmanager
+
+@contextmanager
+def db_cursor(commit=False):
+    """
+    Fournit (conn, cur) et garantit leur fermeture, même en cas d'exception
+    ou de `return` anticipé dans le bloc `with`. Utiliser commit=True pour
+    les opérations d'écriture (INSERT/UPDATE/DELETE).
+    """
+    conn = get_db()
+    cur = get_cursor(conn)
+    try:
+        yield conn, cur
+        if commit:
+            conn.commit()
+    finally:
+        cur.close()
+        conn.close()
 
 def get_cursor(conn):
     return conn.cursor(cursor_factory=RealDictCursor)
@@ -311,13 +345,9 @@ def calculer_retard(h):
 def get_current_employee():
     if 'user_id' not in session: return None
     try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("SELECT e.* FROM employes e JOIN users u ON u.employe_id = e.id WHERE u.id = %s LIMIT 1", (session['user_id'],))
-        emp = cur.fetchone()
-        cur.close()
-        conn.close()
-        return emp
+        with db_cursor() as (conn, cur):
+            cur.execute("SELECT e.* FROM employes e JOIN users u ON u.employe_id = e.id WHERE u.id = %s LIMIT 1", (session['user_id'],))
+            return cur.fetchone()
     except:
         return None
 
@@ -328,36 +358,31 @@ def get_solde_conges(employe_id, annee=None):
     if annee is None:
         annee = datetime.now().year
     try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            SELECT * FROM soldes_conges 
-            WHERE employe_id = %s AND annee = %s
-        """, (employe_id, annee))
-        solde = cur.fetchone()
-
-        if not solde:
+        with db_cursor(commit=True) as (conn, cur):
             cur.execute("""
-                INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-                VALUES (%s, %s, 25, 0)
-                RETURNING *
+                SELECT * FROM soldes_conges 
+                WHERE employe_id = %s AND annee = %s
             """, (employe_id, annee))
             solde = cur.fetchone()
-            conn.commit()
 
-        cur.close()
-        conn.close()
+            if not solde:
+                cur.execute("""
+                    INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
+                    VALUES (%s, %s, 25, 0)
+                    RETURNING *
+                """, (employe_id, annee))
+                solde = cur.fetchone()
 
-        acquis = float(solde.get('jours_acquis') or 25)
-        utilises = float(solde.get('jours_utilises') or 0)
-        return {
-            'jours_acquis': acquis,
-            'jours_utilises': utilises,
-            'jours_restants': round(acquis - utilises, 1),
-            'annee': annee
-        }
+            acquis = float(solde.get('jours_acquis') or 25)
+            utilises = float(solde.get('jours_utilises') or 0)
+            return {
+                'jours_acquis': acquis,
+                'jours_utilises': utilises,
+                'jours_restants': round(acquis - utilises, 1),
+                'annee': annee
+            }
     except Exception as e:
-        print("Erreur get_solde_conges:", e)
+        logger.error("Erreur get_solde_conges: %s", e, exc_info=True)
         return {'jours_acquis': 25, 'jours_utilises': 0, 'jours_restants': 25, 'annee': annee}
 
 
@@ -379,17 +404,23 @@ def mettre_a_jour_solde(employe_id, jours_delta, annee=None):
         conn.close()
         return True
     except Exception as e:
-        print("Erreur mise à jour solde:", e)
+        logger.error("Erreur mise à jour solde: %s", e, exc_info=True)
         return False
 
 
-def recalculer_solde(employe_id, annee=None):
-    """Recalcule automatiquement les jours utilisés depuis les congés approuvés"""
+def recalculer_solde(employe_id, annee=None, cur=None):
+    """
+    Recalcule automatiquement les jours utilisés depuis les congés approuvés.
+
+    Si `cur` est fourni, réutilise ce curseur/cette transaction (nécessaire quand
+    on est appelé depuis update_conge : la connexion séparée qu'on ouvrait ici
+    avant ne voyait pas l'UPDATE du statut pas encore commité par l'appelant,
+    en isolation READ COMMITTED — le solde ne se mettait donc jamais à jour).
+    """
     if annee is None:
         annee = datetime.now().year
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
+
+    def _do(cur):
         cur.execute("""
             SELECT COALESCE(SUM(nombre_jours), 0) as total
             FROM conges 
@@ -405,13 +436,17 @@ def recalculer_solde(employe_id, annee=None):
             ON CONFLICT (employe_id, annee) 
             DO UPDATE SET jours_utilises = %s
         """, (employe_id, annee, total, total))
-        conn.commit()
-        cur.close()
-        conn.close()
         return total
+
+    try:
+        if cur is not None:
+            return _do(cur)
+        with db_cursor(commit=True) as (conn, cur):
+            return _do(cur)
     except Exception as e:
-        print("Erreur recalcul solde:", e)
+        logger.error("Erreur recalcul solde: %s", e, exc_info=True)
         return 0
+
 
 def init_db():
     conn = get_db()
@@ -505,7 +540,7 @@ def init_db():
     conn.commit()
     cur.close()
     conn.close()
-    print("✅ Base PostgreSQL initialisée (Self-Service + Exports + Emails HTML + Soldes Congés)")
+    logger.info("Base PostgreSQL initialisée (Self-Service + Exports + Emails HTML + Soldes Congés)")
 # ==================== AUTH ====================
 @app.route('/login', methods=['GET','POST'])
 def login():
@@ -513,11 +548,9 @@ def login():
     if request.method == 'POST':
         u = request.form.get('username','').strip()
         p = request.form.get('password','')
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("SELECT * FROM users WHERE username=%s", (u,))
-        user = cur.fetchone()
-        cur.close(); conn.close()
+        with db_cursor() as (conn, cur):
+            cur.execute("SELECT * FROM users WHERE username=%s", (u,))
+            user = cur.fetchone()
         if user and check_password_hash(user['password_hash'], p):
             session['user_id'] = user['id']
             session['username'] = user['username']
@@ -984,19 +1017,16 @@ def presences():
 @login_required
 def clock_in(employe_id):
     date_val = request.form.get('date') or datetime.now().strftime('%Y-%m-%d')
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute("SELECT nom, prenom, email FROM employes WHERE id = %s", (employe_id,))
-    emp = cur.fetchone()
-    cur.execute("INSERT INTO presences (employe_id, date, heure_arrivee, statut) VALUES (%s, %s, CURRENT_TIME, 'présent') ON CONFLICT (employe_id, date) DO UPDATE SET heure_arrivee = CURRENT_TIME", (employe_id, date_val))
-    conn.commit()
-    cur.execute("SELECT heure_arrivee FROM presences WHERE employe_id=%s AND date=%s", (employe_id, date_val))
-    res = cur.fetchone()
-    heure = str(res['heure_arrivee'])[:5] if res else '09:00'
-    retard = calculer_retard(heure)
-    if retard > 0 and emp:
-        send_retard_email(f"{emp['prenom']} {emp['nom']}", emp.get('email'), retard, date_val, heure)
-    cur.close(); conn.close()
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT nom, prenom, email FROM employes WHERE id = %s", (employe_id,))
+        emp = cur.fetchone()
+        cur.execute("INSERT INTO presences (employe_id, date, heure_arrivee, statut) VALUES (%s, %s, CURRENT_TIME, 'présent') ON CONFLICT (employe_id, date) DO UPDATE SET heure_arrivee = CURRENT_TIME", (employe_id, date_val))
+        cur.execute("SELECT heure_arrivee FROM presences WHERE employe_id=%s AND date=%s", (employe_id, date_val))
+        res = cur.fetchone()
+        heure = str(res['heure_arrivee'])[:5] if res else '09:00'
+        retard = calculer_retard(heure)
+        if retard > 0 and emp:
+            send_retard_email(f"{emp['prenom']} {emp['nom']}", emp.get('email'), retard, date_val, heure)
     flash('Entrée pointée', 'success')
     return redirect(url_for('presences'))
 
@@ -1004,17 +1034,13 @@ def clock_in(employe_id):
 @login_required
 def clock_out(employe_id):
     date_val = request.form.get('date') or datetime.now().strftime('%Y-%m-%d')
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute("""
-        INSERT INTO presences (employe_id, date, heure_depart)
-        VALUES (%s, %s, CURRENT_TIME)
-        ON CONFLICT (employe_id, date) 
-        DO UPDATE SET heure_depart = CURRENT_TIME
-    """, (employe_id, date_val))
-    conn.commit()
-    cur.close()
-    conn.close()
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("""
+            INSERT INTO presences (employe_id, date, heure_depart)
+            VALUES (%s, %s, CURRENT_TIME)
+            ON CONFLICT (employe_id, date) 
+            DO UPDATE SET heure_depart = CURRENT_TIME
+        """, (employe_id, date_val))
     flash('Sortie pointée', 'success')
     return redirect(url_for('presences'))
 
@@ -1094,38 +1120,33 @@ def conges():
 @app.route('/conges/add', methods=['GET', 'POST'])
 @login_required
 def add_conge():
-    conn = get_db()
-    cur = get_cursor(conn)
-    
-    if request.method == 'POST':
-        employe_id = request.form.get('employe_id')
-        type_conge = request.form.get('type_conge')
-        date_debut = request.form.get('date_debut')
-        date_fin = request.form.get('date_fin')
-        motif = request.form.get('motif', '')
-        
-        if employe_id and type_conge and date_debut and date_fin:
-            # Calculate days
-            from datetime import datetime
-            d1 = datetime.strptime(date_debut, '%Y-%m-%d')
-            d2 = datetime.strptime(date_fin, '%Y-%m-%d')
-            nombre_jours = (d2 - d1).days + 1
+    with db_cursor(commit=True) as (conn, cur):
+        if request.method == 'POST':
+            employe_id = request.form.get('employe_id')
+            type_conge = request.form.get('type_conge')
+            date_debut = request.form.get('date_debut')
+            date_fin = request.form.get('date_fin')
+            motif = request.form.get('motif', '')
             
-            cur.execute("""
-                INSERT INTO conges (employe_id, type_conge, date_debut, date_fin, nombre_jours, motif, statut)
-                VALUES (%s, %s, %s, %s, %s, %s, 'en attente')
-            """, (employe_id, type_conge, date_debut, date_fin, nombre_jours, motif))
-            conn.commit()
-            flash("Demande de congé soumise avec succès", "success")
-            cur.close(); conn.close()
-            return redirect(url_for('conges'))
-        else:
-            flash("Veuillez remplir tous les champs obligatoires", "danger")
-    
-    # GET: load employees
-    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
-    employees = cur.fetchall()
-    cur.close(); conn.close()
+            if employe_id and type_conge and date_debut and date_fin:
+                # Calculate days
+                from datetime import datetime
+                d1 = datetime.strptime(date_debut, '%Y-%m-%d')
+                d2 = datetime.strptime(date_fin, '%Y-%m-%d')
+                nombre_jours = (d2 - d1).days + 1
+                
+                cur.execute("""
+                    INSERT INTO conges (employe_id, type_conge, date_debut, date_fin, nombre_jours, motif, statut)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'en attente')
+                """, (employe_id, type_conge, date_debut, date_fin, nombre_jours, motif))
+                flash("Demande de congé soumise avec succès", "success")
+                return redirect(url_for('conges'))
+            else:
+                flash("Veuillez remplir tous les champs obligatoires", "danger")
+        
+        # GET: load employees
+        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        employees = cur.fetchall()
     return render_template('conge_form.html', employees=employees)
 
 @app.route('/conges/update/<int:id>', methods=['POST'])
@@ -1133,43 +1154,35 @@ def add_conge():
 @role_required('admin', 'rh', 'manager')
 def update_conge(id):
     action = request.form.get('action')
-    conn = get_db()
-    cur = get_cursor(conn)
-    
-    if action == 'approuver':
-        cur.execute("UPDATE conges SET statut = 'approuvé' WHERE id = %s", (id,))
-        # Update solde
-        cur.execute("SELECT employe_id, nombre_jours, date_debut FROM conges WHERE id = %s", (id,))
-        conge = cur.fetchone()
-        if conge:
-            from datetime import datetime
-            annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
-            # recalculer_solde() fait la somme exacte des congés approuvés
-            # (plus fiable qu'un delta manuel qui pouvait désynchroniser le solde)
-            recalculer_solde(conge['employe_id'], annee)
-            flash("Congé approuvé et solde mis à jour", "success")
-    elif action == 'refuser':
-        cur.execute("UPDATE conges SET statut = 'refusé' WHERE id = %s", (id,))
-        cur.execute("SELECT employe_id, date_debut FROM conges WHERE id = %s", (id,))
-        conge = cur.fetchone()
-        if conge:
-            from datetime import datetime
-            annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
-            recalculer_solde(conge['employe_id'], annee)
-        flash("Congé refusé", "info")
-    
-    conn.commit()
-    cur.close(); conn.close()
+    with db_cursor(commit=True) as (conn, cur):
+        if action == 'approuver':
+            cur.execute("UPDATE conges SET statut = 'approuvé' WHERE id = %s", (id,))
+            # Update solde
+            cur.execute("SELECT employe_id, nombre_jours, date_debut FROM conges WHERE id = %s", (id,))
+            conge = cur.fetchone()
+            if conge:
+                from datetime import datetime
+                annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
+                # recalculer_solde() fait la somme exacte des congés approuvés
+                # (plus fiable qu'un delta manuel qui pouvait désynchroniser le solde)
+                recalculer_solde(conge['employe_id'], annee, cur=cur)
+                flash("Congé approuvé et solde mis à jour", "success")
+        elif action == 'refuser':
+            cur.execute("UPDATE conges SET statut = 'refusé' WHERE id = %s", (id,))
+            cur.execute("SELECT employe_id, date_debut FROM conges WHERE id = %s", (id,))
+            conge = cur.fetchone()
+            if conge:
+                from datetime import datetime
+                annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
+                recalculer_solde(conge['employe_id'], annee, cur=cur)
+            flash("Congé refusé", "info")
     return redirect(url_for('conges'))
 
 @app.route('/conges/delete/<int:id>', methods=['POST'])
 @login_required
 def delete_conge(id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute("DELETE FROM conges WHERE id = %s", (id,))
-    conn.commit()
-    cur.close(); conn.close()
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("DELETE FROM conges WHERE id = %s", (id,))
     flash("Demande de congé supprimée", "success")
     return redirect(url_for('conges'))
 
@@ -1177,11 +1190,9 @@ def delete_conge(id):
 @app.route('/audit')
 @role_required('admin', 'rh')
 def audit():
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute("SELECT a.*, u.username FROM audit_logs a LEFT JOIN users u ON a.user_id = u.id ORDER BY a.timestamp DESC LIMIT 150")
-    logs = cur.fetchall()
-    cur.close(); conn.close()
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT a.*, u.username FROM audit_logs a LEFT JOIN users u ON a.user_id = u.id ORDER BY a.timestamp DESC LIMIT 150")
+        logs = cur.fetchall()
     return render_template('audit.html', logs=logs)
 
 @app.route('/notifications')
@@ -1379,7 +1390,7 @@ def delete_employee(id):
     except Exception as e:
         conn.rollback()
         flash(f"Erreur lors de la suppression : {str(e)}", "danger")
-        print("Erreur delete_employee:", e)
+        logger.error("Erreur delete_employee: %s", e, exc_info=True)
     finally:
         cur.close()
         conn.close()
@@ -1825,7 +1836,7 @@ def register():
         except Exception as e:
             conn.rollback()
             flash(f"Une erreur est survenue lors de la création du compte : {str(e)}", "danger")
-            print("Erreur register:", e)
+            logger.error("Erreur register: %s", e, exc_info=True)
         finally:
             cur.close()
             conn.close()
@@ -1882,6 +1893,9 @@ def add_employee_alt():
 
 if __name__ == '__main__':
     init_db()
+    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    if debug_mode and os.environ.get('FLASK_ENV') == 'production':
+        raise RuntimeError("FLASK_DEBUG ne doit jamais être activé en production (FLASK_ENV=production).")
     # For development with basic concurrency support (multiple users)
     # For production use: gunicorn -w 4 -b 0.0.0.0:5000 app:app
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    app.run(debug=debug_mode, host='0.0.0.0', port=5000, threaded=True)
