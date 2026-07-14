@@ -9,7 +9,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from functools import wraps
 import io
 
@@ -990,7 +990,27 @@ def presences():
     cur.execute("SELECT p.*, e.nom, e.prenom FROM presences p JOIN employes e ON p.employe_id = e.id ORDER BY p.date DESC LIMIT 60")
     presences_list = cur.fetchall()
 
+    today = date.today().strftime('%Y-%m-%d')
     
+        # === Retards aujourd'hui ===
+    cur.execute("""
+        SELECT p.*, e.nom, e.prenom 
+        FROM presences p 
+        JOIN employes e ON p.employe_id = e.id 
+        WHERE p.date = %s
+    """, (today,))
+    presences_today = cur.fetchall()
+
+    retards_aujourdhui = []
+    total_retards_minutes = 0
+    for p in presences_today:
+        retard = calculer_retard(p.get('heure_arrivee'))
+        if retard > 0:
+            p['retard_minutes'] = retard
+            retards_aujourdhui.append(p)
+            total_retards_minutes += retard
+
+    nb_retards = len(retards_aujourdhui)
 
     # === Gestion du pointage rapide (POST) ===
     if request.method == 'POST':
@@ -1063,7 +1083,7 @@ def presences():
     employees = cur.fetchall()
     cur.close()
     conn.close()
-    return render_template('presences.html', presences=presences_list, employees=employees)
+    return render_template('presences.html', presences=presences_list, employees=employees, today=today, retards_aujourdhui=retards_aujourdhui, nb_retards=nb_retards, total_retards_minutes=total_retards_minutes)
 
 @app.route('/presences/clock_in/<int:employe_id>', methods=['POST'])
 @login_required

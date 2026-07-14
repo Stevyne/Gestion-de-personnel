@@ -166,8 +166,11 @@
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
-                <span class="logo"><image src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
+                <a href="{{ url_for('dashboard') }}">
+                    <span class="logo"><image src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
+                </a>    
                 <span class="brand-text"><image src="{{ url_for('static', filename='nom.png') }}" alt="Gestion du Personnel" style="width: 180px; height: 36px;"></span>
+                
             </div>
             
             <!-- Hamburger button for mobile -->

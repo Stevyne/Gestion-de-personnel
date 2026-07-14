@@ -42,19 +42,51 @@
         </form>
     </div>
 
-    <!-- Alertes retards du jour -->
-    {% set retards = presences | selectattr('retard') | list %}
-    {% if retards %}
-    <div style="background:#fee2e2; border:2px solid #f87171; padding:12px 16px; border-radius:10px; margin-bottom:18px;">
-        <strong style="color:#991b1b;">⚠️ {{ retards|length }} retard(s) aujourd'hui</strong>
-        <span style="margin-left:12px; font-size:0.9rem; color:#7f1d1d;">(retard calculé à partir de 09:00)</span>
+    <!-- ALERTES RETARDS -->
+    {% if nb_retards > 0 %}
+    <div style="margin: 20px 0; background: #fee2e2; border: 2px solid #f87171; border-radius: 14px; padding: 18px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+            <span style="font-size: 1.8rem;">⚠️</span>
+            <h3 style="margin: 0; color: #991b1b;">Alertes Retards — Aujourd'hui ({{ today }})</h3>
+            <span style="background: #991b1b; color: white; padding: 3px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 700;">
+                {{ nb_retards }} retard(s)
+            </span>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+            {% for r in retards_aujourdhui[:5] %}
+            <div style="background: white; padding: 6px 11px; border-radius: 8px; border: 1px solid #fecaca; font-size: 0.9rem;">
+                <strong>{{ r.prenom }} {{ r.nom }}</strong>
+                <span style="color: #991b1b; font-weight: 700; margin-left: 6px;">+{{ r.retard_minutes }} min</span>
+                <span style="color: #64748b; font-size: 0.8rem;"> ({{ r.heure_arrivee }})</span>
+            </div>
+            {% endfor %}
+            {% if nb_retards > 5 %}
+                <div style="align-self: center; font-size: 0.85rem; color: #7f1d1d;">+ {{ nb_retards - 5 }} autres...</div>
+            {% endif %}
+        </div>
+
+        <div style="font-size: 0.95rem; color: #7f1d1d;">
+            <strong>Total cumulé :</strong> {{ total_retards_minutes }} minutes (≈ {{ "%.1f"|format(total_retards_minutes / 60) }} heures)
+        </div>
+
+    </div>
+    {% else %}
+    <div style="margin: 16px 0; background:#dcfce7; border:1px solid #86efac; padding:12px 16px; border-radius:10px; color:#166534; font-weight:500;">
+        ✅ Aucun retard enregistré aujourd'hui (arrivée standard à 09:00)
     </div>
     {% endif %}
 
     <div class="filters">
-        <form method="get" action="{{ url_for('presences') }}">
-            <input type="text" name="search" placeholder="Rechercher employé..." class="search-input" value="{{ search }}">
-            <input type="date" name="date" class="filter-select" value="{{ date_filter }}">
+        <form method="get" action="{{ url_for('presences') }}" class="filter-form">
+            <div class="filter-group">
+                <label>Recherche </label>
+                <input type="text" name="search" placeholder="Rechercher employé..." class="search-input" value="{{ search }}">
+            </div>
+            <div class="filter-group">
+                <label>Date </label>
+                <input type="date" name="date" class="filter-select" value="{{ date_filter }}">
+            </div>
             <button type="submit" class="btn btn-secondary">🔍 Filtrer</button>
             
             <a href="{{ url_for('presences') }}" class="btn btn-secondary">Réinitialiser</a>
