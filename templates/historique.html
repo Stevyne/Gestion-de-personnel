@@ -140,7 +140,9 @@
                                   data-confirm-icon="🕒"
                                   data-confirm-warning="Cette présence sera définitivement supprimée.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;">🗑️</button>
+                                {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+                                    <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;">🗑️</button>
+                                {% endif %}
                             </form>
                         </div>
                     </td>

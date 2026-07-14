@@ -166,8 +166,8 @@
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
-                <span class="logo">👥</span>
-                <span class="brand-text">Gestion du Personnel</span>
+                <span class="logo"><image src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
+                <span class="brand-text"><image src="{{ url_for('static', filename='nom.png') }}" alt="Gestion du Personnel" style="width: 180px; height: 36px;"></span>
             </div>
             
             <!-- Hamburger button for mobile -->
@@ -223,7 +223,7 @@
     <div id="navDrawer" class="nav-drawer">
         <div class="drawer-header">
             <div class="drawer-brand">
-                <span class="logo">👥</span>
+                <span class="logo"><image src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
                 <span class="brand-text">Menu</span>
             </div>
             <button class="drawer-close" id="drawerClose" aria-label="Fermer le menu">×</button>

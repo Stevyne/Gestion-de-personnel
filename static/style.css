@@ -65,7 +65,9 @@ body {
 }
 
 .logo {
-    font-size: 1.95rem;
+    /*font-size: 1.95rem;*/
+    width: 36px;
+    height: 36px;
     line-height: 1;
 }
 

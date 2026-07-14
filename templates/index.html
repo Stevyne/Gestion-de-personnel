@@ -23,7 +23,7 @@
             <div class="stat-label">Employés actifs</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">{{ "%.0f"|format(stats.salaire_moyen) }} €</div>
+            <div class="stat-value">{{ "%.0f"|format(stats.salaire_moyen) }} Ar</div>
             <div class="stat-label">Salaire moyen</div>
         </div>
         <div class="stat-card">
@@ -129,7 +129,7 @@
                         </td>
                         <td>
                             {% if emp.salaire %}
-                                <span class="salary">{{ "%.0f"|format(emp.salaire) }} €</span>
+                                <span class="salary">{{ "%.0f"|format(emp.salaire) }} Ar</span>
                             {% else %}
                                 <span class="text-muted">—</span>
                             {% endif %}
@@ -177,7 +177,7 @@
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="action-btn" title="Pointer sortie" onclick="return confirm('Pointer la sortie ?')">🏁</button>
                                 </form>
-                                
+                                {% if session.get('role') in ['admin', 'rh', 'manager'] %}
                                 <!-- DELETE - triggers beautiful modal popup -->
                                 <form action="{{ url_for('delete_employee', id=emp.id) }}" 
                                       method="post" 
@@ -187,6 +187,7 @@
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="action-btn danger" title="Supprimer">🗑️</button>
                                 </form>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>

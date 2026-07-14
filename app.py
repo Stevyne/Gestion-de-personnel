@@ -33,6 +33,9 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from dotenv import load_dotenv
+load_dotenv()   # charge .env dans os.environ
+
 app = Flask(__name__)
 
 # === CONFIGURATION SÉCURITÉ ===
@@ -1132,6 +1135,7 @@ def add_presence():
 
 @app.route('/presences/delete/<int:id>', methods=['POST'])
 @login_required
+@role_required('admin', 'rh', 'manager')
 def delete_presence(id):
     conn = get_db()
     cur = get_cursor(conn)
@@ -1229,6 +1233,7 @@ def update_conge(id):
 
 @app.route('/conges/delete/<int:id>', methods=['POST'])
 @login_required
+@role_required('admin', 'rh', 'manager')
 def delete_conge(id):
     with db_cursor(commit=True) as (conn, cur):
         cur.execute("DELETE FROM conges WHERE id = %s", (id,))
