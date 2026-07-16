@@ -5,7 +5,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
+
 build/
 develop-eggs/
 dist/
@@ -125,7 +125,7 @@ coverage.xml
 # ============================
 # pyenv
 # ============================
-.python-version
+
 
 # ============================
 # pipenv
