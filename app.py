@@ -231,6 +231,21 @@ def create_notification(user_id, title, message, type_="info"):
         logger.error("Erreur create_notification DB: %s", e, exc_info=True)
         return False
 
+def notify_all_users(title, message, type_="info", exclude_user_id=None):
+    """Crée une notification pour TOUS les utilisateurs (option: exclure l'auteur de l'action)"""
+    try:
+        with db_cursor() as (conn, cur):
+            cur.execute("SELECT id FROM users")
+            user_ids = [row['id'] for row in cur.fetchall()]
+        for uid in user_ids:
+            if exclude_user_id is not None and uid == exclude_user_id:
+                continue
+            create_notification(uid, title, message, type_)
+        return True
+    except Exception as e:
+        logger.error("Erreur notify_all_users: %s", e, exc_info=True)
+        return False
+
 def get_unread_notifications(user_id=None):
     """Retourne les notifications non lues depuis PostgreSQL"""
     try:
@@ -1103,6 +1118,8 @@ def clock_in(employe_id):
         retard = calculer_retard(heure)
         if retard > 0 and emp:
             send_retard_email(f"{emp['prenom']} {emp['nom']}", emp.get('email'), retard, date_val, heure)
+    if emp:
+        notify_all_users("Pointage arrivée", f"{emp['prenom']} {emp['nom']} a pointé son arrivée ({heure}).", "info", exclude_user_id=session.get('user_id'))
     flash('Entrée pointée', 'success')
     return redirect(url_for('presences'))
 
@@ -1111,12 +1128,16 @@ def clock_in(employe_id):
 def clock_out(employe_id):
     date_val = request.form.get('date') or datetime.now().strftime('%Y-%m-%d')
     with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT nom, prenom FROM employes WHERE id = %s", (employe_id,))
+        emp = cur.fetchone()
         cur.execute("""
             INSERT INTO presences (employe_id, date, heure_depart)
             VALUES (%s, %s, CURRENT_TIME)
             ON CONFLICT (employe_id, date) 
             DO UPDATE SET heure_depart = CURRENT_TIME
         """, (employe_id, date_val))
+    if emp:
+        notify_all_users("Pointage départ", f"{emp['prenom']} {emp['nom']} a pointé sa sortie.", "info", exclude_user_id=session.get('user_id'))
     flash('Sortie pointée', 'success')
     return redirect(url_for('presences'))
 
@@ -1146,6 +1167,7 @@ def add_presence():
                     commentaire = EXCLUDED.commentaire
             """, (employe_id, date_val, heure_arrivee or None, heure_depart or None, statut, commentaire))
             conn.commit()
+            notify_all_users("Présence modifiée", f"Une présence a été enregistrée/modifiée manuellement.", "info", exclude_user_id=session.get('user_id'))
             flash("Présence enregistrée / modifiée avec succès", "success")
             cur.close(); conn.close()
             return redirect(url_for('presences'))
@@ -1166,6 +1188,7 @@ def delete_presence(id):
     cur.execute("DELETE FROM presences WHERE id = %s", (id,))
     conn.commit()
     cur.close(); conn.close()
+    notify_all_users("Présence supprimée", "Une présence a été supprimée.", "warning", exclude_user_id=session.get('user_id'))
     flash("Présence supprimée", "success")
     return redirect(url_for('presences'))
 
@@ -1217,6 +1240,10 @@ def add_conge():
                     VALUES (%s, %s, %s, %s, %s, %s, 'en attente')
                 """, (employe_id, type_conge, date_debut, date_fin, nombre_jours, motif))
                 flash("Demande de congé soumise avec succès", "success")
+                cur.execute("SELECT nom, prenom FROM employes WHERE id = %s", (employe_id,))
+                nom_emp = cur.fetchone()
+                nom_str = f"{nom_emp['prenom']} {nom_emp['nom']}" if nom_emp else "Un employé"
+                notify_all_users("Nouvelle demande de congé", f"{nom_str} a soumis une demande de congé.", "info", exclude_user_id=session.get('user_id'))
                 return redirect(url_for('conges'))
             else:
                 flash("Veuillez remplir tous les champs obligatoires", "danger")
@@ -1232,16 +1259,15 @@ def add_conge():
 def update_conge(id):
     action = request.form.get('action')
     with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT employe_id, date_debut FROM conges WHERE id = %s", (id,))
+        conge_avant = cur.fetchone()
         if action == 'approuver':
             cur.execute("UPDATE conges SET statut = 'approuvé' WHERE id = %s", (id,))
-            # Update solde
             cur.execute("SELECT employe_id, nombre_jours, date_debut FROM conges WHERE id = %s", (id,))
             conge = cur.fetchone()
             if conge:
                 from datetime import datetime
                 annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
-                # recalculer_solde() fait la somme exacte des congés approuvés
-                # (plus fiable qu'un delta manuel qui pouvait désynchroniser le solde)
                 recalculer_solde(conge['employe_id'], annee, cur=cur)
                 flash("Congé approuvé et solde mis à jour", "success")
         elif action == 'refuser':
@@ -1253,6 +1279,12 @@ def update_conge(id):
                 annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
                 recalculer_solde(conge['employe_id'], annee, cur=cur)
             flash("Congé refusé", "info")
+        if conge_avant:
+            cur.execute("SELECT nom, prenom FROM employes WHERE id = %s", (conge_avant['employe_id'],))
+            emp = cur.fetchone()
+            nom_str = f"{emp['prenom']} {emp['nom']}" if emp else "Un employé"
+            statut_txt = "approuvé" if action == 'approuver' else "refusé"
+            notify_all_users("Congé traité", f"La demande de congé de {nom_str} a été {statut_txt}.", "success" if action == 'approuver' else "warning", exclude_user_id=session.get('user_id'))
     return redirect(url_for('conges'))
 
 @app.route('/conges/delete/<int:id>', methods=['POST'])
@@ -1261,6 +1293,7 @@ def update_conge(id):
 def delete_conge(id):
     with db_cursor(commit=True) as (conn, cur):
         cur.execute("DELETE FROM conges WHERE id = %s", (id,))
+    notify_all_users("Demande de congé supprimée", "Une demande de congé a été supprimée.", "warning", exclude_user_id=session.get('user_id'))
     flash("Demande de congé supprimée", "success")
     return redirect(url_for('conges'))
 
@@ -1417,6 +1450,7 @@ def edit_employee(id):
             WHERE id = %s
         """, (nom, prenom, poste, departement, email, telephone, salaire, id))
         conn.commit()
+        notify_all_users("Employé modifié", f"La fiche de {prenom} {nom} a été modifiée.", "info", exclude_user_id=session.get('user_id'))
         flash("Employé modifié avec succès", "success")
         cur.close()
         conn.close()
@@ -1436,7 +1470,8 @@ def edit_employee(id):
 def delete_employee(id):
     conn = get_db()
     cur = get_cursor(conn)
-    
+    cur.execute("SELECT nom, prenom FROM employes WHERE id = %s", (id,))
+    emp_supprime = cur.fetchone()
     try:
         # 1. Supprimer les présences liées
         cur.execute("DELETE FROM presences WHERE employe_id = %s", (id,))
@@ -1463,6 +1498,8 @@ def delete_employee(id):
         cur.execute("DELETE FROM employes WHERE id = %s", (id,))
         
         conn.commit()
+        if emp_supprime:
+            notify_all_users("Employé supprimé", f"{emp_supprime['prenom']} {emp_supprime['nom']} a été supprimé du système.", "danger", exclude_user_id=session.get('user_id'))
         flash("Employé et toutes ses données associées ont été supprimés avec succès", "success")
         
     except Exception as e:
@@ -1591,6 +1628,7 @@ def documents():
                       filename.rsplit('.', 1)[1].lower(), os.path.getsize(filepath), description))
                 conn.commit()
                 log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", None, f"{titre} ({filename})")
+                notify_all_users("Document ajouté", f"Un nouveau document '{titre or filename}' a été ajouté.", "info", exclude_user_id=session.get('user_id'))
                 flash('Document uploadé avec succès', 'success')
         else:
             flash('Type de fichier non autorisé', 'danger')
@@ -1624,6 +1662,7 @@ def delete_document(doc_id):
         except: pass
         cur.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
         conn.commit()
+        notify_all_users("Document supprimé", "Un document a été supprimé.", "warning", exclude_user_id=session.get('user_id'))
         flash('Document supprimé', 'success')
     cur.close(); conn.close()
     return redirect(url_for('documents'))
@@ -1814,6 +1853,7 @@ def add_departement():
                     VALUES (%s, %s, %s)
                 """, (nom, description or None, responsable or None))
                 conn.commit()
+                notify_all_users("Nouveau département", f"Le département '{nom}' a été créé.", "info", exclude_user_id=session.get('user_id'))
                 flash(f"Département '{nom}' créé avec succès", "success")
                 cur.close()
                 conn.close()
@@ -1851,6 +1891,7 @@ def edit_departement(id):
                     WHERE id=%s
                 """, (nom, description or None, responsable or None, id))
                 conn.commit()
+                notify_all_users("Département modifié", f"Le département '{nom}' a été modifié.", "info", exclude_user_id=session.get('user_id'))
                 flash("Département mis à jour", "success")
                 cur.close()
                 conn.close()
@@ -1880,6 +1921,7 @@ def delete_departement(id):
     try:
         cur.execute("DELETE FROM departements WHERE id = %s", (id,))
         conn.commit()
+        notify_all_users("Département supprimé", "Un département a été supprimé.", "warning", exclude_user_id=session.get('user_id'))
         flash("Département supprimé", "success")
     except Exception as e:
         conn.rollback()
