@@ -338,7 +338,11 @@ def send_retard_email(employee_name, employee_email, retard_minutes, date_str, h
 
 # ==================== DB ====================
 def get_db():
-    return psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("SET timezone TO 'Indian/Antananarivo'")
+    cur.close()
+    return conn
 
 from contextlib import contextmanager
 
