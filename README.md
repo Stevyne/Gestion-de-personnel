@@ -1,6 +1,7 @@
 # 👥 Gestion du Personnel
 
 **Application RH complète en Flask + PostgreSQL**
+
 Système de gestion du personnel multi-utilisateur avec suivi des présences, congés, documents et notifications.
 
 > Interface entièrement en français • Multi-utilisateur réel (isolation par `user_id`) • Sécurité CSRF / rate limiting / headers HTTP
@@ -47,21 +48,22 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 
 ## 🛠️ Technologies
 
-| Catégorie      | Choix                                              |
-|----------------|-----------------------------------------------------|
-| Backend        | Flask 3.0.3                                          |
-| Base de données| PostgreSQL (psycopg2-binary, RealDictCursor)         |
-| Sécurité       | Flask-WTF (CSRF), Flask-Limiter, Flask-Talisman, python-dotenv |
-| Emails         | Flask-Mail                                           |
-| Exports        | ReportLab (PDF), Openpyxl (Excel)                    |
-| Frontend       | HTML + CSS responsive mobile-first (pas de framework JS) |
-| Auth           | Werkzeug (hash des mots de passe)                    |
+| Catégorie       | Choix                                              |
+|-----------------|----------------------------------------------------|
+| Backend         | Flask 3.0.3                                        |
+| Base de données | PostgreSQL (psycopg2-binary, RealDictCursor)       |
+| Sécurité        | Flask-WTF (CSRF), Flask-Limiter, Flask-Talisman, python-dotenv |
+| Emails          | Flask-Mail                                         |
+| Exports         | ReportLab (PDF), Openpyxl (Excel)                  |
+| Frontend        | HTML + CSS responsive mobile-first (pas de framework JS) |
+| Auth            | Werkzeug (hash des mots de passe)                  |
 
 ---
 
 ## 📦 Installation
 
 ### 1. Prérequis
+
 ```bash
 # Python 3.10+
 python3 --version
@@ -72,6 +74,7 @@ sudo apt install postgresql postgresql-contrib
 ```
 
 ### 2. Cloner et installer les dépendances
+
 ```bash
 git clone https://github.com/Stevyne/Gestion-de-personnel.git
 cd Gestion-de-personnel
@@ -79,10 +82,13 @@ pip install -r requirements.txt
 ```
 
 ### 3. Configuration de la base de données
+
 ```bash
 sudo -u postgres psql
 ```
+
 Dans psql :
+
 ```sql
 CREATE DATABASE gestion_personnel;
 CREATE USER postgres WITH PASSWORD 'postgres';
@@ -91,18 +97,20 @@ GRANT ALL PRIVILEGES ON DATABASE gestion_personnel TO postgres;
 ```
 
 ### 4. Variables d'environnement
+
 Copiez `.env.example` en `.env` et adaptez les valeurs :
+
 ```bash
 cp .env.example .env
 ```
 
-| Variable | Description |
-|---|---|
-| `SECRET_KEY` | Clé secrète Flask — à générer avec `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `DATABASE_URL` | Chaîne de connexion PostgreSQL |
+| Variable                  | Description |
+|---------------------------|-------------|
+| `SECRET_KEY`              | Clé secrète Flask — à générer avec `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `DATABASE_URL`            | Chaîne de connexion PostgreSQL |
 | `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS` | Config SMTP |
 | `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_DEFAULT_SENDER` | Identifiants email (optionnel, mode démo sinon) |
-| `ADMIN_EMAIL` | Destinataire des alertes admin |
+| `ADMIN_EMAIL`             | Destinataire des alertes admin |
 | `FLASK_ENV`, `FLASK_DEBUG` | Mode d'exécution |
 | `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_HTTPONLY`, `SESSION_COOKIE_SAMESITE` | Sécurité des cookies de session |
 
@@ -128,6 +136,7 @@ L'application démarre sur **http://0.0.0.0:5000**
 > La première exécution crée automatiquement les tables et les utilisateurs par défaut.
 
 **En production**, ne pas utiliser le serveur de développement Flask :
+
 ```bash
 gunicorn -w 4 -b 0.0.0.0:5000 app:app
 ```
@@ -136,12 +145,12 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 
 ## 👤 Utilisateurs par défaut
 
-| Utilisateur | Mot de passe | Rôle    | Description         |
-|-------------|---------------|---------|----------------------|
-| `admin`     | `admin123`    | admin   | Accès complet        |
-| `rh`        | `rh123`       | rh      | Ressources Humaines  |
-| `manager`   | `manager123`  | manager | Chef de projet       |
-| `employe`   | `user123`     | employe | Employé classique    |
+| Utilisateur | Mot de passe | Rôle     | Description              |
+|-------------|--------------|----------|--------------------------|
+| `admin`     | `admin123`   | admin    | Accès complet            |
+| `rh`        | `rh123`      | rh       | Ressources Humaines      |
+| `manager`   | `manager123` | manager  | Chef de projet           |
+| `employe`   | `user123`    | employe  | Employé classique        |
 
 > À changer immédiatement en environnement réel — ces identifiants sont créés automatiquement par `init_db()`.
 
@@ -149,22 +158,22 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 
 ## 📍 Routes principales
 
-| Route | Description | Accès |
-|---|---|---|
-| `/` | Tableau de bord | Connecté |
-| `/login`, `/logout`, `/register` | Authentification et inscription | Public / Connecté |
-| `/employes`, `/employes/add`, `/employes/<id>`, `/employes/<id>/edit`, `/employes/<id>/delete` | Gestion des employés | Tous / selon rôle |
-| `/departements`, `/departements/add`, `/departements/edit/<id>`, `/departements/delete/<id>` | Gestion des départements | Selon rôle |
-| `/presences`, `/presences/clock_in/<id>`, `/presences/clock_out/<id>`, `/presences/add`, `/presences/delete/<id>` | Pointages | Tous / selon rôle |
-| `/conges`, `/conges/add`, `/conges/update/<id>`, `/conges/delete/<id>` | Congés | Tous / selon rôle |
-| `/calendrier-conges` | Calendrier des congés | Tous |
-| `/rapports` | Rapports avancés + filtres | Tous |
-| `/documents`, `/documents/delete/<id>` | Documents | Tous |
-| `/historique` | Historique salaires / embauches | Tous |
-| `/notifications`, `/notifications/mark-read` | Centre de notifications | Tous |
-| `/self-service`, `/mon-espace`, `/self-service/presences`, `/self-service/conges` | Espace personnel | Tous |
-| `/audit` | Logs d'audit | admin, rh |
-| `/export/presences/pdf`, `/export/presences/excel`, `/export/conges/pdf`, `/export/conges/excel` | Exports | Connecté |
+| Route                              | Description                      | Accès                  |
+|------------------------------------|----------------------------------|------------------------|
+| `/`                                | Tableau de bord                  | Connecté               |
+| `/login`, `/logout`, `/register`   | Authentification et inscription  | Public / Connecté      |
+| `/employes`, `/employes/add`, ...  | Gestion des employés             | Tous / selon rôle      |
+| `/departements`                    | Gestion des départements         | Selon rôle             |
+| `/presences`, `/presences/clock_in`| Pointages                        | Tous / selon rôle      |
+| `/conges`, `/conges/add`           | Congés                           | Tous / selon rôle      |
+| `/calendrier-conges`               | Calendrier des congés            | Tous                   |
+| `/rapports`                        | Rapports avancés + filtres       | Tous                   |
+| `/documents`                       | Documents                        | Tous                   |
+| `/historique`                      | Historique salaires / embauches  | Tous                   |
+| `/notifications`                   | Centre de notifications          | Tous                   |
+| `/self-service`, `/mon-espace`     | Espace personnel                 | Tous                   |
+| `/audit`                           | Logs d'audit                     | admin, rh              |
+| `/export/presences/pdf`            | Exports                          | Connecté               |
 
 ---
 
@@ -185,7 +194,7 @@ Les tests s'appuient sur une **vraie base PostgreSQL** de test (pas de mock), co
 # 1. Créer la base de test
 createdb gestion_personnel_test
 
-# 2. Installer les dépendances de dev
+# 2. Installer les dépendances de développement
 pip install -r requirements-dev.txt
 
 # 3. Lancer les tests
@@ -248,4 +257,5 @@ Projet interne – 2026
 ---
 
 **Développé avec ❤️ en Flask + PostgreSQL**
+
 Pour toute question ou contribution, contactez l'administrateur système.
