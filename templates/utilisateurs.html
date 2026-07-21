@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>👤 Gestion des Utilisateurs</h1>
+        <div>
+            <a href="{{ url_for('register') }}" class="btn btn-primary">+ Nouvel utilisateur</a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Identifiant</th>
+                    <th>Rôle</th>
+                    <th>Employé lié</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td><strong>{{ u.username }}</strong></td>
+                    <td>
+                        {% if u.role == 'admin' %}
+                            <span class="badge" style="background:#ede9fe;color:#5b21b6;">Admin</span>
+                        {% elif u.role == 'rh' %}
+                            <span class="badge" style="background:#dbeafe;color:#1e40af;">RH</span>
+                        {% elif u.role == 'manager' %}
+                            <span class="badge" style="background:#fef9c3;color:#854d0e;">Manager</span>
+                        {% else %}
+                            <span class="badge" style="background:#f1f5f9;color:#334155;">Employé</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if u.nom %}{{ u.prenom }} {{ u.nom }}{% else %}<span style="color:#94a3b8;">— Aucun —</span>{% endif %}
+                    </td>
+                    <td style="min-width:280px;">
+                        <details style="display:inline-block; margin-right:6px;">
+                            <summary class="btn btn-secondary" style="display:inline-block; padding:4px 8px; font-size:0.7rem; cursor:pointer;">✏️ Modifier</summary>
+                            <form action="{{ url_for('edit_utilisateur', user_id=u.id) }}" method="post"
+                                  style="margin-top:8px; padding:10px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; display:flex; flex-direction:column; gap:6px; min-width:220px;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label style="font-size:0.75rem; font-weight:600; color:#475569;">Rôle</label>
+                                <select name="role" style="padding:4px 6px; border-radius:6px; border:1px solid #cbd5e1;">
+                                    <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
+                                    <option value="rh" {% if u.role == 'rh' %}selected{% endif %}>RH</option>
+                                    <option value="manager" {% if u.role == 'manager' %}selected{% endif %}>Manager</option>
+                                    <option value="employe" {% if u.role == 'employe' %}selected{% endif %}>Employé</option>
+                                </select>
+                                <label style="font-size:0.75rem; font-weight:600; color:#475569;">Employé lié</label>
+                                <select name="employe_id" style="padding:4px 6px; border-radius:6px; border:1px solid #cbd5e1;">
+                                    <option value="">— Aucun —</option>
+                                    {% for emp in employees %}
+                                    <option value="{{ emp.id }}" {% if u.employe_id == emp.id %}selected{% endif %}>{{ emp.prenom }} {{ emp.nom }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-secondary" style="padding:4px 8px; font-size:0.75rem;">✓ Enregistrer</button>
+                            </form>
+                        </details>
+
+                        <details style="display:inline-block; margin-right:6px;">
+                            <summary class="btn btn-secondary" style="display:inline-block; padding:4px 8px; font-size:0.7rem; cursor:pointer;">🔑 Mot de passe</summary>
+                            <form action="{{ url_for('reset_password_utilisateur', user_id=u.id) }}" method="post"
+                                  style="margin-top:8px; padding:10px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; display:flex; flex-direction:column; gap:6px; min-width:200px;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label style="font-size:0.75rem; font-weight:600; color:#475569;">Nouveau mot de passe</label>
+                                <input type="password" name="nouveau_mdp" minlength="6" required
+                                       style="padding:5px 8px; border-radius:6px; border:1px solid #cbd5e1;">
+                                <button type="submit" class="btn btn-secondary" style="padding:4px 8px; font-size:0.75rem;">✓ Réinitialiser</button>
+                            </form>
+                        </details>
+
+                        {% if u.id != session.get('user_id') %}
+                        <form action="{{ url_for('delete_utilisateur', user_id=u.id) }}" method="post" style="display:inline;"
+                              class="confirm-form"
+                              data-confirm-title="Supprimer cet utilisateur ?"
+                              data-confirm-subtitle="Action irréversible"
+                              data-confirm-icon="👤"
+                              data-confirm-warning="Ce compte perdra tout accès à la plateforme.">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger" style="padding:4px 7px; font-size:0.7rem;">🗑️</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" style="text-align:center; padding:40px; color:#64748b;">
+                        Aucun utilisateur trouvé.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
