@@ -1298,6 +1298,67 @@ def delete_conge(id):
     return redirect(url_for('conges'))
 
 
+@app.route('/soldes-conges')
+@login_required
+@role_required('admin', 'rh', 'manager')
+def soldes_conges_page():
+    """Affiche le solde de congés de chaque employé pour une année donnée.
+    jours_utilises est recalculé automatiquement depuis les congés approuvés
+    (via recalculer_solde) avant affichage, donc toujours à jour."""
+    annee = request.args.get('annee', type=int) or datetime.now().year
+
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
+        employees = cur.fetchall()
+        for emp in employees:
+            recalculer_solde(emp['id'], annee, cur=cur)
+
+    soldes = []
+    for emp in employees:
+        s = get_solde_conges(emp['id'], annee)
+        s['employe_id'] = emp['id']
+        s['nom'] = emp['nom']
+        s['prenom'] = emp['prenom']
+        soldes.append(s)
+
+    annee_courante = datetime.now().year
+    annees_disponibles = list(range(annee_courante - 2, annee_courante + 2))
+
+    return render_template('soldes_conges.html', soldes=soldes, annee=annee,
+                            annees_disponibles=annees_disponibles)
+
+
+@app.route('/soldes-conges/update/<int:employe_id>', methods=['POST'])
+@login_required
+@role_required('admin', 'rh')
+def update_solde_conges(employe_id):
+    """Permet de modifier manuellement le nombre de jours acquis (allocation)
+    d'un employé pour une année. jours_utilises reste calculé automatiquement."""
+    annee = request.form.get('annee', type=int) or datetime.now().year
+    jours_acquis = request.form.get('jours_acquis', type=float)
+
+    if jours_acquis is None or jours_acquis < 0:
+        flash("Valeur de jours acquis invalide", "danger")
+        return redirect(url_for('soldes_conges_page', annee=annee))
+
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("""
+            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
+            VALUES (%s, %s, %s, 0)
+            ON CONFLICT (employe_id, annee)
+            DO UPDATE SET jours_acquis = %s
+        """, (employe_id, annee, jours_acquis, jours_acquis))
+        cur.execute("SELECT nom, prenom FROM employes WHERE id = %s", (employe_id,))
+        emp = cur.fetchone()
+
+    if emp:
+        log_action(session.get('user_id'), session.get('username'), "UPDATE_SOLDE_CONGES",
+                   "solde_conges", employe_id, f"{emp['prenom']} {emp['nom']} → jours_acquis={jours_acquis} ({annee})")
+
+    flash("Solde de congés mis à jour avec succès", "success")
+    return redirect(url_for('soldes_conges_page', annee=annee))
+
+
 @app.route('/audit')
 @role_required('admin', 'rh')
 def audit():

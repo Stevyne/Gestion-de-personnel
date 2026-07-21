@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>💰 Soldes de Congés</h1>
+        <div>
+            <form method="get" style="display:inline-flex; gap:8px; align-items:center;">
+                <label for="annee" style="font-size:0.85rem; color:#64748b;">Année :</label>
+                <select name="annee" id="annee" onchange="this.form.submit()" style="padding:6px 10px; border-radius:6px; border:1px solid #cbd5e1;">
+                    {% for a in annees_disponibles %}
+                        <option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            <a href="{{ url_for('conges') }}" class="btn btn-secondary">← Retour aux congés</a>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Employé</th>
+                    <th>Jours acquis</th>
+                    <th>Jours utilisés</th>
+                    <th>Jours restants</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in soldes %}
+                <tr>
+                    <td><strong>{{ s.prenom }} {{ s.nom }}</strong></td>
+                    <td>
+                        <form action="{{ url_for('update_solde_conges', employe_id=s.employe_id) }}" method="post" style="display:flex; gap:6px; align-items:center;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="annee" value="{{ annee }}">
+                            <input type="number" name="jours_acquis" value="{{ s.jours_acquis }}" min="0" step="0.5"
+                                   style="width:80px; padding:4px 8px; border-radius:6px; border:1px solid #cbd5e1;">
+                            <button type="submit" class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem;">✓ Enregistrer</button>
+                        </form>
+                    </td>
+                    <td>{{ s.jours_utilises }} j</td>
+                    <td>
+                        {% if s.jours_restants < 0 %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">{{ s.jours_restants }} j</span>
+                        {% elif s.jours_restants <= 5 %}
+                            <span class="badge" style="background:#fef9c3;color:#854d0e;">{{ s.jours_restants }} j</span>
+                        {% else %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">{{ s.jours_restants }} j</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <small style="color:#64748b;">Calculé automatiquement selon les congés approuvés</small>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align:center; padding:40px; color:#64748b;">
+                        Aucun employé trouvé.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
