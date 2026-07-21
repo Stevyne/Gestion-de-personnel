@@ -328,6 +328,27 @@
         </div>
     </div>
 
+    <!-- ==================== GENERIC CONFIRMATION POPUP (réutilisable via class="confirm-form") ==================== -->
+    <div id="genericConfirmModal" class="modal-backdrop">
+        <div class="delete-modal">
+            <div class="modal-header">
+                <div class="modal-icon" id="genericConfirmIcon">⚠️</div>
+                <h3 class="modal-title" id="genericConfirmTitle">Confirmer cette action ?</h3>
+                <p class="modal-subtitle" id="genericConfirmSubtitle">Action irréversible</p>
+            </div>
+
+            <div class="modal-body">
+                <div class="warning-text" id="genericConfirmWarning" style="display:none;"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="modal-btn cancel" onclick="closeGenericConfirm()">Annuler</button>
+                <button type="button" class="modal-btn danger" id="genericConfirmBtn">Confirmer</button>
+            </div>
+        </div>
+    </div>
+
+
     <script>
         // ===== ROBUST MOBILE DRAWER (no blur + no tap-through + clickable) =====
         const navToggle = document.getElementById('navToggle');
@@ -518,6 +539,32 @@
             currentForm = null;
         }
 
+        let currentGenericForm = null;
+        function showGenericConfirm(formElement) {
+            const modal = document.getElementById('genericConfirmModal');
+            document.getElementById('genericConfirmIcon').textContent = formElement.dataset.confirmIcon || '⚠️';
+            document.getElementById('genericConfirmTitle').textContent = formElement.dataset.confirmTitle || 'Confirmer cette action ?';
+            document.getElementById('genericConfirmSubtitle').textContent = formElement.dataset.confirmSubtitle || 'Action irréversible';
+            const warningEl = document.getElementById('genericConfirmWarning');
+            if (formElement.dataset.confirmWarning) {
+                warningEl.innerHTML = '<strong>Attention :</strong> ' + formElement.dataset.confirmWarning;
+                warningEl.style.display = 'block';
+            } else {
+                warningEl.style.display = 'none';
+            }
+            currentGenericForm = formElement;
+            modal.classList.add('show');
+            modal.onclick = e => { if (e.target === modal) closeGenericConfirm(); };
+        }
+        function closeGenericConfirm() {
+            const modal = document.getElementById('genericConfirmModal');
+            const btn = document.getElementById('genericConfirmBtn');
+            modal.classList.remove('show');
+            btn.disabled = false;
+            btn.textContent = 'Confirmer';
+            currentGenericForm = null;
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('form.delete-employee-form').forEach(form => {
                 const btn = form.querySelector('button[type="submit"]');
@@ -528,6 +575,27 @@
                     showDeleteModal(form, form.dataset.employeeId || '?', form.dataset.employeeName || 'cet employé');
                 });
             });
+
+            document.querySelectorAll('form.confirm-form').forEach(form => {
+                const btn = form.querySelector('button[type="submit"]');
+                if (!btn) return;
+                form.onsubmit = null;
+                btn.addEventListener('click', e => {
+                    e.preventDefault();
+                    showGenericConfirm(form);
+                });
+            });
+            const genericBtn = document.getElementById('genericConfirmBtn');
+            if (genericBtn) {
+                genericBtn.addEventListener('click', () => {
+                    if (currentGenericForm) {
+                        genericBtn.disabled = true;
+                        genericBtn.textContent = 'Traitement...';
+                        currentGenericForm.submit();
+                    }
+                });
+            }
+
             setupAutoClose();
             setupHamburgerIcon();
             window.addEventListener('resize', () => { if (window.innerWidth > 768 && isDrawerOpen) closeDrawer(true); });
