@@ -188,7 +188,7 @@
                 <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">📋 Historique</a>
                 <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                <a href="{{ url_for('soldes_conges_page') }}" class="nav-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">💰 Soldes</a>
+                <a href="{{ url_for('soldes_conges_page') }}" class="nav-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}"> Soldes congés</a>
                 {% endif %}
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
                 {% if session.get('role') == 'admin' %}
@@ -244,7 +244,7 @@
                 <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">📋 Historique</a>
                 <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                <a href="{{ url_for('soldes_conges_page') }}" class="nav-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">💰 Soldes</a>
+                <a href="{{ url_for('soldes_conges_page') }}" class="nav-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}"> Soldes congés</a>
                 {% endif %}
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
                 {% if session.get('role') == 'admin' %}
