@@ -482,6 +482,7 @@ def recalculer_solde(employe_id, annee=None, cur=None):
             FROM conges 
             WHERE employe_id = %s 
               AND statut = 'approuvé'
+              AND type_conge = 'congé payé'
               AND EXTRACT(YEAR FROM date_debut) = %s
         """, (employe_id, annee))
         total = float(cur.fetchone()['total'] or 0)
@@ -520,6 +521,17 @@ def init_db():
     cur.execute('''CREATE TABLE IF NOT EXISTS employes (id SERIAL PRIMARY KEY, nom VARCHAR(100) NOT NULL, prenom VARCHAR(100) NOT NULL, poste VARCHAR(150), departement VARCHAR(100), email VARCHAR(150), telephone VARCHAR(20), date_embauche DATE, salaire NUMERIC(10,2))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS presences (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), date DATE, heure_arrivee TIME, heure_depart TIME, statut VARCHAR(30) DEFAULT 'présent', commentaire TEXT, UNIQUE(employe_id, date))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS conges (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), type_conge VARCHAR(50), date_debut DATE, date_fin DATE, nombre_jours INTEGER, motif TEXT, statut VARCHAR(20) DEFAULT 'en attente', date_demande DATE DEFAULT CURRENT_DATE)''')
+    # Absences non justifiées : jours d'absence qui ne relèvent ni d'un congé
+    # ni d'une permission approuvés (ex. absence non signalée, no-show).
+    cur.execute('''CREATE TABLE IF NOT EXISTS absences (
+        id SERIAL PRIMARY KEY,
+        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        motif TEXT,
+        enregistre_par INTEGER REFERENCES users(id),
+        date_enregistrement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(employe_id, date)
+    )''')
 
     # ==================== TABLE SOLDES_CONGES (CRITIQUE) ====================
     cur.execute('''CREATE TABLE IF NOT EXISTS soldes_conges (
@@ -1263,6 +1275,58 @@ def delete_conge(id):
         cur.execute("DELETE FROM conges WHERE id = %s", (id,))
     flash("Demande de congé supprimée", "success")
     return redirect(url_for('conges'))
+
+
+# ==================== ABSENCES NON JUSTIFIÉES ====================
+@app.route('/absences')
+@login_required
+@role_required('admin', 'rh', 'manager')
+def absences():
+    with db_cursor() as (conn, cur):
+        cur.execute("""
+            SELECT a.*, e.nom, e.prenom
+            FROM absences a
+            JOIN employes e ON a.employe_id = e.id
+            ORDER BY a.date DESC LIMIT 100
+        """)
+        absences_list = cur.fetchall()
+        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        employees = cur.fetchall()
+    return render_template('absences.html', absences=absences_list, employees=employees)
+
+
+@app.route('/absences/add', methods=['GET', 'POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def add_absence():
+    if request.method == 'POST':
+        employe_id = request.form.get('employe_id')
+        date_val = request.form.get('date')
+        motif = request.form.get('motif', '')
+        if employe_id and date_val:
+            with db_cursor(commit=True) as (conn, cur):
+                cur.execute("""
+                    INSERT INTO absences (employe_id, date, motif, enregistre_par)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (employe_id, date) DO UPDATE SET motif = EXCLUDED.motif
+                """, (employe_id, date_val, motif, session.get('user_id')))
+            flash("Absence non justifiée enregistrée", "success")
+            return redirect(url_for('absences'))
+        flash("Employé et date requis", "danger")
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        employees = cur.fetchall()
+    return render_template('absence_form.html', employees=employees)
+
+
+@app.route('/absences/delete/<int:id>', methods=['POST'])
+@login_required
+@role_required('admin', 'rh')
+def delete_absence(id):
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("DELETE FROM absences WHERE id = %s", (id,))
+    flash("Absence supprimée", "success")
+    return redirect(url_for('absences'))
 
 
 @app.route('/soldes-conges')

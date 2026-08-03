@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 720px; margin: 0 auto;">
+    <div class="card-header">
+        <h1>🚫 Enregistrer une absence non justifiée</h1>
+    </div>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+            <label for="employe_id">Employé *</label>
+            <select name="employe_id" id="employe_id" class="form-control" required>
+                {% for emp in employees %}
+                    <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="date">Date de l'absence *</label>
+            <input type="date" id="date" name="date" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+            <label for="motif">Commentaire</label>
+            <textarea id="motif" name="motif" class="form-control" rows="3" placeholder="Ex : absence non signalée, aucune nouvelle de l'employé..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+            <a href="{{ url_for('absences') }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

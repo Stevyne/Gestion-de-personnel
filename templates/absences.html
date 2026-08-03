@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>🚫 Absences non justifiées</h1>
+        <div>
+            <a href="{{ url_for('add_absence') }}" class="btn btn-primary">+ Enregistrer une absence</a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Employé</th>
+                    <th>Date</th>
+                    <th>Motif</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in absences %}
+                <tr>
+                    <td><strong>{{ a.prenom }} {{ a.nom }}</strong></td>
+                    <td>{{ a.date }}</td>
+                    <td><small>{{ a.motif or '—' }}</small></td>
+                    <td>
+                        {% if session.get('role') in ['admin', 'rh'] %}
+                        <form action="{{ url_for('delete_absence', id=a.id) }}" method="post" style="display:inline;"
+                              class="confirm-form"
+                              data-confirm-title="Supprimer cette absence ?"
+                              data-confirm-subtitle="Action irréversible"
+                              data-confirm-icon="🚫">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger" style="padding:4px 7px;font-size:0.7rem;">🗑️</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" style="text-align:center; padding:40px; color:#64748b;">
+                        Aucune absence non justifiée enregistrée.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
