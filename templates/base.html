@@ -164,6 +164,33 @@
     </style>
 </head>
 <body>
+{% macro pagination(endpoint, base_qs, pg, page_items) %}
+{% if pg and pg.pages > 1 %}
+<nav style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin:20px 0 6px;">
+  {% set href %}{{ url_for(endpoint) }}?{% if base_qs %}{{ base_qs }}&{% endif %}page={% endset %}
+  {% if pg.has_prev %}
+    <a href="{{ href }}{{ pg.page-1 }}" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:8px;text-decoration:none;color:#1e40af;background:#fff;font-size:.9rem;">&laquo; Précédent</a>
+  {% else %}
+    <span style="padding:7px 13px;border:1px solid #e2e8f0;border-radius:8px;color:#94a3b8;background:#f1f5f9;font-size:.9rem;">&laquo; Précédent</span>
+  {% endif %}
+  {% for n in page_items %}
+    {% if n == '...' %}
+      <span style="padding:7px 4px;color:#64748b;">&hellip;</span>
+    {% elif n == pg.page %}
+      <strong style="padding:7px 13px;border-radius:8px;background:#1e40af;color:#fff;font-size:.9rem;">{{ n }}</strong>
+    {% else %}
+      <a href="{{ href }}{{ n }}" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:8px;text-decoration:none;color:#1e40af;background:#fff;font-size:.9rem;">{{ n }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if pg.has_next %}
+    <a href="{{ href }}{{ pg.page+1 }}" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:8px;text-decoration:none;color:#1e40af;background:#fff;font-size:.9rem;">Suivant &raquo;</a>
+  {% else %}
+    <span style="padding:7px 13px;border:1px solid #e2e8f0;border-radius:8px;color:#94a3b8;background:#f1f5f9;font-size:.9rem;">Suivant &raquo;</span>
+  {% endif %}
+</nav>
+<div style="text-align:center;color:#64748b;font-size:.82rem;margin-bottom:10px;">Page {{ pg.page }} / {{ pg.pages }} &mdash; {{ pg.total }} résultat(s)</div>
+{% endif %}
+{% endmacro %}
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">

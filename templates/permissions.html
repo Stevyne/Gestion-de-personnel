@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "base.html" import pagination %}
 
 {% block content %}
 <div class="card">
@@ -85,5 +86,7 @@
             </tbody>
         </table>
     </div>
+
+    {{ pagination('permissions', base_qs, pg, page_items) }}
 </div>
 {% endblock %}
