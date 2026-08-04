@@ -521,17 +521,6 @@ def init_db():
     cur.execute('''CREATE TABLE IF NOT EXISTS employes (id SERIAL PRIMARY KEY, nom VARCHAR(100) NOT NULL, prenom VARCHAR(100) NOT NULL, poste VARCHAR(150), departement VARCHAR(100), email VARCHAR(150), telephone VARCHAR(20), date_embauche DATE, salaire NUMERIC(10,2))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS presences (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), date DATE, heure_arrivee TIME, heure_depart TIME, statut VARCHAR(30) DEFAULT 'présent', commentaire TEXT, UNIQUE(employe_id, date))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS conges (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), type_conge VARCHAR(50), date_debut DATE, date_fin DATE, nombre_jours INTEGER, motif TEXT, statut VARCHAR(20) DEFAULT 'en attente', date_demande DATE DEFAULT CURRENT_DATE)''')
-    # Absences non justifiées : jours d'absence qui ne relèvent ni d'un congé
-    # ni d'une permission approuvés (ex. absence non signalée, no-show).
-    cur.execute('''CREATE TABLE IF NOT EXISTS absences (
-        id SERIAL PRIMARY KEY,
-        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
-        date DATE NOT NULL,
-        motif TEXT,
-        enregistre_par INTEGER REFERENCES users(id),
-        date_enregistrement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(employe_id, date)
-    )''')
 
     # ==================== TABLE SOLDES_CONGES (CRITIQUE) ====================
     cur.execute('''CREATE TABLE IF NOT EXISTS soldes_conges (
@@ -545,6 +534,17 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_soldes_employe_annee ON soldes_conges(employe_id, annee)")
 
     cur.execute('''CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username VARCHAR(80) UNIQUE, password_hash VARCHAR(255), role VARCHAR(20) DEFAULT 'employe', employe_id INTEGER REFERENCES employes(id))''')
+    # Absences non justifiées : jours d'absence qui ne relèvent ni d'un congé
+    # ni d'une permission approuvés (ex. absence non signalée, no-show).
+    cur.execute('''CREATE TABLE IF NOT EXISTS absences (
+        id SERIAL PRIMARY KEY,
+        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        motif TEXT,
+        enregistre_par INTEGER REFERENCES users(id),
+        date_enregistrement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(employe_id, date)
+    )''')
     cur.execute('''CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id INTEGER, username VARCHAR(80), action VARCHAR(100), entity_type VARCHAR(50), entity_id INTEGER, details TEXT, ip_address VARCHAR(45), timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs(timestamp DESC)")
 
@@ -2283,8 +2283,13 @@ def add_employee_alt():
     return redirect(url_for('index'))
 
 
+# Doit s'exécuter que l'app soit lancée directement (python app.py) OU importée
+# par un serveur WSGI (gunicorn app:app, cas du déploiement Render) : sinon les
+# tables créées via CREATE TABLE IF NOT EXISTS (comme `absences`) n'existent
+# jamais en production. Idempotent, donc sans risque même avec plusieurs workers.
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     if debug_mode and os.environ.get('FLASK_ENV') == 'production':
         raise RuntimeError("FLASK_DEBUG ne doit jamais être activé en production (FLASK_ENV=production).")
