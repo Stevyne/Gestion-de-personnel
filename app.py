@@ -1201,13 +1201,34 @@ def delete_presence(id):
 def conges():
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute("SELECT c.*, e.nom, e.prenom FROM conges c JOIN employes e ON c.employe_id = e.id ORDER BY c.date_demande DESC")
+
+    # ---- Filtres / recherche ----
+    search = request.args.get('search', '').strip()
+    statut = request.args.get('statut', '').strip()
+    type_conge = request.args.get('type_conge', '').strip()
+    date_debut = request.args.get('date_debut', '').strip()
+    date_fin = request.args.get('date_fin', '').strip()
+
+    q = "SELECT c.*, e.nom, e.prenom FROM conges c JOIN employes e ON c.employe_id = e.id WHERE 1=1"
+    params = []
+    if search:
+        q += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
+        params += [f"%{search.lower()}%", f"%{search.lower()}%"]
+    if statut:
+        q += " AND c.statut = %s"; params.append(statut)
+    if type_conge:
+        q += " AND c.type_conge = %s"; params.append(type_conge)
+    if date_debut:
+        q += " AND c.date_debut >= %s"; params.append(date_debut)
+    if date_fin:
+        q += " AND c.date_fin <= %s"; params.append(date_fin)
+    q += " ORDER BY c.date_demande DESC"
+    cur.execute(q, params)
     conges_list = cur.fetchall()
-    
-    # Always fetch employees (needed for the "+ Nouvelle demande" button)
+
     cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
     employees = cur.fetchall()
-    
+
     # Soldes de congés pour les rôles privilégiés (admin/rh/manager)
     soldes = {}
     annee_courante = datetime.now().year
@@ -1216,10 +1237,16 @@ def conges():
             s = get_solde_conges(emp['id'], annee_courante)
             s['nom'] = f"{emp['prenom']} {emp['nom']}"
             soldes[emp['id']] = s
-    
+
+    cur.execute("SELECT DISTINCT type_conge FROM conges WHERE type_conge IS NOT NULL ORDER BY type_conge")
+    types = [r['type_conge'] for r in cur.fetchall()]
+
     cur.close()
     conn.close()
-    return render_template('conges.html', conges=conges_list, employees=employees, soldes=soldes, annee_courante=annee_courante)
+    return render_template('conges.html', conges=conges_list, employees=employees, soldes=soldes,
+                           annee_courante=annee_courante, types=types,
+                           filters={'search': search, 'statut': statut, 'type_conge': type_conge,
+                                    'date_debut': date_debut, 'date_fin': date_fin})
 
 @app.route('/conges/add', methods=['GET', 'POST'])
 @login_required
@@ -1414,9 +1441,8 @@ def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None):
 @role_required('admin', 'rh', 'manager')
 def absences():
     # Génère automatiquement les absences dans SA PROPRE transaction :
-    # si la génération échoue (données inattendues, table manquante...), on
-    # ne fait pas planter la page — on journalise l'erreur et on affiche les
-    # absences déjà enregistrées. La cause exacte apparaît dans les logs.
+    # si la génération échoue, la page s'affiche quand même et l'erreur est
+    # journalisée.
     try:
         with db_cursor(commit=True) as (conn, cur):
             generer_absences_automatiques(cur)
@@ -1425,19 +1451,35 @@ def absences():
         flash("Génération automatique des absences impossible (voir les logs du serveur). "
               "Affichage des absences déjà enregistrées.", "warning")
 
+    # ---- Filtres / recherche ----
+    search = request.args.get('search', '').strip()
+    employe_id = request.args.get('employe_id', '').strip()
+    date_debut = request.args.get('date_debut', '').strip()
+    date_fin = request.args.get('date_fin', '').strip()
+
     with db_cursor() as (conn, cur):
-        cur.execute("""
-            SELECT a.*, e.nom, e.prenom
-            FROM absences a
-            JOIN employes e ON a.employe_id = e.id
-            ORDER BY a.date DESC LIMIT 200
-        """)
+        q = ("SELECT a.*, e.nom, e.prenom FROM absences a "
+             "JOIN employes e ON a.employe_id = e.id WHERE 1=1")
+        params = []
+        if search:
+            q += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
+            params += [f"%{search.lower()}%", f"%{search.lower()}%"]
+        if employe_id and employe_id.isdigit():
+            q += " AND a.employe_id = %s"; params.append(int(employe_id))
+        if date_debut:
+            q += " AND a.date >= %s"; params.append(date_debut)
+        if date_fin:
+            q += " AND a.date <= %s"; params.append(date_fin)
+        q += " ORDER BY a.date DESC LIMIT 500"
+        cur.execute(q, params)
         absences_list = cur.fetchall()
         cur.execute("SELECT COUNT(*) AS nb FROM absences")
         nb_total = cur.fetchone()['nb']
         cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
         employees = cur.fetchall()
-    return render_template('absences.html', absences=absences_list, employees=employees, nb_total=nb_total)
+    return render_template('absences.html', absences=absences_list, employees=employees, nb_total=nb_total,
+                           filters={'search': search, 'employe_id': employe_id,
+                                    'date_debut': date_debut, 'date_fin': date_fin})
 
 
 @app.route('/absences/add', methods=['GET', 'POST'])
@@ -1496,17 +1538,31 @@ def synchroniser_absences():
 @app.route('/permissions')
 @login_required
 def permissions():
+    search = request.args.get('search', '').strip()
+    statut = request.args.get('statut', '').strip()
+    date_debut = request.args.get('date_debut', '').strip()
+    date_fin = request.args.get('date_fin', '').strip()
+
     with db_cursor() as (conn, cur):
-        cur.execute("""
-            SELECT p.*, e.nom, e.prenom
-            FROM permissions p
-            JOIN employes e ON p.employe_id = e.id
-            ORDER BY p.date_demande DESC
-        """)
+        q = ("SELECT p.*, e.nom, e.prenom FROM permissions p "
+             "JOIN employes e ON p.employe_id = e.id WHERE 1=1")
+        params = []
+        if search:
+            q += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
+            params += [f"%{search.lower()}%", f"%{search.lower()}%"]
+        if statut:
+            q += " AND p.statut = %s"; params.append(statut)
+        if date_debut:
+            q += " AND p.date_debut >= %s"; params.append(date_debut)
+        if date_fin:
+            q += " AND p.date_fin <= %s"; params.append(date_fin)
+        q += " ORDER BY p.date_demande DESC"
+        cur.execute(q, params)
         permissions_list = cur.fetchall()
         cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
         employees = cur.fetchall()
-    return render_template('permissions.html', permissions=permissions_list, employees=employees)
+    return render_template('permissions.html', permissions=permissions_list, employees=employees,
+                           filters={'search': search, 'statut': statut, 'date_debut': date_debut, 'date_fin': date_fin})
 
 
 @app.route('/permissions/add', methods=['GET', 'POST'])

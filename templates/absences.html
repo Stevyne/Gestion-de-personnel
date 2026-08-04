@@ -15,10 +15,15 @@
     </div>
 
     <p style="color:#64748b; margin: 0 0 16px;">
-        <strong>{{ nb_total }}</strong> absence(s) au total. Chaque jour ouvré (lun. → ven.) passé sans présence
+        <strong>{{ absences|length }}</strong> absence(s) affichée(s) sur <strong>{{ nb_total }}</strong> au total. Chaque jour ouvré (lun. → ven.) passé sans présence
         enregistrée est automatiquement compté comme une absence — sauf s'il est couvert par un
         congé ou une <a href="{{ url_for('permissions') }}">permission</a> approuvé(e).
     </p>
+
+<form method="get" action="{{ url_for('absences') }}" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:#f8fafc; padding:14px 16px; border-radius:12px; margin-bottom:18px; border:1px solid #e2e8f0;"><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">🔎 Rechercher un employé</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Nom ou prénom..." class="form-control" style="min-width:200px;"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Employé</label><select name="employe_id" class="form-control">
+                <option value="">Tous</option>
+                {% for emp in employees %}<option value="{{ emp.id }}" {{ 'selected' if filters.employe_id == emp.id|string }}>{{ emp.prenom }} {{ emp.nom }}</option>{% endfor %}
+            </select></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Du</label><input type="date" name="date_debut" value="{{ filters.date_debut }}" class="form-control"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Au</label><input type="date" name="date_fin" value="{{ filters.date_fin }}" class="form-control"></div><button type="submit" class="btn btn-primary">Filtrer</button><a href="{{ url_for('absences') }}" class="btn btn-secondary">Réinitialiser</a></form>
 
     <div class="table-container">
         <table>

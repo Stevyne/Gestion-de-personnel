@@ -10,6 +10,16 @@
         </div>
     </div>
 
+<form method="get" action="{{ url_for('conges') }}" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:#f8fafc; padding:14px 16px; border-radius:12px; margin-bottom:18px; border:1px solid #e2e8f0;"><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">🔎 Rechercher un employé</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Nom ou prénom..." class="form-control" style="min-width:200px;"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Statut</label><select name="statut" class="form-control">
+                <option value="">Tous</option>
+                <option value="en attente" {{ 'selected' if filters.statut == 'en attente' }}>En attente</option>
+                <option value="approuvé" {{ 'selected' if filters.statut == 'approuvé' }}>Approuvé</option>
+                <option value="refusé" {{ 'selected' if filters.statut == 'refusé' }}>Refusé</option>
+            </select></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Type</label><select name="type_conge" class="form-control">
+                <option value="">Tous</option>
+                {% for t in types %}<option value="{{ t }}" {{ 'selected' if filters.type_conge == t }}>{{ t }}</option>{% endfor %}
+            </select></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Début ≥</label><input type="date" name="date_debut" value="{{ filters.date_debut }}" class="form-control"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Fin ≤</label><input type="date" name="date_fin" value="{{ filters.date_fin }}" class="form-control"></div><button type="submit" class="btn btn-primary">Filtrer</button><a href="{{ url_for('conges') }}" class="btn btn-secondary">Réinitialiser</a></form>
+
     <div class="table-container">
         <table>
             <thead>
