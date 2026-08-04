@@ -3,12 +3,17 @@
 {% block content %}
 <div class="card" style="max-width: 720px; margin: 0 auto;">
     <div class="card-header">
-        <h1>🏖️ Nouvelle demande de congé</h1>
+        <h1>🧾 Nouvelle demande de permission</h1>
     </div>
+
+    <p style="color:#64748b; margin: 0 0 16px;">
+        Une permission est <strong>indépendante des congés</strong> et ne déduit
+        aucun jour de votre solde de congés.
+    </p>
 
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        
+
         <div class="form-group">
             <label for="employe_id">Employé *</label>
             <select name="employe_id" id="employe_id" class="form-control" required>
@@ -16,19 +21,6 @@
                     <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
                 {% endfor %}
             </select>
-        </div>
-
-        <div class="form-group">
-            <label for="type_conge">Type de congé *</label>
-            <select name="type_conge" id="type_conge" class="form-control" required>
-                <option value="congé payé">Congé payé</option>
-                <option value="congé sans solde">Congé sans solde</option>
-                <option value="maladie">Maladie</option>
-                <option value="maternité / paternité">Maternité / Paternité</option>
-                <option value="récupération">Récupération</option>
-                <option value="autre">Autre</option>
-            </select>
-            <small style="color:#64748b;">Les permissions sont gérées dans un module séparé : <a href="{{ url_for('permissions') }}">🧾 Permissions</a>.</small>
         </div>
 
         <div class="form-row">
@@ -43,14 +35,14 @@
         </div>
 
         <div class="form-group">
-            <label for="motif">Motif / Commentaire</label>
-            <textarea name="motif" id="motif" class="form-control" rows="3" 
-                      placeholder="Ex: Vacances d'été, mariage, etc."></textarea>
+            <label for="motif">Motif de la permission *</label>
+            <textarea name="motif" id="motif" class="form-control" rows="3"
+                      placeholder="Ex : rendez-vous administratif, événement familial, démarche personnelle..."></textarea>
         </div>
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Soumettre la demande</button>
-            <a href="{{ url_for('conges') }}" class="btn btn-secondary">Annuler</a>
+            <a href="{{ url_for('permissions') }}" class="btn btn-secondary">Annuler</a>
         </div>
     </form>
 </div>

@@ -545,6 +545,21 @@ def init_db():
         date_enregistrement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(employe_id, date)
     )''')
+    # ==================== TABLE PERMISSIONS (MODULE SÉPARÉ) ====================
+    # Une permission fonctionne COMME un congé (demande → approbation/refus),
+    # mais c'est une entité à part entière : elle NE fait PAS partie des congés
+    # et ne déduit JAMAIS de jours du solde de congés (soldes_conges).
+    cur.execute('''CREATE TABLE IF NOT EXISTS permissions (
+        id SERIAL PRIMARY KEY,
+        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
+        motif TEXT,
+        date_debut DATE NOT NULL,
+        date_fin DATE NOT NULL,
+        nombre_jours INTEGER NOT NULL DEFAULT 1,
+        statut VARCHAR(20) DEFAULT 'en attente',
+        date_demande DATE DEFAULT CURRENT_DATE
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_permissions_employe ON permissions(employe_id)")
     cur.execute('''CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id INTEGER, username VARCHAR(80), action VARCHAR(100), entity_type VARCHAR(50), entity_id INTEGER, details TEXT, ip_address VARCHAR(45), timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs(timestamp DESC)")
 
@@ -1278,21 +1293,132 @@ def delete_conge(id):
 
 
 # ==================== ABSENCES NON JUSTIFIÉES ====================
+# Jours ouvrés pris en compte pour la génération automatique des absences
+# (0 = lundi ... 6 = dimanche). Par défaut : lundi → vendredi.
+JOURS_OUVRES = {0, 1, 2, 3, 4}
+
+def _dates_couvertes(cur, employe_id):
+    """Ensemble des dates qui ne doivent PAS être comptées comme une absence
+    pour un employé : jours avec présence + jours couverts par un congé
+    approuvé + jours couverts par une permission approuvée."""
+    couverts = set()
+
+    # Présences enregistrées
+    cur.execute("SELECT date FROM presences WHERE employe_id = %s", (employe_id,))
+    for row in cur.fetchall():
+        couverts.add(row['date'])
+
+    # Congés approuvés (tous types de congé)
+    cur.execute("""
+        SELECT date_debut, date_fin FROM conges
+        WHERE employe_id = %s AND statut = 'approuvé'
+    """, (employe_id,))
+    for row in cur.fetchall():
+        d, fin = row['date_debut'], row['date_fin']
+        while d <= fin:
+            couverts.add(d)
+            d += timedelta(days=1)
+
+    # Permissions approuvées (module séparé, mais un jour de permission
+    # approuvée n'est pas non plus une absence non justifiée)
+    cur.execute("""
+        SELECT date_debut, date_fin FROM permissions
+        WHERE employe_id = %s AND statut = 'approuvé'
+    """, (employe_id,))
+    for row in cur.fetchall():
+        d, fin = row['date_debut'], row['date_fin']
+        while d <= fin:
+            couverts.add(d)
+            d += timedelta(days=1)
+
+    return couverts
+
+
+def generer_absences_automatiques(cur, date_jusqua=None):
+    """Enregistre automatiquement dans `absences` chaque jour ouvré passé SANS
+    présence (et non couvert par un congé/permission approuvé), pour tous les
+    employés. Concrètement : « tout jour où l'employé n'a pas de présence ».
+
+    Règles :
+      - jour ouvré uniquement (lun → ven, cf. JOURS_OUVRES) ;
+      - date >= date d'embauche de l'employé ;
+      - date <= la veille (aujourd'hui reste « en cours ») ;
+      - aucune présence ce jour-là ;
+      - le jour n'est PAS couvert par un congé approuvé ;
+      - le jour n'est PAS couvert par une permission approuvée.
+
+    Idempotent grâce à la contrainte UNIQUE(employe_id, date).
+    Retourne le nombre d'absences nouvellement créées.
+
+    NB : les jours fériés (hors week-end) ne sont pas gérés tant qu'aucune
+    table de jours fériés n'existe ; ils seront marqués comme absences.
+    """
+    if date_jusqua is None:
+        date_jusqua = date.today() - timedelta(days=1)  # on exclut aujourd'hui
+
+    fin_globale = date_jusqua if isinstance(date_jusqua, date) \
+        else datetime.strptime(str(date_jusqua), '%Y-%m-%d').date()
+
+    cur.execute("SELECT id, date_embauche FROM employes ORDER BY id")
+    employes = cur.fetchall()
+
+    nb_creees = 0
+    motif_auto = "Aucune présence enregistrée (généré automatiquement)"
+
+    for emp in employes:
+        embauche = emp['date_embauche']
+        if not embauche:
+            # Sans date d'embauche, impossible de délimiter la période : on ignore.
+            continue
+        debut = embauche if isinstance(embauche, date) \
+            else datetime.strptime(str(embauche), '%Y-%m-%d').date()
+        if debut > fin_globale:
+            continue
+
+        couverts = _dates_couvertes(cur, emp['id'])
+
+        # Absences déjà enregistrées (évite des INSERT inutiles)
+        cur.execute("SELECT date FROM absences WHERE employe_id = %s", (emp['id'],))
+        deja = {row['date'] for row in cur.fetchall()}
+
+        valeurs = []
+        jour = debut
+        while jour <= fin_globale:
+            if jour.weekday() in JOURS_OUVRES and jour not in couverts and jour not in deja:
+                valeurs.append((emp['id'], jour, motif_auto))
+            jour += timedelta(days=1)
+
+        if valeurs:
+            cur.executemany("""
+                INSERT INTO absences (employe_id, date, motif, enregistre_par)
+                VALUES (%s, %s, %s, NULL)
+                ON CONFLICT (employe_id, date) DO NOTHING
+            """, valeurs)
+            nb_creees += len(valeurs)
+
+    return nb_creees
+
+
 @app.route('/absences')
 @login_required
 @role_required('admin', 'rh', 'manager')
 def absences():
-    with db_cursor() as (conn, cur):
+    with db_cursor(commit=True) as (conn, cur):
+        # Génère automatiquement les absences = tout jour ouvré passé sans
+        # présence (et non couvert par un congé/permission approuvé).
+        generer_absences_automatiques(cur)
         cur.execute("""
             SELECT a.*, e.nom, e.prenom
             FROM absences a
             JOIN employes e ON a.employe_id = e.id
-            ORDER BY a.date DESC LIMIT 100
+            ORDER BY a.date DESC LIMIT 200
         """)
         absences_list = cur.fetchall()
+        cur.execute("SELECT COUNT(*) AS nb FROM absences")
+        nb_total = cur.fetchone()['nb']
         cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
         employees = cur.fetchall()
-    return render_template('absences.html', absences=absences_list, employees=employees)
+    return render_template('absences.html', absences=absences_list, employees=employees, nb_total=nb_total)
 
 
 @app.route('/absences/add', methods=['GET', 'POST'])
@@ -1327,6 +1453,91 @@ def delete_absence(id):
         cur.execute("DELETE FROM absences WHERE id = %s", (id,))
     flash("Absence supprimée", "success")
     return redirect(url_for('absences'))
+
+
+@app.route('/absences/synchroniser', methods=['POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def synchroniser_absences():
+    """Recalcule explicitement toutes les absences (depuis la date d'embauche
+    jusqu'à la veille) et renvoie le nombre d'absences nouvellement créées."""
+    with db_cursor(commit=True) as (conn, cur):
+        nb = generer_absences_automatiques(cur)
+    if nb > 0:
+        flash(f"{nb} absence(s) générée(s) automatiquement.", "success")
+    else:
+        flash("Les absences sont déjà à jour.", "info")
+    return redirect(url_for('absences'))
+
+
+# ==================== PERMISSIONS (MODULE SÉPARÉ, COMME LES CONGÉS) ====================
+# Une permission est demandée / approuvée / refusée exactement comme un congé,
+# mais elle vit dans sa propre table (`permissions`) et n'a AUCUN impact sur le
+# solde de congés (`soldes_conges`).
+@app.route('/permissions')
+@login_required
+def permissions():
+    with db_cursor() as (conn, cur):
+        cur.execute("""
+            SELECT p.*, e.nom, e.prenom
+            FROM permissions p
+            JOIN employes e ON p.employe_id = e.id
+            ORDER BY p.date_demande DESC
+        """)
+        permissions_list = cur.fetchall()
+        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        employees = cur.fetchall()
+    return render_template('permissions.html', permissions=permissions_list, employees=employees)
+
+
+@app.route('/permissions/add', methods=['GET', 'POST'])
+@login_required
+def add_permission():
+    with db_cursor(commit=True) as (conn, cur):
+        if request.method == 'POST':
+            employe_id = request.form.get('employe_id')
+            date_debut = request.form.get('date_debut')
+            date_fin = request.form.get('date_fin')
+            motif = request.form.get('motif', '').strip()
+            if employe_id and date_debut and date_fin:
+                d1 = datetime.strptime(date_debut, '%Y-%m-%d')
+                d2 = datetime.strptime(date_fin, '%Y-%m-%d')
+                nombre_jours = (d2 - d1).days + 1
+                cur.execute("""
+                    INSERT INTO permissions (employe_id, motif, date_debut, date_fin, nombre_jours, statut)
+                    VALUES (%s, %s, %s, %s, %s, 'en attente')
+                """, (employe_id, motif, date_debut, date_fin, nombre_jours))
+                flash("Demande de permission soumise avec succès", "success")
+                return redirect(url_for('permissions'))
+            flash("Veuillez remplir tous les champs obligatoires", "danger")
+        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        employees = cur.fetchall()
+    return render_template('permission_form.html', employees=employees)
+
+
+@app.route('/permissions/update/<int:id>', methods=['POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def update_permission(id):
+    action = request.form.get('action')
+    with db_cursor(commit=True) as (conn, cur):
+        if action == 'approuver':
+            cur.execute("UPDATE permissions SET statut = 'approuvé' WHERE id = %s", (id,))
+            flash("Permission approuvée", "success")
+        elif action == 'refuser':
+            cur.execute("UPDATE permissions SET statut = 'refusé' WHERE id = %s", (id,))
+            flash("Permission refusée", "info")
+    return redirect(url_for('permissions'))
+
+
+@app.route('/permissions/delete/<int:id>', methods=['POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def delete_permission(id):
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("DELETE FROM permissions WHERE id = %s", (id,))
+    flash("Demande de permission supprimée", "success")
+    return redirect(url_for('permissions'))
 
 
 @app.route('/soldes-conges')
@@ -1568,6 +1779,12 @@ def delete_employee(id):
         
         # 2. Supprimer les congés liés
         cur.execute("DELETE FROM conges WHERE employe_id = %s", (id,))
+
+        # 2b. Supprimer les permissions liées (module séparé)
+        cur.execute("DELETE FROM permissions WHERE employe_id = %s", (id,))
+
+        # 2c. Supprimer les absences liées
+        cur.execute("DELETE FROM absences WHERE employe_id = %s", (id,))
         
         # 3. Supprimer les soldes de congés liés
         cur.execute("DELETE FROM soldes_conges WHERE employe_id = %s", (id,))

@@ -27,6 +27,18 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Soldes de congés (25 jours acquis par défaut, table `soldes_conges`, recalcul automatique)
 - Calendrier des congés : vue mensuelle des congés **approuvés** (`/calendrier-conges`)
 
+### 🧾 Gestion des permissions (module séparé)
+- Les permissions fonctionnent **comme les congés** (demande → approbation / refus), mais vivent dans **un module totalement séparé** (`/permissions`, table `permissions`)
+- **Indépendantes des congés** : une permission approuvée ne déduit **aucun jour** du solde de congés (`soldes_conges`)
+- Une permission approuvée couvre le jour : il n'est alors pas compté comme une absence
+- Routes : `/permissions`, `/permissions/add`, `/permissions/update/<id>`, `/permissions/delete/<id>`
+
+### 🚫 Gestion des absences (génération automatique)
+- **Tout jour ouvré (lun. → ven.) sans présence enregistrée est automatiquement enregistré comme une absence** dans la table `absences`
+- Sont exclus des absences : les jours couverts par un **congé approuvé** ou une **permission approuvée**, ainsi que les jours avant la date d'embauche et le jour en cours
+- Calcul déclenché automatiquement à l'ouverture de `/absences` et via le bouton **🔄 Synchroniser** ; idempotent (contrainte `UNIQUE(employe_id, date)`)
+- Enregistrement manuel possible (`/absences/add`) ; suppression réservée à `admin`/`rh`
+
 ### 📁 Documents & Rapports
 - Upload de documents (PDF, Excel, images...)
 - Rapports avancés avec filtres (`/rapports`)
@@ -166,6 +178,8 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 | `/departements`                    | Gestion des départements         | Selon rôle             |
 | `/presences`, `/presences/clock_in`| Pointages                        | Tous / selon rôle      |
 | `/conges`, `/conges/add`           | Congés                           | Tous / selon rôle      |
+| `/permissions`, `/permissions/add` | Permissions (module séparé)      | Tous / selon rôle      |
+| `/absences`, `/absences/add`       | Absences (génération automatique)| admin, rh, manager     |
 | `/calendrier-conges`               | Calendrier des congés            | Tous                   |
 | `/rapports`                        | Rapports avancés + filtres       | Tous                   |
 | `/documents`                       | Documents                        | Tous                   |

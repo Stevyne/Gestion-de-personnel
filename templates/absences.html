@@ -5,10 +5,20 @@
     <div class="card-header">
         <h1>🚫 Absences non justifiées</h1>
         <div>
+            <form action="{{ url_for('synchroniser_absences') }}" method="post" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-secondary">🔄 Synchroniser</button>
+            </form>
             <a href="{{ url_for('add_absence') }}" class="btn btn-primary">+ Enregistrer une absence</a>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
         </div>
     </div>
+
+    <p style="color:#64748b; margin: 0 0 16px;">
+        <strong>{{ nb_total }}</strong> absence(s) au total. Chaque jour ouvré (lun. → ven.) passé sans présence
+        enregistrée est automatiquement compté comme une absence — sauf s'il est couvert par un
+        congé ou une <a href="{{ url_for('permissions') }}">permission</a> approuvé(e).
+    </p>
 
     <div class="table-container">
         <table>
