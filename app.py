@@ -6,7 +6,7 @@ from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_values
 import os
 import logging
 from datetime import date, datetime, timedelta
@@ -1297,6 +1297,11 @@ def delete_conge(id):
 # (0 = lundi ... 6 = dimanche). Par défaut : lundi → vendredi.
 JOURS_OUVRES = {0, 1, 2, 3, 4}
 
+# Fenêtre max de génération (en jours). Borné pour rester rapide et léger en
+# mémoire sur les hébergements contraints (Render : timeout worker ~30 s,
+# RAM 512 Mo). Ajustable.
+LOOKBACK_JOURS = 365
+
 def _dates_couvertes(cur, employe_id):
     """Ensemble des dates qui ne doivent PAS être comptées comme une absence
     pour un employé : jours avec présence + jours couverts par un congé
@@ -1338,30 +1343,31 @@ def _dates_couvertes(cur, employe_id):
     return couverts
 
 
-def generer_absences_automatiques(cur, date_jusqua=None):
+def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None):
     """Enregistre automatiquement dans `absences` chaque jour ouvré passé SANS
-    présence (et non couvert par un congé/permission approuvé), pour tous les
-    employés. Concrètement : « tout jour où l'employé n'a pas de présence ».
+    présence (et non couvert par un congé/permission approuvé) = « tout jour où
+    l'employé n'a pas de présence ».
 
-    Règles :
-      - jour ouvré uniquement (lun → ven, cf. JOURS_OUVRES) ;
-      - date >= date d'embauche de l'employé ;
-      - date <= la veille (aujourd'hui reste « en cours ») ;
-      - aucune présence ce jour-là ;
-      - le jour n'est PAS couvert par un congé approuvé ;
-      - le jour n'est PAS couvert par une permission approuvée.
+    Règles : jour ouvré (lun→ven) ; >= date d'embauche ; <= la veille ; aucune
+    présence ; non couvert par un congé ou une permission approuvés.
 
-    Idempotent grâce à la contrainte UNIQUE(employe_id, date).
-    Retourne le nombre d'absences nouvellement créées.
-
-    NB : les jours fériés (hors week-end) ne sont pas gérés tant qu'aucune
-    table de jours fériés n'existe ; ils seront marqués comme absences.
+    IMPORTANT (perf/mémoire) : la génération est BORNÉE à une fenêtre récente
+    (LOOKBACK_JOURS) et les insertions sont envoyées par LOTS via execute_values
+    (1 requête par lot au lieu d'1 par ligne). Sans cela, sur un hébergement
+    contraint (Render : timeout worker 30 s, RAM 512 Mo), la génération depuis
+    la date d'embauche + executemany => timeout worker + kill OOM => HTTP 500.
+    Idempotent (UNIQUE(employe_id, date)). Retourne le nb d'absences créées.
     """
     if date_jusqua is None:
         date_jusqua = date.today() - timedelta(days=1)  # on exclut aujourd'hui
+    if date_depuis is None:
+        date_depuis = date_jusqua - timedelta(days=LOOKBACK_JOURS - 1)
 
-    fin_globale = date_jusqua if isinstance(date_jusqua, date) \
-        else datetime.strptime(str(date_jusqua), '%Y-%m-%d').date()
+    def _to_date(v):
+        return v if isinstance(v, date) else datetime.strptime(str(v), '%Y-%m-%d').date()
+
+    fin_globale = _to_date(date_jusqua)
+    debut_global = _to_date(date_depuis)
 
     cur.execute("SELECT id, date_embauche FROM employes ORDER BY id")
     employes = cur.fetchall()
@@ -1372,17 +1378,17 @@ def generer_absences_automatiques(cur, date_jusqua=None):
     for emp in employes:
         embauche = emp['date_embauche']
         if not embauche:
-            # Sans date d'embauche, impossible de délimiter la période : on ignore.
-            continue
-        debut = embauche if isinstance(embauche, date) \
-            else datetime.strptime(str(embauche), '%Y-%m-%d').date()
+            continue  # sans date d'embauche, période indéterminée
+        debut = max(debut_global, _to_date(embauche))
         if debut > fin_globale:
             continue
 
         couverts = _dates_couvertes(cur, emp['id'])
 
-        # Absences déjà enregistrées (évite des INSERT inutiles)
-        cur.execute("SELECT date FROM absences WHERE employe_id = %s", (emp['id'],))
+        cur.execute(
+            "SELECT date FROM absences WHERE employe_id = %s AND date BETWEEN %s AND %s",
+            (emp['id'], debut, fin_globale),
+        )
         deja = {row['date'] for row in cur.fetchall()}
 
         valeurs = []
@@ -1393,16 +1399,16 @@ def generer_absences_automatiques(cur, date_jusqua=None):
             jour += timedelta(days=1)
 
         if valeurs:
-            cur.executemany("""
-                INSERT INTO absences (employe_id, date, motif, enregistre_par)
-                VALUES (%s, %s, %s, NULL)
-                ON CONFLICT (employe_id, date) DO NOTHING
-            """, valeurs)
+            execute_values(
+                cur,
+                "INSERT INTO absences (employe_id, date, motif) "
+                "VALUES %s ON CONFLICT (employe_id, date) DO NOTHING",
+                valeurs,
+                page_size=500,
+            )
             nb_creees += len(valeurs)
 
     return nb_creees
-
-
 @app.route('/absences')
 @login_required
 @role_required('admin', 'rh', 'manager')
