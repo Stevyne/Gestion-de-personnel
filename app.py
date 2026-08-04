@@ -1100,38 +1100,34 @@ def presences():
             cur.close(); conn.close()
             return redirect(url_for('presences'))
 
-    # Normal GET: display the page with filters
-    search = request.args.get('search', '').strip().lower()
+        # Normal GET: display the page with filters + pagination
+    search_raw = request.args.get('search', '').strip()
+    search = search_raw.lower()
     date_filter = request.args.get('date', '').strip()
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 10
 
-    # Construction requête filtrée
-    q = "SELECT p.*, e.nom, e.prenom FROM presences p JOIN employes e ON p.employe_id = e.id "
+    where = ""
     params = []
-    conditions = []
-
     if search:
-        conditions.append("(LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)")
-        params.extend([f"%{search}%", f"%{search}%"])
-
+        where += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
+        params += [f"%{search}%", f"%{search}%"]
     if date_filter:
-        conditions.append("p.date = %s")
-        params.append(date_filter)
+        where += " AND p.date = %s"; params.append(date_filter)
 
-    if conditions:
-        q += " WHERE " + " AND ".join(conditions)
-
-    q += " ORDER BY p.date DESC, p.heure_arrivee DESC LIMIT 100"
-
-    cur.execute(q, params)
+    from_ = "presences p JOIN employes e ON p.employe_id = e.id"
+    cur.execute(f"SELECT COUNT(*) AS nb FROM {from_} WHERE 1=1{where}", params)
+    total = cur.fetchone()['nb']
+    pg = pagination_info(total, page, per_page)
+    offset = (pg['page'] - 1) * per_page
+    cur.execute(f"SELECT p.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY p.date DESC, p.heure_arrivee DESC LIMIT %s OFFSET %s", params + [per_page, offset])
     presences_list = cur.fetchall()
 
     for p in presences_list:
-        # Convert datetime.time → string (ex: "09:15")
         if p.get('heure_arrivee'):
             p['heure_arrivee'] = str(p['heure_arrivee'])[:5]
         if p.get('heure_depart'):
             p['heure_depart'] = str(p['heure_depart'])[:5]
-
         p['retard_minutes'] = calculer_retard(p['heure_arrivee'])
         p['retard'] = p['retard_minutes'] > 0
 
@@ -1139,7 +1135,11 @@ def presences():
     employees = cur.fetchall()
     cur.close()
     conn.close()
-    return render_template('presences.html', presences=presences_list, employees=employees, today=today, retards_aujourdhui=retards_aujourdhui, nb_retards=nb_retards, total_retards_minutes=total_retards_minutes)
+    filters = {'search': search_raw, 'date': date_filter}
+    return render_template('presences.html', presences=presences_list, employees=employees, today=today,
+                           retards_aujourdhui=retards_aujourdhui, nb_retards=nb_retards, total_retards_minutes=total_retards_minutes,
+                           search=search_raw, date_filter=date_filter, pg=pg, page_items=page_list(pg['page'], pg['pages']),
+                           base_qs=urlencode({k: v for k, v in filters.items() if v}))
 
 @app.route('/presences/clock_in/<int:employe_id>', methods=['POST'])
 @login_required
@@ -1745,53 +1745,40 @@ def index():
     conn = get_db()
     cur = get_cursor(conn)
 
-    cur.execute("SELECT * FROM employes ORDER BY nom, prenom")
-    employes = cur.fetchall()
-
     search = request.args.get('search', '').strip()
     selected_dept = request.args.get('departement', '').strip()
     sort = request.args.get('sort', 'nom')
     order = request.args.get('order', 'asc')
-    
-    # Dynamic filter query
-    query = "SELECT * FROM employes WHERE 1=1"
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 10
+
+    where = ""
     params = []
-    
     if search:
-        query += """ AND (
-            LOWER(nom) LIKE %s OR 
-            LOWER(prenom) LIKE %s OR 
-            LOWER(poste) LIKE %s OR 
-            LOWER(email) LIKE %s
-        )"""
+        where += " AND (LOWER(nom) LIKE %s OR LOWER(prenom) LIKE %s OR LOWER(poste) LIKE %s OR LOWER(email) LIKE %s)"
         s = f"%{search.lower()}%"
-        params.extend([s, s, s, s])
-    
+        params += [s, s, s, s]
     if selected_dept:
-        query += " AND departement = %s"
-        params.append(selected_dept)
-    
-    # Sorting
-    sort_map = {
-        'nom': 'nom, prenom',
-        'salaire': 'COALESCE(salaire, 0)',
-        'date_embauche': 'date_embauche',
-        'poste': 'poste'
-    }
+        where += " AND departement = %s"; params.append(selected_dept)
+
+    sort_map = {'nom': 'nom, prenom', 'salaire': 'COALESCE(salaire, 0)', 'date_embauche': 'date_embauche', 'poste': 'poste'}
     sort_col = sort_map.get(sort, 'nom, prenom')
     direction = 'DESC' if order.lower() == 'desc' else 'ASC'
-    query += f" ORDER BY {sort_col} {direction}"
-    
-    cur.execute(query, params)
+    order_clause = f" ORDER BY {sort_col} {direction}"
+
+    cur.execute(f"SELECT COUNT(*) AS nb FROM employes WHERE 1=1{where}", params)
+    total = cur.fetchone()['nb']
+    pg = pagination_info(total, page, per_page)
+    offset = (pg['page'] - 1) * per_page
+    cur.execute(f"SELECT * FROM employes WHERE 1=1{where}{order_clause} LIMIT %s OFFSET %s", params + [per_page, offset])
     employes = cur.fetchall()
-    
-        # Enrich with last presence info (for better view)
+
     for emp in employes:
         cur.execute("""
-            SELECT date, heure_arrivee, statut 
-            FROM presences 
-            WHERE employe_id = %s 
-            ORDER BY date DESC 
+            SELECT date, heure_arrivee, statut
+            FROM presences
+            WHERE employe_id = %s
+            ORDER BY date DESC
             LIMIT 1
         """, (emp['id'],))
         last = cur.fetchone()
@@ -1805,33 +1792,22 @@ def index():
     cur.execute("SELECT DISTINCT nom FROM departements ORDER BY nom")
     depts = cur.fetchall()
 
-    # Requête corrigée avec les bons alias
     cur.execute("""
-        SELECT 
+        SELECT
             COUNT(*) as total,
             COALESCE(AVG(salaire), 0) as salaire_moyen,
             (SELECT COUNT(*) FROM departements) as nb_departements
         FROM employes
     """)
     stats = cur.fetchone()
-
-    # Conversion en dict pour éviter les erreurs RealDictRow
-    stats = dict(stats) if stats else {
-        'total': 0,
-        'salaire_moyen': 0,
-        'nb_departements': 0
-    }
+    stats = dict(stats) if stats else {'total': 0, 'salaire_moyen': 0, 'nb_departements': 0}
 
     cur.close()
     conn.close()
-
-    return render_template('index.html',
-                           employes=employes,
-                           depts=depts,
-                           search='',
-                           selected_dept='',
-                           stats=stats)
-
+    filters = {'search': search, 'departement': selected_dept, 'sort': sort, 'order': order}
+    return render_template('index.html', employes=employes, depts=depts, search=search, selected_dept=selected_dept,
+                           sort=sort, order=order, stats=stats, pg=pg, page_items=page_list(pg['page'], pg['pages']),
+                           base_qs=urlencode({k: v for k, v in filters.items() if v}))
 @app.route('/employes/<int:id>')
 @login_required
 def view_employee(id):
@@ -2117,60 +2093,38 @@ def historique():
     conn = get_db()
     cur = get_cursor(conn)
 
-    # Récupérer les filtres
     selected_employe = request.args.get('employe_id', '').strip()
     date_debut = request.args.get('date_debut', '').strip()
     date_fin = request.args.get('date_fin', '').strip()
     selected_statut = request.args.get('statut', '').strip()
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 10
 
-    # Construction de la requête
-    query = """
-        SELECT p.*, e.nom, e.prenom 
-        FROM presences p 
-        JOIN employes e ON p.employe_id = e.id 
-    """
+    where = ""
     params = []
-    conditions = []
-
-    if selected_employe:
-        conditions.append("p.employe_id = %s")
-        params.append(int(selected_employe))
-
+    if selected_employe and selected_employe.isdigit():
+        where += " AND p.employe_id = %s"; params.append(int(selected_employe))
     if date_debut:
-        conditions.append("p.date >= %s")
-        params.append(date_debut)
-
+        where += " AND p.date >= %s"; params.append(date_debut)
     if date_fin:
-        conditions.append("p.date <= %s")
-        params.append(date_fin)
-
+        where += " AND p.date <= %s"; params.append(date_fin)
     if selected_statut:
-        conditions.append("p.statut = %s")
-        params.append(selected_statut)
+        where += " AND p.statut = %s"; params.append(selected_statut)
 
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
+    from_ = "presences p JOIN employes e ON p.employe_id = e.id"
+    # On récupère tout le jeu filtré (borné) pour les stats, puis on pagine l'affichage
+    cur.execute(f"SELECT p.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY p.date DESC, p.heure_arrivee DESC LIMIT 5000", params)
+    all_presences = cur.fetchall()
 
-    query += " ORDER BY p.date DESC, p.heure_arrivee DESC LIMIT 500"
-
-    cur.execute(query, params)
-    presences_list = cur.fetchall()
-
-    # Traitement des données + calculs
-    total_pointages = len(presences_list)
+    total_pointages = len(all_presences)
     total_heures = 0.0
     employes_set = set()
-
-    for p in presences_list:
-        # Normaliser les heures
+    for p in all_presences:
         if p.get('heure_arrivee'):
             p['heure_arrivee'] = str(p['heure_arrivee'])[:5]
         if p.get('heure_depart'):
             p['heure_depart'] = str(p['heure_depart'])[:5]
-
         employes_set.add(p.get('employe_id'))
-
-        # Calcul durée
         try:
             if p.get('heure_arrivee') and p.get('heure_depart'):
                 ha_parts = str(p['heure_arrivee']).split(':')[:2]
@@ -2179,41 +2133,34 @@ def historique():
                 hd_min = int(hd_parts[0]) * 60 + int(hd_parts[1])
                 mins = hd_min - ha_min
                 if mins > 0:
-                    duree = round(mins / 60, 1)
-                    p['duree_heures'] = duree
-                    total_heures += duree
+                    p['duree_heures'] = round(mins / 60, 1)
+                    total_heures += mins / 60
                 else:
                     p['duree_heures'] = None
             else:
                 p['duree_heures'] = None
         except Exception:
             p['duree_heures'] = None
-
-        # Retard (pour cohérence)
         p['retard_minutes'] = calculer_retard(p.get('heure_arrivee'))
         p['retard'] = p['retard_minutes'] > 0
 
     employes_concernes = len(employes_set)
+    pg = pagination_info(total_pointages, page, per_page)
+    offset = (pg['page'] - 1) * per_page
+    presences_list = all_presences[offset:offset + per_page]
 
-    # Liste employés pour le filtre
     cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
     employees = cur.fetchall()
-
     cur.close()
     conn.close()
 
-    return render_template(
-        'historique.html',
-        presences=presences_list,
-        employees=employees,
-        total_pointages=total_pointages,
-        total_heures=round(total_heures, 1),
-        employes_concernes=employes_concernes,
-        selected_employe=selected_employe,
-        date_debut=date_debut,
-        date_fin=date_fin,
-        selected_statut=selected_statut
-    )
+    filters = {'employe_id': selected_employe, 'date_debut': date_debut, 'date_fin': date_fin, 'statut': selected_statut}
+    return render_template('historique.html', presences=presences_list, employees=employees,
+                           total_pointages=total_pointages, total_heures=round(total_heures, 1),
+                           employes_concernes=employes_concernes, selected_employe=selected_employe,
+                           date_debut=date_debut, date_fin=date_fin, selected_statut=selected_statut,
+                           pg=pg, page_items=page_list(pg['page'], pg['pages']),
+                           base_qs=urlencode({k: v for k, v in filters.items() if v}))
 @app.route('/departements')
 @login_required
 def departements():
