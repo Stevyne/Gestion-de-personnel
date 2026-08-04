@@ -1314,7 +1314,9 @@ def _dates_couvertes(cur, employe_id):
         WHERE employe_id = %s AND statut = 'approuvé'
     """, (employe_id,))
     for row in cur.fetchall():
-        d, fin = row['date_debut'], row['date_fin']
+        d, fin = row.get('date_debut'), row.get('date_fin')
+        if not d or not fin:
+            continue  # plage incomplète (dates NULL) : on l'ignore
         while d <= fin:
             couverts.add(d)
             d += timedelta(days=1)
@@ -1326,7 +1328,9 @@ def _dates_couvertes(cur, employe_id):
         WHERE employe_id = %s AND statut = 'approuvé'
     """, (employe_id,))
     for row in cur.fetchall():
-        d, fin = row['date_debut'], row['date_fin']
+        d, fin = row.get('date_debut'), row.get('date_fin')
+        if not d or not fin:
+            continue
         while d <= fin:
             couverts.add(d)
             d += timedelta(days=1)
@@ -1403,10 +1407,19 @@ def generer_absences_automatiques(cur, date_jusqua=None):
 @login_required
 @role_required('admin', 'rh', 'manager')
 def absences():
-    with db_cursor(commit=True) as (conn, cur):
-        # Génère automatiquement les absences = tout jour ouvré passé sans
-        # présence (et non couvert par un congé/permission approuvé).
-        generer_absences_automatiques(cur)
+    # Génère automatiquement les absences dans SA PROPRE transaction :
+    # si la génération échoue (données inattendues, table manquante...), on
+    # ne fait pas planter la page — on journalise l'erreur et on affiche les
+    # absences déjà enregistrées. La cause exacte apparaît dans les logs.
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            generer_absences_automatiques(cur)
+    except Exception:
+        logger.exception("Erreur lors de la génération automatique des absences")
+        flash("Génération automatique des absences impossible (voir les logs du serveur). "
+              "Affichage des absences déjà enregistrées.", "warning")
+
+    with db_cursor() as (conn, cur):
         cur.execute("""
             SELECT a.*, e.nom, e.prenom
             FROM absences a
