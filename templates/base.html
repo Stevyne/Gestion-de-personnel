@@ -252,7 +252,7 @@
             </div>
             {% else %}
             <div class="nav-links desktop-nav">
-                <a href="{{ url_for('login') }}" class="nav-link">🔐 Connexion</a>
+
                 {% if current_role == 'admin' %}
                 <a href="{{ url_for('register') }}" class="nav-link" style="background:#e0e7ff;color:#1e40af;padding:6px 14px;border-radius:6px;font-weight:600;">
                     👤 Inscrire
