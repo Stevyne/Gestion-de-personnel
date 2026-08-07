@@ -114,16 +114,16 @@
             <tbody>
                 {% for p in presences %}
                 <tr>
-                    <td><strong>{{ p.prenom }} {{ p.nom }}</strong></td>
-                    <td>{{ p.date }}</td>
-                    <td>
+                    <td data-label="Employé"><strong>{{ p.prenom }} {{ p.nom }}</strong></td>
+                    <td data-label="Date">{{ p.date }}</td>
+                    <td data-label="Arrivée">
                         {% if p.heure_arrivee %}
                             <strong style="color:#166534;">{{ p.heure_arrivee }}</strong>
                         {% else %}
                             <span style="color:#94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Retard">
                         {% if p.retard %}
                             <span style="background:#fee2e2; color:#991b1b; padding:3px 9px; border-radius:6px; font-weight:700; font-size:0.85rem;">
                                 +{{ p.retard_minutes }} min
@@ -134,14 +134,14 @@
                             <span style="color:#94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Départ">
                         {% if p.heure_depart %}
                             <strong style="color:#854d0e;">{{ p.heure_depart }}</strong>
                         {% else %}
                             <span style="color:#94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Durée">
                         {% if p.heure_arrivee and p.heure_depart %}
                             {% set h_arr = p.heure_arrivee.split(':') | map('int') | list %}
                             {% set h_dep = p.heure_depart.split(':') | map('int') | list %}
@@ -155,7 +155,7 @@
                             <span style="color:#94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Statut">
                         {% if p.statut == 'présent' %}
                             <span class="badge" style="background:#dcfce7;color:#166534;">Présent</span>
                         {% elif p.statut == 'absent' %}
@@ -164,14 +164,14 @@
                             <span class="badge">{{ p.statut }}</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Commentaire">
                         {% if p.commentaire %}
                             <small>{{ p.commentaire }}</small>
                         {% else %}
                             <span style="color:#64748b">-</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Actions">
                         <div class="actions" style="gap:4px;">
                         
                             <form action="{{ url_for('clock_in', employe_id=p.employe_id) }}" method="post" style="display:inline;">

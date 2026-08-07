@@ -53,16 +53,16 @@
             <tbody>
                 {% for p in presences %}
                 <tr>
-                    <td><strong>{{ p.date }}</strong></td>
-                    <td>{{ p.prenom }} {{ p.nom }}</td>
-                    <td>{{ p.heure_arrivee or '—' }}</td>
-                    <td>
+                    <td data-label="Date"><strong>{{ p.date }}</strong></td>
+                    <td data-label="Employé">{{ p.prenom }} {{ p.nom }}</td>
+                    <td data-label="Arrivée">{{ p.heure_arrivee or '—' }}</td>
+                    <td data-label="Retard">
                         {% if p.retard_minutes > 0 %}
                         <span style="color:#dc2626; font-weight:600;">+{{ p.retard_minutes }} min</span>
                         {% else %}—{% endif %}
                     </td>
-                    <td>{{ p.heure_depart or '—' }}</td>
-                    <td><span class="badge">{{ p.statut }}</span></td>
+                    <td data-label="Départ">{{ p.heure_depart or '—' }}</td>
+                    <td data-label="Statut"><span class="badge">{{ p.statut }}</span></td>
                 </tr>
                 {% else %}
                 <tr><td colspan="6" style="text-align:center;">Aucun résultat</td></tr>
@@ -82,11 +82,11 @@
             <tbody>
                 {% for c in conges %}
                 <tr>
-                    <td>{{ c.prenom }} {{ c.nom }}</td>
-                    <td>{{ c.type_conge }}</td>
-                    <td>{{ c.date_debut }} → {{ c.date_fin }}</td>
-                    <td><strong>{{ c.nombre_jours }} j</strong></td>
-                    <td>
+                    <td data-label="Employé">{{ c.prenom }} {{ c.nom }}</td>
+                    <td data-label="Type">{{ c.type_conge }}</td>
+                    <td data-label="Dates">{{ c.date_debut }} → {{ c.date_fin }}</td>
+                    <td data-label="Jours"><strong>{{ c.nombre_jours }} j</strong></td>
+                    <td data-label="Statut">
                         {% if c.statut == 'approuvé' %}<span class="badge badge-success">Approuvé</span>
                         {% elif c.statut == 'refusé' %}<span class="badge badge-danger">Refusé</span>
                         {% else %}<span class="badge badge-warning">En attente</span>{% endif %}

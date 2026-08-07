@@ -87,25 +87,25 @@
             <tbody>
                 {% for p in presences %}
                 <tr>
-                    <td><strong>{{ p.date }}</strong></td>
-                    <td>
+                    <td data-label="Date"><strong>{{ p.date }}</strong></td>
+                    <td data-label="Employé">
                         <div class="employee-name">{{ p.prenom }} {{ p.nom }}</div>
                     </td>
-                    <td>
+                    <td data-label="Arrivée">
                         {% if p.heure_arrivee %}
                             <strong style="color:#166534;">{{ p.heure_arrivee }}</strong>
                         {% else %}
                             <span style="color:#94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Sortie">
                         {% if p.heure_depart %}
                             <strong style="color:#854d0e;">{{ p.heure_depart }}</strong>
                         {% else %}
                             <span style="color:#94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Durée">
                         {% if p.duree_heures %}
                             <span style="font-weight:600; background:#f1f5f9; padding:2px 8px; border-radius:4px;">
                                 {{ p.duree_heures }} h
@@ -114,7 +114,7 @@
                             <span style="color:#94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Statut">
                         {% if p.statut == 'présent' %}
                             <span class="badge" style="background:#dcfce7;color:#166534;">Présent</span>
                         {% elif p.statut == 'absent' %}
@@ -123,14 +123,14 @@
                             <span class="badge">{{ p.statut }}</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Commentaire">
                         {% if p.commentaire %}
                             <small>{{ p.commentaire }}</small>
                         {% else %}
                             <span style="color:#94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Actions">
                         <div class="actions" style="gap:4px;">
                             <a href="{{ url_for('add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}" 
                                class="btn btn-secondary" style="padding:3px 9px; font-size:0.7rem;">✏️ Modifier</a>

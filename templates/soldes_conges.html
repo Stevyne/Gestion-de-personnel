@@ -31,8 +31,8 @@
             <tbody>
                 {% for s in soldes %}
                 <tr>
-                    <td><strong>{{ s.prenom }} {{ s.nom }}</strong></td>
-                    <td>
+                    <td data-label="Employé"><strong>{{ s.prenom }} {{ s.nom }}</strong></td>
+                    <td data-label="Jours acquis">
                         <form action="{{ url_for('update_solde_conges', employe_id=s.employe_id) }}" method="post" style="display:flex; gap:6px; align-items:center;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="annee" value="{{ annee }}">
@@ -41,8 +41,8 @@
                             <button type="submit" class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem;">✓ Enregistrer</button>
                         </form>
                     </td>
-                    <td>{{ s.jours_utilises }} j</td>
-                    <td>
+                    <td data-label="Jours utilisés">{{ s.jours_utilises }} j</td>
+                    <td data-label="Jours restants">
                         {% if s.jours_restants < 0 %}
                             <span class="badge" style="background:#fee2e2;color:#991b1b;">{{ s.jours_restants }} j</span>
                         {% elif s.jours_restants <= 5 %}
@@ -51,7 +51,7 @@
                             <span class="badge" style="background:#dcfce7;color:#166534;">{{ s.jours_restants }} j</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Actions">
                         <small style="color:#64748b;">Calculé automatiquement selon les congés approuvés</small>
                     </td>
                 </tr>

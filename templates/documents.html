@@ -61,18 +61,18 @@
             <tbody>
                 {% for d in documents %}
                 <tr>
-                    <td>
+                    <td data-label="Titre">
                         <strong>{{ d.titre }}</strong>
                         {% if d.description %}<br><small style="color:#64748b;">{{ d.description }}</small>{% endif %}
                     </td>
-                    <td>{{ d.prenom }} {{ d.nom or '—' }}</td>
-                    <td>{{ d.date_upload.strftime('%d/%m/%Y %H:%M') if d.date_upload else '—' }}</td>
-                    <td>
+                    <td data-label="Employé">{{ d.prenom }} {{ d.nom or '—' }}</td>
+                    <td data-label="Date">{{ d.date_upload.strftime('%d/%m/%Y %H:%M') if d.date_upload else '—' }}</td>
+                    <td data-label="Fichier">
                         <a href="{{ url_for('download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;padding:4px 11px;font-size:0.8rem;">
                             📄 Télécharger
                         </a>
                     </td>
-                    <td>
+                    <td data-label="Actions">
                         {% if current_role in ['admin','rh'] %}
                         <form method="post" action="{{ url_for('delete_document', doc_id=d.id) }}" style="display:inline;"
                                   class="confirm-form"

@@ -547,6 +547,21 @@ def init_db():
     cur.execute('''CREATE TABLE IF NOT EXISTS presences (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), date DATE, heure_arrivee TIME, heure_depart TIME, statut VARCHAR(30) DEFAULT 'présent', commentaire TEXT, UNIQUE(employe_id, date))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS conges (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), type_conge VARCHAR(50), date_debut DATE, date_fin DATE, nombre_jours INTEGER, motif TEXT, statut VARCHAR(20) DEFAULT 'en attente', date_demande DATE DEFAULT CURRENT_DATE)''')
 
+    # ==================== TABLE PERMISSIONS (module indépendant des congés) ====================
+    # Une permission est une autorisation d'absence ponctuelle (ex: rdv médical,
+    # démarche administrative) : elle ne consomme pas de solde de congés et ne
+    # figure pas dans la table `conges`.
+    cur.execute('''CREATE TABLE IF NOT EXISTS permissions (
+        id SERIAL PRIMARY KEY,
+        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
+        date_debut DATE NOT NULL,
+        date_fin DATE NOT NULL,
+        motif TEXT,
+        statut VARCHAR(20) DEFAULT 'en attente',
+        date_demande DATE DEFAULT CURRENT_DATE
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_permissions_employe ON permissions(employe_id)")
+
     # ==================== TABLE SOLDES_CONGES (CRITIQUE) ====================
     cur.execute('''CREATE TABLE IF NOT EXISTS soldes_conges (
         id SERIAL PRIMARY KEY,

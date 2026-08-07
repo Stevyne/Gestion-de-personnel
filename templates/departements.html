@@ -21,13 +21,13 @@
             <tbody>
                 {% for dept in departements %}
                 <tr>
-                    <td><strong>{{ dept.nom }}</strong></td>
-                    <td>{{ dept.description or '—' }}</td>
-                    <td>{{ dept.responsable or '—' }}</td>
-                    <td>
+                    <td data-label="Département"><strong>{{ dept.nom }}</strong></td>
+                    <td data-label="Description">{{ dept.description or '—' }}</td>
+                    <td data-label="Responsable">{{ dept.responsable or '—' }}</td>
+                    <td data-label="Employés">
                         <span class="badge">{{ dept.nb_employes }} employé(s)</span>
                     </td>
-                    <td>
+                    <td data-label="Actions">
                         <div class="actions">
                             <a href="{{ url_for('edit_departement', id=dept.id) }}" class="btn btn-secondary" style="padding:4px 10px;font-size:0.75rem;">✏️</a>
                             <form action="{{ url_for('delete_departement', id=dept.id) }}" method="post" style="display:inline;"

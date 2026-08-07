@@ -126,9 +126,9 @@
             <tbody>
                 {% for dept in dept_stats %}
                 <tr>
-                    <td><strong>{{ dept.nom }}</strong></td>
-                    <td>{{ dept.nb_employes }}</td>
-                    <td>
+                    <td data-label="Département"><strong>{{ dept.nom }}</strong></td>
+                    <td data-label="Employés">{{ dept.nb_employes }}</td>
+                    <td data-label="%">
                         <div style="display:flex; align-items:center; gap:6px;">
                             <div style="flex:1; background:#e2e8f0; height:6px; border-radius:999px;">
                                 <div style="width:{{ dept.pourcentage }}%; height:100%; background:#2563eb;"></div>

@@ -72,25 +72,25 @@
             <tbody>
                 {% for log in logs %}
                 <tr>
-                    <td><strong>{{ log.timestamp.strftime('%d/%m/%Y %H:%M') if log.timestamp else '—' }}</strong></td>
-                    <td>
+                    <td data-label="Date / Heure"><strong>{{ log.timestamp.strftime('%d/%m/%Y %H:%M') if log.timestamp else '—' }}</strong></td>
+                    <td data-label="Utilisateur">
                         {% if log.username %}
                             <span style="font-weight:600;">{{ log.username }}</span>
                         {% else %}
                             <span style="color:#94a3b8;">Système</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Action">
                         {% set color = {'LOGIN':'#16a34a','LOGOUT':'#ca8a04','CREATE':'#2563eb','UPDATE':'#7c3aed','DELETE':'#dc2626','CLOCK_IN':'#16a34a','CLOCK_OUT':'#ca8a04'}.get(log.action, '#64748b') %}
                         <span style="background:{{ color }}; color:white; padding:2px 10px; border-radius:999px; font-size:0.75rem; font-weight:600;">
                             {{ log.action }}
                         </span>
                     </td>
-                    <td>
+                    <td data-label="Entité">
                         {% if log.entity_type %}<span class="badge">{{ log.entity_type }}</span>{% if log.entity_id %} #{{ log.entity_id }}{% endif %}{% else %}<span style="color:#94a3b8;">—</span>{% endif %}
                     </td>
-                    <td><small style="color:#475569;">{{ log.details or '—' }}</small></td>
-                    <td><small style="font-family:monospace; color:#64748b;">{{ log.ip_address or '—' }}</small></td>
+                    <td data-label="Détails"><small style="color:#475569;">{{ log.details or '—' }}</small></td>
+                    <td data-label="IP"><small style="font-family:monospace; color:#64748b;">{{ log.ip_address or '—' }}</small></td>
                 </tr>
                 {% else %}
                 <tr><td colspan="6" style="text-align:center; padding:40px; color:#64748b;">Aucun log trouvé.</td></tr>

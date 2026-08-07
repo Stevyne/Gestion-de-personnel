@@ -15,11 +15,11 @@
     <tbody>
     {% for p in presences %}
     <tr>
-      <td>{{ p.date }}</td>
-      <td>{{ p.heure_arrivee or '—' }}</td>
-      <td>{% if p.retard_minutes > 0 %}<span style="color:#dc2626;font-weight:700">+{{ p.retard_minutes }} min</span>{% else %}—{% endif %}</td>
-      <td>{{ p.heure_depart or '—' }}</td>
-      <td><span class="badge">{{ p.statut }}</span></td>
+      <td data-label="Date">{{ p.date }}</td>
+      <td data-label="Arrivée">{{ p.heure_arrivee or '—' }}</td>
+      <td data-label="Retard">{% if p.retard_minutes > 0 %}<span style="color:#dc2626;font-weight:700">+{{ p.retard_minutes }} min</span>{% else %}—{% endif %}</td>
+      <td data-label="Départ">{{ p.heure_depart or '—' }}</td>
+      <td data-label="Statut"><span class="badge">{{ p.statut }}</span></td>
     </tr>
     {% else %}<tr><td colspan="5">Aucune présence.</td></tr>{% endfor %}
     </tbody>

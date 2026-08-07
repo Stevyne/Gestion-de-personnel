@@ -111,7 +111,7 @@
                 <tbody>
                     {% for emp in employes %}
                     <tr>
-                        <td>
+                        <td data-label="Employé">
                             <div class="employee-cell">
                                 <div class="avatar-small">{{ emp.prenom[0] }}{{ emp.nom[0] }}</div>
                                 <div class="employee-info">
@@ -122,27 +122,27 @@
                                 </div>
                             </div>
                         </td>
-                        <td>
+                        <td data-label="Poste">
                             <span class="badge badge-role">{{ emp.poste }}</span>
                         </td>
-                        <td>
+                        <td data-label="Département">
                             <span class="badge badge-dept">{{ emp.departement or '—' }}</span>
                         </td>
-                        <td>
+                        <td data-label="Salaire">
                             {% if emp.salaire %}
                                 <span class="salary">{{ "%.0f"|format(emp.salaire) }} Ar</span>
                             {% else %}
                                 <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td data-label="Embauché le">
                             {% if emp.date_embauche %}
                                 {{ emp.date_embauche }}
                             {% else %}
                                 <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td data-label="Dernière présence">
                             {% if emp.last_presence %}
                                 <div class="last-presence">
                                     <div class="last-date">{{ emp.last_presence.date }}</div>
@@ -161,7 +161,7 @@
                                 <span class="text-muted">Aucune</span>
                             {% endif %}
                         </td>
-                        <td class="actions-col">
+                        <td data-label="Actions" class="actions-col">
                             <div class="actions">
                                 <a href="{{ url_for('view_employee', id=emp.id) }}" 
                                    class="action-btn" title="Voir le profil">👁️</a>

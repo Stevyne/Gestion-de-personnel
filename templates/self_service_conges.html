@@ -16,10 +16,10 @@
     <tbody>
     {% for c in conges %}
     <tr>
-      <td>{{ c.type_conge }}</td>
-      <td>{{ c.date_debut }} → {{ c.date_fin }}</td>
-      <td>{{ c.nombre_jours }} j</td>
-      <td>{{ c.statut }}</td>
+      <td data-label="Type">{{ c.type_conge }}</td>
+      <td data-label="Dates">{{ c.date_debut }} → {{ c.date_fin }}</td>
+      <td data-label="Jours">{{ c.nombre_jours }} j</td>
+      <td data-label="Statut">{{ c.statut }}</td>
     </tr>
     {% else %}<tr><td colspan="4">Aucune demande.</td></tr>{% endfor %}
     </tbody>

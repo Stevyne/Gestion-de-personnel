@@ -74,6 +74,16 @@ body {
 .brand-text {
     font-weight: 800;
     letter-spacing: -0.5px;
+    min-width: 0; /* permet au flex item de rétrécir dans un conteneur étroit */
+}
+
+.brand-text-img {
+    display: block;
+    width: 180px;
+    height: 36px;
+    max-width: 40vw; /* évite le débordement du header sur petits écrans */
+    object-fit: contain;
+    object-position: left center;
 }
 
 .nav-links {
@@ -1029,18 +1039,45 @@ footer {
     
     table td {
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
         align-items: center;
+        gap: 6px;
         padding: 10px 14px;
         border-bottom: 1px solid #f1f5f9;
         text-align: right;
         min-height: 42px;
     }
+
+    /* Colonnes "Actions" contenant plusieurs boutons/formulaires : le libellé
+       (::before) prend toute la largeur et les boutons se placent en dessous,
+       alignés à droite, au lieu de déborder horizontalement. */
+    table td:has(> form:nth-child(2)),
+    table td:has(> details:nth-child(2)) {
+        justify-content: flex-end;
+    }
+
+    table td:has(> form:nth-child(2)):before,
+    table td:has(> details:nth-child(2)):before {
+        flex: 1 0 100%;
+    }
     
     table td:last-child {
         border-bottom: none;
     }
-    
+
+    /* Lignes "aucun résultat" (un seul <td colspan>) : pas de data-label,
+       donc pas de mise en page flex column/label — juste un message centré. */
+    table td[colspan] {
+        display: block;
+        text-align: center;
+        color: #64748b;
+    }
+
+    table td[colspan]:before {
+        content: none;
+    }
+
     table td:before {
         content: attr(data-label);
         font-weight: 600;

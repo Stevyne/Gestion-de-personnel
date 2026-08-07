@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <icon rel="icon" href="{{ url_for('static', filename='Logo.png') }}" type="image/png">
+    <link rel="icon" href="{{ url_for('static', filename='Logo.png') }}" type="image/png">
     <title>Gestion du Personnel</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
@@ -195,9 +195,9 @@
         <div class="nav-container">
             <div class="nav-brand">
                 <a href="{{ url_for('dashboard') }}">
-                    <span class="logo"><image src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
+                    <span class="logo"><img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
                 </a>    
-                <span class="brand-text"><image src="{{ url_for('static', filename='nom.png') }}" alt="Gestion du Personnel" style="width: 180px; height: 36px;"></span>
+                <span class="brand-text"><img src="{{ url_for('static', filename='nom.png') }}" alt="Gestion du Personnel" class="brand-text-img"></span>
                 
             </div>
             
@@ -259,7 +259,7 @@
     <div id="navDrawer" class="nav-drawer">
         <div class="drawer-header">
             <div class="drawer-brand">
-                <span class="logo"><image src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
+                <span class="logo"><img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
                 <span class="brand-text">Menu</span>
             </div>
             <button class="drawer-close" id="drawerClose" aria-label="Fermer le menu">×</button>

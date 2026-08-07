@@ -24,19 +24,19 @@
             <tbody>
                 {% for n in notifications %}
                 <tr>
-                    <td>{{ n.timestamp }}</td>
-                    <td>
+                    <td data-label="Date">{{ n.timestamp }}</td>
+                    <td data-label="Type">
                         {% if n.type == 'retard' %}
                             <span style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:4px;">Retard</span>
                         {% else %}
                             <span class="badge">{{ n.type }}</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Message">
                         <strong>{{ n.title }}</strong><br>
                         <small>{{ n.message }}</small>
                     </td>
-                    <td>
+                    <td data-label="Statut">
                         {% if n.is_read %}
                             <span style="color:#16a34a;">Lu</span>
                         {% else %}
