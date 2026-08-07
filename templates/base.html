@@ -313,7 +313,7 @@
                     </a>
                 </div>
             {% else %}
-                <a href="{{ url_for('login') }}" class="nav-link">🔐 Connexion</a>
+
                 {% if current_role == 'admin' %}
                 <a href="{{ url_for('register') }}" class="nav-link" style="background:#e0e7ff;color:#1e40af;padding:12px 20px;border-radius:10px;margin:8px 20px;justify-content:center;font-weight:600;">
                     👤 Inscrire
