@@ -585,6 +585,15 @@ def init_db():
         date_enregistrement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(employe_id, date)
     )''')
+    # Absences supprimées manuellement : on mémorise les couples (employe_id, date)
+    # à NE PAS régénérer automatiquement. Sans cela, la génération auto recréerait
+    # immédiatement toute absence supprimée (le jour reste sans présence) et la
+    # suppression semblait ne pas fonctionner.
+    cur.execute('''CREATE TABLE IF NOT EXISTS absences_exclues (
+        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        PRIMARY KEY (employe_id, date)
+    )''')
     # ==================== TABLE PERMISSIONS (MODULE SÉPARÉ) ====================
     # Une permission fonctionne COMME un congé (demande → approbation/refus),
     # mais c'est une entité à part entière : elle NE fait PAS partie des congés
@@ -1463,6 +1472,9 @@ def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None):
             (emp['id'], debut, fin_globale),
         )
         deja = {row['date'] for row in cur.fetchall()}
+        # Absences supprimées manuellement : ne JAMAIS les régénérer
+        cur.execute("SELECT date FROM absences_exclues WHERE employe_id = %s", (emp['id'],))
+        deja |= {row['date'] for row in cur.fetchall()}
 
         valeurs = []
         jour = debut
@@ -1558,6 +1570,15 @@ def add_absence():
 @role_required('admin', 'rh')
 def delete_absence(id):
     with db_cursor(commit=True) as (conn, cur):
+        # On mémorise la date supprimée pour empêcher la génération automatique
+        # de la recréer immédiatement (sinon elle réapparaît au prochain affichage).
+        cur.execute("SELECT employe_id, date FROM absences WHERE id = %s", (id,))
+        row = cur.fetchone()
+        if row:
+            cur.execute("""
+                INSERT INTO absences_exclues (employe_id, date) VALUES (%s, %s)
+                ON CONFLICT (employe_id, date) DO NOTHING
+            """, (row['employe_id'], row['date']))
         cur.execute("DELETE FROM absences WHERE id = %s", (id,))
     flash("Absence supprimée", "success")
     return redirect(url_for('absences'))

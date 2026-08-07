@@ -33,7 +33,7 @@ import app as application  # noqa: E402  (import après config des env vars, vol
 # employes / users / departements restent seedés une seule fois par session
 # (les identifiants de test admin/rh/manager/employe doivent rester stables).
 MUTABLE_TABLES = [
-    'presences', 'conges', 'permissions', 'absences', 'soldes_conges',
+    'presences', 'conges', 'permissions', 'absences', 'absences_exclues', 'soldes_conges',
     'audit_logs', 'documents', 'notifications',
 ]
 
