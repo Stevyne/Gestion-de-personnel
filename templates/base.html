@@ -213,10 +213,19 @@
                 <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">👥 Employés</a>
                 <a href="{{ url_for('presences') }}" class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">🕒 Présences</a>
                 <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">📋 Historique</a>
-                <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
-                <a href="{{ url_for('permissions') }}" class="nav-link {% if request.endpoint == 'permissions' %}active{% endif %}">🧾 Permissions</a>
+                <div class="nav-dropdown" id="congesDropdown">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['conges', 'permissions', 'soldes_conges_page'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                        🏖️ Congés &amp; Permissions <span class="nav-caret">▾</span>
+                    </button>
+                    <div class="nav-dropdown-menu">
+                        <a href="{{ url_for('conges') }}" class="nav-dropdown-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
+                        <a href="{{ url_for('permissions') }}" class="nav-dropdown-link {% if request.endpoint == 'permissions' %}active{% endif %}">🧾 Permissions</a>
+                        {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+                        <a href="{{ url_for('soldes_conges_page') }}" class="nav-dropdown-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">💰 Soldes</a>
+                        {% endif %}
+                    </div>
+                </div>
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                <a href="{{ url_for('soldes_conges_page') }}" class="nav-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">💰 Soldes</a>
                 <a href="{{ url_for('absences') }}" class="nav-link {% if request.endpoint == 'absences' %}active{% endif %}">🚫 Absences</a>
                 {% endif %}
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
@@ -630,6 +639,39 @@
             setupAutoClose();
             setupHamburgerIcon();
             window.addEventListener('resize', () => { if (window.innerWidth > 768 && isDrawerOpen) closeDrawer(true); });
+
+            // ===== NAV DROPDOWN (Congés & Permissions) =====
+            document.querySelectorAll('.nav-dropdown').forEach(dropdown => {
+                const toggle = dropdown.querySelector('.nav-dropdown-toggle');
+                if (!toggle) return;
+                toggle.addEventListener('click', e => {
+                    e.stopPropagation();
+                    const isOpen = dropdown.classList.contains('open');
+                    document.querySelectorAll('.nav-dropdown.open').forEach(d => {
+                        d.classList.remove('open');
+                        d.querySelector('.nav-dropdown-toggle').setAttribute('aria-expanded', 'false');
+                    });
+                    if (!isOpen) {
+                        dropdown.classList.add('open');
+                        toggle.setAttribute('aria-expanded', 'true');
+                    }
+                });
+            });
+            document.addEventListener('click', () => {
+                document.querySelectorAll('.nav-dropdown.open').forEach(d => {
+                    d.classList.remove('open');
+                    d.querySelector('.nav-dropdown-toggle').setAttribute('aria-expanded', 'false');
+                });
+            });
+            document.addEventListener('keydown', e => {
+                if (e.key === 'Escape') {
+                    document.querySelectorAll('.nav-dropdown.open').forEach(d => {
+                        d.classList.remove('open');
+                        d.querySelector('.nav-dropdown-toggle').setAttribute('aria-expanded', 'false');
+                    });
+                }
+            });
+
             console.log('%c✅ Super fluid animation + auto-close + responsive ready', 'color:#16a34a');
         });
     </script>
