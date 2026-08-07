@@ -232,23 +232,23 @@
                 {% if session.get('role') in ['admin', 'rh'] %}
                 <a href="{{ url_for('utilisateurs_page') }}" class="nav-link btn-primary {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">👤 Utilisateurs</a>
                 {% endif %}
-                <div class="nav-user-section">
-                    <a href="{{ url_for('notifications') }}" class="nav-notif" style="position:relative;">
-                        🛎️
-                        {% if unread_notifications and unread_notifications > 0 %}
-                        <span class="notif-badge">{{ unread_notifications }}</span>
-                        {% endif %}
-                    </a>
-                    
-                    <div class="user-info">
-                        <span class="user-name">{{ session.get('username', 'Utilisateur') }}</span>
-                        {% if session.get('role') == 'admin' %}
-                        <span class="user-role">admin</span>
-                        {% endif %}
-                    </div>
-                    
-                    <a href="{{ url_for('logout') }}" class="nav-link logout-btn">Déconnexion</a>
+            </div>
+            <div class="nav-user-section desktop-nav">
+                <a href="{{ url_for('notifications') }}" class="nav-notif" style="position:relative;">
+                    🛎️
+                    {% if unread_notifications and unread_notifications > 0 %}
+                    <span class="notif-badge">{{ unread_notifications }}</span>
+                    {% endif %}
+                </a>
+                
+                <div class="user-info">
+                    <span class="user-name">{{ session.get('username', 'Utilisateur') }}</span>
+                    {% if session.get('role') == 'admin' %}
+                    <span class="user-role">admin</span>
+                    {% endif %}
                 </div>
+                
+                <a href="{{ url_for('logout') }}" class="nav-link logout-btn">Déconnexion</a>
             </div>
             {% else %}
             <div class="nav-links desktop-nav">

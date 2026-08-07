@@ -60,6 +60,30 @@ body {
     align-items: center;
 }
 
+/* Desktop : 3 zones — logo à gauche, navigation centrée, compte à droite */
+@media (min-width: 769px) {
+    .nav-container {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        column-gap: 16px;
+    }
+
+    .nav-brand {
+        grid-column: 1;
+        justify-self: start;
+    }
+
+    .nav-links.desktop-nav {
+        grid-column: 2;
+        justify-self: center;
+    }
+
+    .nav-user-section.desktop-nav {
+        grid-column: 3;
+        justify-self: end;
+    }
+}
+
 .nav-brand {
     display: flex;
     align-items: center;
