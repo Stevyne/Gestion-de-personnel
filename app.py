@@ -621,6 +621,18 @@ def init_db():
         description TEXT
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_employe ON documents(employe_id)")
+    # Date d'expiration optionnelle (CDD, visa, certification, contrat...) pour
+    # les alertes automatiques avant échéance.
+    cur.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS date_expiration DATE")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_expiration ON documents(date_expiration)")
+    # Empêche de renvoyer la même alerte d'expiration chaque jour : une seule
+    # notif/email par document et par type d'alerte ('bientot' / 'expire').
+    cur.execute('''CREATE TABLE IF NOT EXISTS documents_alertes (
+        document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+        type_alerte VARCHAR(20) NOT NULL,
+        envoye_le DATE DEFAULT CURRENT_DATE,
+        PRIMARY KEY (document_id, type_alerte)
+    )''')
 
     # Table notifications (multi-utilisateur)
     cur.execute('''CREATE TABLE IF NOT EXISTS notifications (
@@ -1497,6 +1509,97 @@ def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None):
     return nb_creees
 
 
+SEUIL_ALERTE_EXPIRATION_DOCUMENTS_JOURS = 30
+
+
+def job_alertes_expiration_documents():
+    """Job planifié (1x/jour) : alerte RH/admin (+ l'employé concerné) pour
+    les documents dont la date d'expiration approche ou est dépassée
+    (CDD, visa, certification, contrat...).
+
+    Deux alertes possibles par document, chacune envoyée UNE SEULE FOIS
+    (table `documents_alertes`) :
+      - 'bientot' : expire dans <= 30 jours (mais pas encore expiré)
+      - 'expire'  : date d'expiration dépassée
+    """
+    with app.app_context():
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                cur.execute("""
+                    INSERT INTO scheduler_runs (job_name, run_date)
+                    VALUES ('alertes_expiration_documents', CURRENT_DATE)
+                    ON CONFLICT DO NOTHING
+                    RETURNING job_name
+                """)
+                if cur.fetchone() is None:
+                    logger.info("Job alertes expiration documents : déjà exécuté aujourd'hui, on saute.")
+                    return
+
+                cur.execute("""
+                    SELECT d.id, d.titre, d.date_expiration, d.employe_id, e.nom, e.prenom
+                    FROM documents d
+                    LEFT JOIN employes e ON d.employe_id = e.id
+                    WHERE d.date_expiration IS NOT NULL
+                      AND d.date_expiration <= CURRENT_DATE + INTERVAL %s
+                """, (f"{SEUIL_ALERTE_EXPIRATION_DOCUMENTS_JOURS} days",))
+                candidats = cur.fetchall()
+                if not candidats:
+                    return
+
+                cur.execute("SELECT id, employe_id FROM users WHERE employe_id IS NOT NULL")
+                user_id_par_employe = {u['employe_id']: u['id'] for u in cur.fetchall()}
+                cur.execute("SELECT id FROM users WHERE role IN ('admin', 'rh')")
+                ids_rh = [u['id'] for u in cur.fetchall()]
+
+                a_notifier = []
+                for d in candidats:
+                    type_alerte = 'expire' if d['date_expiration'] <= date.today() else 'bientot'
+                    cur.execute("""
+                        INSERT INTO documents_alertes (document_id, type_alerte)
+                        VALUES (%s, %s) ON CONFLICT DO NOTHING
+                        RETURNING document_id
+                    """, (d['id'], type_alerte))
+                    if cur.fetchone() is None:
+                        continue  # déjà alerté pour ce document + ce type
+                    a_notifier.append((d, type_alerte))
+
+                if not a_notifier:
+                    return
+
+                for d, type_alerte in a_notifier:
+                    proprietaire = f"{d['prenom']} {d['nom']}" if d['nom'] else "document général"
+                    if type_alerte == 'expire':
+                        message = f"« {d['titre']} » ({proprietaire}) a expiré le {d['date_expiration']}."
+                    else:
+                        message = f"« {d['titre']} » ({proprietaire}) expire le {d['date_expiration']}."
+
+                    for uid in ids_rh:
+                        create_notification(uid, "Document arrivant à expiration" if type_alerte == 'bientot'
+                                             else "Document expiré", message, "warning")
+
+                    if d['employe_id']:
+                        uid = user_id_par_employe.get(d['employe_id'])
+                        if uid:
+                            create_notification(uid, "Votre document arrive à expiration" if type_alerte == 'bientot'
+                                                 else "Votre document a expiré", message, "warning")
+
+                details = "\n".join(
+                    f"- [{'EXPIRÉ' if t == 'expire' else 'bientôt'}] {d['titre']} "
+                    f"({d['prenom']} {d['nom']} — {d['date_expiration']})" if d['nom']
+                    else f"- [{'EXPIRÉ' if t == 'expire' else 'bientôt'}] {d['titre']} ({d['date_expiration']})"
+                    for d, t in a_notifier
+                )
+                _envoyer_email_texte(
+                    [get_admin_email()],
+                    f"📄 {len(a_notifier)} document(s) à vérifier (expiration)",
+                    "Bonjour,\n\nLes documents suivants nécessitent votre attention :\n\n"
+                    f"{details}\n\nConsultez la page Documents pour les renouveler si besoin."
+                )
+        except Exception:
+            logger.exception("Erreur lors du job planifié d'alertes d'expiration de documents")
+
+
+
 def _envoyer_email_texte(destinataires, sujet, corps):
     """Envoi d'un email texte simple (pas de template HTML dédié nécessaire ici)."""
     if not app.config.get('MAIL_USERNAME'):
@@ -1608,9 +1711,14 @@ def demarrer_scheduler():
         job_generation_quotidienne_absences, 'cron',
         hour=1, minute=0, id='generation_absences_quotidienne', replace_existing=True
     )
+    scheduler.add_job(
+        job_alertes_expiration_documents, 'cron',
+        hour=1, minute=30, id='alertes_expiration_documents', replace_existing=True
+    )
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
-    logger.info("Scheduler démarré : génération automatique des absences tous les jours à 01h00.")
+    logger.info("Scheduler démarré : génération auto des absences (01h00) + alertes "
+                "d'expiration de documents (01h30), tous les jours.")
 
 
 @app.route('/absences')
@@ -2151,6 +2259,7 @@ def documents():
         titre = request.form.get('titre', '').strip()
         description = request.form.get('description', '').strip()
         employe_id = request.form.get('employe_id') or (emp['id'] if emp else None)
+        date_expiration = request.form.get('date_expiration') or None
         
         if 'fichier' not in request.files:
             flash('Aucun fichier sélectionné', 'danger')
@@ -2177,10 +2286,10 @@ def documents():
 
                 # Insert into DB
                 cur.execute("""
-                    INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description, date_expiration)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (employe_id, titre or filename, filename, filepath,
-                      filename.rsplit('.', 1)[1].lower(), os.path.getsize(filepath), description))
+                      filename.rsplit('.', 1)[1].lower(), os.path.getsize(filepath), description, date_expiration))
                 conn.commit()
                 log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", None, f"{titre} ({filename})")
                 flash('Document uploadé avec succès', 'success')
@@ -2200,7 +2309,9 @@ def documents():
     docs = cur.fetchall()
     
     cur.close(); conn.close()
-    return render_template('documents.html', documents=docs, employees=employees, current_employee=emp)
+    return render_template('documents.html', documents=docs, employees=employees, current_employee=emp,
+                           today=date.today(),
+                           bientot=date.today() + timedelta(days=SEUIL_ALERTE_EXPIRATION_DOCUMENTS_JOURS))
 
 @app.route('/documents/delete/<int:doc_id>', methods=['POST'])
 @login_required

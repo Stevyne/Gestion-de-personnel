@@ -35,9 +35,16 @@
                 <input type="file" name="fichier" class="form-control" required style="padding:10px;">
             </div>
             
-            <div class="form-group">
-                <label>Description (optionnel)</label>
-                <textarea name="description" class="form-control" rows="2" placeholder="Motif ou commentaire"></textarea>
+            <div class="form-row">
+                <div class="form-group" style="flex:1; min-width:220px;">
+                    <label>Description (optionnel)</label>
+                    <textarea name="description" class="form-control" rows="2" placeholder="Motif ou commentaire"></textarea>
+                </div>
+                <div class="form-group" style="flex:1; min-width:220px;">
+                    <label>Date d'expiration (optionnel)</label>
+                    <input type="date" name="date_expiration" class="form-control">
+                    <small style="color:#64748b;">CDD, visa, certification... Une alerte sera envoyée 30 jours avant.</small>
+                </div>
             </div>
             
             <button type="submit" class="btn btn-primary">📤 Uploader</button>
@@ -54,6 +61,7 @@
                     <th>Titre</th>
                     <th>Employé</th>
                     <th>Date</th>
+                    <th>Expiration</th>
                     <th>Fichier</th>
                     <th>Actions</th>
                 </tr>
@@ -67,6 +75,17 @@
                     </td>
                     <td data-label="Employé">{{ d.prenom }} {{ d.nom or '—' }}</td>
                     <td data-label="Date">{{ d.date_upload.strftime('%d/%m/%Y %H:%M') if d.date_upload else '—' }}</td>
+                    <td data-label="Expiration">
+                        {% if not d.date_expiration %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% elif d.date_expiration < today %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">⛔ Expiré le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                        {% elif d.date_expiration <= bientot %}
+                            <span class="badge" style="background:#fef9c3;color:#854d0e;">⚠️ Expire le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                        {% else %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">{{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                        {% endif %}
+                    </td>
                     <td data-label="Fichier">
                         <a href="{{ url_for('download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;padding:4px 11px;font-size:0.8rem;">
                             📄 Télécharger
@@ -88,7 +107,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" style="text-align:center; padding:40px; color:#64748b;">Aucun document uploadé.</td>
+                    <td colspan="6" style="text-align:center; padding:40px; color:#64748b;">Aucun document uploadé.</td>
                 </tr>
                 {% endfor %}
             </tbody>
