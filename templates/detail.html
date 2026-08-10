@@ -180,6 +180,64 @@
                 {% endif %}
             </div>
 
+            <!-- Documents (contrat, etc.) -->
+            {% if current_role in ['admin', 'rh', 'manager'] %}
+            <div class="card">
+                <div class="card-header" style="margin-bottom:12px;">
+                    <h3 style="margin:0; font-size:1.05rem;">📁 Documents</h3>
+                </div>
+
+                {% if current_role in ['admin', 'rh'] %}
+                <form method="post" action="{{ url_for('add_employee_document', id=employee.id) }}"
+                      enctype="multipart/form-data" style="background:#f8fafc; padding:16px; border-radius:12px; margin-bottom:16px;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1; min-width:180px;">
+                            <label>Titre</label>
+                            <input type="text" name="titre" class="form-control" placeholder="Ex: Contrat de travail" required>
+                        </div>
+                        <div class="form-group" style="flex:1; min-width:160px;">
+                            <label>Expiration (optionnel)</label>
+                            <input type="date" name="date_expiration" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Fichier</label>
+                        <input type="file" name="fichier" class="form-control" required style="padding:8px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">📤 Importer le document</button>
+                </form>
+                {% endif %}
+
+                {% if documents %}
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    {% for d in documents %}
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:#f8fafc; border-radius:10px;">
+                        <div>
+                            <strong>{{ d.titre }}</strong>
+                            <div style="font-size:0.8rem; color:#64748b;">
+                                {{ d.date_upload.strftime('%d/%m/%Y') if d.date_upload else '—' }}
+                                {% if d.date_expiration %}
+                                    {% if d.date_expiration < today %}
+                                        · <span style="color:#991b1b;">⛔ Expiré le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                                    {% elif d.date_expiration <= bientot %}
+                                        · <span style="color:#854d0e;">⚠️ Expire le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                                    {% else %}
+                                        · Valable jusqu'au {{ d.date_expiration.strftime('%d/%m/%Y') }}
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                        <a href="{{ url_for('download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;">📄</a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p style="color:#94a3b8; text-align:center; padding:12px 0;">Aucun document pour cet employé.</p>
+                {% endif %}
+            </div>
+            {% endif %}
+
             <!-- Quick actions -->
             <div class="card">
                 <div class="card-header" style="margin-bottom:8px;">

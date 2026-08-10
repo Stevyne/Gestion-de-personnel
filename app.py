@@ -2082,12 +2082,20 @@ def view_employee(id):
     cur = get_cursor(conn)
     cur.execute("SELECT * FROM employes WHERE id = %s", (id,))
     employee = cur.fetchone()
-    cur.close()
-    conn.close()
     if not employee:
+        cur.close()
+        conn.close()
         flash("Employé introuvable", "danger")
         return redirect(url_for('index'))
-    return render_template('detail.html', employee=employee)
+
+    cur.execute("SELECT * FROM documents WHERE employe_id = %s ORDER BY date_upload DESC", (id,))
+    employee_documents = cur.fetchall()
+
+    cur.close()
+    conn.close()
+    return render_template('detail.html', employee=employee, documents=employee_documents,
+                           today=date.today(),
+                           bientot=date.today() + timedelta(days=SEUIL_ALERTE_EXPIRATION_DOCUMENTS_JOURS))
 
 @app.route('/employes/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -2248,6 +2256,39 @@ def rapports():
                            total_jours=total_jours)
 
 # ==================== DOCUMENTS (Upload) ====================
+def _traiter_upload_document(conn, cur, employe_id, titre, description, date_expiration):
+    """Valide et enregistre un document uploadé (fichier dans request.files).
+    Retourne (ok: bool, message: str). Réutilisée par /documents et par
+    l'upload direct depuis la fiche employé."""
+    if 'fichier' not in request.files or request.files['fichier'].filename == '':
+        return False, 'Aucun fichier sélectionné'
+
+    fichier = request.files['fichier']
+    if not (fichier and allowed_file(fichier.filename)):
+        return False, 'Type de fichier non autorisé'
+
+    # Validation du CONTENU (pas seulement de l'extension) pour éviter qu'un
+    # fichier malveillant ne se déguise en image/document.
+    detected = detect_file_type(fichier)
+    if detected is None:
+        return False, 'Le contenu du fichier ne correspond pas à son extension (type non autorisé).'
+
+    filename = secure_filename(fichier.filename)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"{timestamp}_{filename}"
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    fichier.save(filepath)
+
+    cur.execute("""
+        INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description, date_expiration)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """, (employe_id, titre or filename, filename, filepath,
+          filename.rsplit('.', 1)[1].lower(), os.path.getsize(filepath), description, date_expiration))
+    conn.commit()
+    log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", None, f"{titre} ({filename})")
+    return True, 'Document uploadé avec succès'
+
+
 @app.route('/documents', methods=['GET', 'POST'])
 @login_required
 def documents():
@@ -2260,41 +2301,9 @@ def documents():
         description = request.form.get('description', '').strip()
         employe_id = request.form.get('employe_id') or (emp['id'] if emp else None)
         date_expiration = request.form.get('date_expiration') or None
-        
-        if 'fichier' not in request.files:
-            flash('Aucun fichier sélectionné', 'danger')
-            return redirect(url_for('documents'))
-        
-        fichier = request.files['fichier']
-        if fichier.filename == '':
-            flash('Aucun fichier sélectionné', 'danger')
-            return redirect(url_for('documents'))
-        
-        if fichier and allowed_file(fichier.filename):
-            # Validation du CONTENU (pas seulement de l'extension) pour éviter
-            # qu'un fichier malveillant ne se déguise en image/document.
-            detected = detect_file_type(fichier)
-            if detected is None:
-                flash('Le contenu du fichier ne correspond pas à son extension (type non autorisé).', 'danger')
-            else:
-                filename = secure_filename(fichier.filename)
-                # Unique filename
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                filename = f"{timestamp}_{filename}"
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                fichier.save(filepath)
 
-                # Insert into DB
-                cur.execute("""
-                    INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description, date_expiration)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (employe_id, titre or filename, filename, filepath,
-                      filename.rsplit('.', 1)[1].lower(), os.path.getsize(filepath), description, date_expiration))
-                conn.commit()
-                log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", None, f"{titre} ({filename})")
-                flash('Document uploadé avec succès', 'success')
-        else:
-            flash('Type de fichier non autorisé', 'danger')
+        ok, message = _traiter_upload_document(conn, cur, employe_id, titre, description, date_expiration)
+        flash(message, 'success' if ok else 'danger')
     
     # List documents
     cur.execute("SELECT id, prenom, nom FROM employes ORDER BY nom")
@@ -2312,6 +2321,31 @@ def documents():
     return render_template('documents.html', documents=docs, employees=employees, current_employee=emp,
                            today=date.today(),
                            bientot=date.today() + timedelta(days=SEUIL_ALERTE_EXPIRATION_DOCUMENTS_JOURS))
+
+
+@app.route('/employes/<int:id>/documents/add', methods=['POST'])
+@login_required
+@role_required('admin', 'rh')
+def add_employee_document(id):
+    """Import direct d'un document (ex: contrat) depuis la fiche employé —
+    l'employé est déjà connu, pas besoin de choisir dans une liste."""
+    conn = get_db()
+    cur = get_cursor(conn)
+    cur.execute("SELECT id FROM employes WHERE id = %s", (id,))
+    if not cur.fetchone():
+        cur.close(); conn.close()
+        flash("Employé introuvable", "danger")
+        return redirect(url_for('index'))
+
+    titre = request.form.get('titre', '').strip()
+    description = request.form.get('description', '').strip()
+    date_expiration = request.form.get('date_expiration') or None
+
+    ok, message = _traiter_upload_document(conn, cur, id, titre, description, date_expiration)
+    flash(message, 'success' if ok else 'danger')
+    cur.close(); conn.close()
+    return redirect(url_for('view_employee', id=id))
+
 
 @app.route('/documents/delete/<int:doc_id>', methods=['POST'])
 @login_required
