@@ -547,21 +547,6 @@ def init_db():
     cur.execute('''CREATE TABLE IF NOT EXISTS presences (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), date DATE, heure_arrivee TIME, heure_depart TIME, statut VARCHAR(30) DEFAULT 'présent', commentaire TEXT, UNIQUE(employe_id, date))''')
     cur.execute('''CREATE TABLE IF NOT EXISTS conges (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), type_conge VARCHAR(50), date_debut DATE, date_fin DATE, nombre_jours INTEGER, motif TEXT, statut VARCHAR(20) DEFAULT 'en attente', date_demande DATE DEFAULT CURRENT_DATE)''')
 
-    # ==================== TABLE PERMISSIONS (module indépendant des congés) ====================
-    # Une permission est une autorisation d'absence ponctuelle (ex: rdv médical,
-    # démarche administrative) : elle ne consomme pas de solde de congés et ne
-    # figure pas dans la table `conges`.
-    cur.execute('''CREATE TABLE IF NOT EXISTS permissions (
-        id SERIAL PRIMARY KEY,
-        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
-        date_debut DATE NOT NULL,
-        date_fin DATE NOT NULL,
-        motif TEXT,
-        statut VARCHAR(20) DEFAULT 'en attente',
-        date_demande DATE DEFAULT CURRENT_DATE
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_permissions_employe ON permissions(employe_id)")
-
     # ==================== TABLE SOLDES_CONGES (CRITIQUE) ====================
     cur.execute('''CREATE TABLE IF NOT EXISTS soldes_conges (
         id SERIAL PRIMARY KEY,
@@ -1319,6 +1304,11 @@ def add_conge():
                 from datetime import datetime
                 d1 = datetime.strptime(date_debut, '%Y-%m-%d')
                 d2 = datetime.strptime(date_fin, '%Y-%m-%d')
+                if d2 < d1:
+                    flash("La date de fin ne peut pas être avant la date de début", "danger")
+                    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+                    employees = cur.fetchall()
+                    return render_template('conge_form.html', employees=employees)
                 nombre_jours = (d2 - d1).days + 1
                 
                 cur.execute("""
@@ -1498,13 +1488,12 @@ def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None):
 @login_required
 @role_required('admin', 'rh', 'manager')
 def absences():
-    try:
-        with db_cursor(commit=True) as (conn, cur):
-            generer_absences_automatiques(cur)
-    except Exception:
-        logger.exception("Erreur lors de la génération automatique des absences")
-        flash("Génération automatique des absences impossible (voir les logs du serveur). "
-              "Affichage des absences déjà enregistrées.", "warning")
+    # NOTE : la génération automatique se faisait ici, à CHAQUE affichage de la
+    # page. Conséquence : supprimer une absence "aucune présence enregistrée"
+    # ne servait à rien, puisque la condition (toujours aucune présence ce
+    # jour-là) redevenait vraie au rechargement suivant et la ligne était
+    # aussitôt recréée. La génération se fait maintenant uniquement via le
+    # bouton "Synchroniser" (route /absences/synchroniser), de façon explicite.
 
     search = request.args.get('search', '').strip()
     employe_id = request.args.get('employe_id', '').strip()
@@ -1653,6 +1642,11 @@ def add_permission():
             if employe_id and date_debut and date_fin:
                 d1 = datetime.strptime(date_debut, '%Y-%m-%d')
                 d2 = datetime.strptime(date_fin, '%Y-%m-%d')
+                if d2 < d1:
+                    flash("La date de fin ne peut pas être avant la date de début", "danger")
+                    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+                    employees = cur.fetchall()
+                    return render_template('permission_form.html', employees=employees)
                 nombre_jours = (d2 - d1).days + 1
                 cur.execute("""
                     INSERT INTO permissions (employe_id, motif, date_debut, date_fin, nombre_jours, statut)
@@ -2081,6 +2075,7 @@ def documents():
 
 @app.route('/documents/delete/<int:doc_id>', methods=['POST'])
 @login_required
+@role_required('admin', 'rh')
 def delete_document(doc_id):
     conn = get_db()
     cur = get_cursor(conn)
@@ -2101,11 +2096,18 @@ def delete_document(doc_id):
 @login_required
 def download_document(doc_id):
     with db_cursor() as (conn, cur):
-        cur.execute("SELECT nom_fichier FROM documents WHERE id = %s", (doc_id,))
+        cur.execute("SELECT nom_fichier, employe_id FROM documents WHERE id = %s", (doc_id,))
         doc = cur.fetchone()
     if not doc:
         flash('Document introuvable.', 'danger')
         return redirect(url_for('documents'))
+    # Un simple employé ne peut accéder qu'à SES PROPRES documents ; seuls
+    # admin/rh/manager peuvent accéder aux documents de n'importe qui.
+    if session.get('role') not in ('admin', 'rh', 'manager'):
+        emp = get_current_employee()
+        if not emp or doc.get('employe_id') != emp['id']:
+            flash('Accès refusé : ce document ne vous appartient pas.', 'danger')
+            return redirect(url_for('documents'))
     filename = secure_filename(doc['nom_fichier'])
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     # Anti-path-traversal : on ne sert que depuis le dossier uploads autorisé
