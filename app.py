@@ -15,6 +15,8 @@ import io
 from urllib.parse import urlencode
 
 from flask_mail import Mail, Message
+from apscheduler.schedulers.background import BackgroundScheduler
+import atexit
 
 # ==================== LOGGING ====================
 logging.basicConfig(
@@ -578,6 +580,15 @@ def init_db():
         employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
         date DATE NOT NULL,
         PRIMARY KEY (employe_id, date)
+    )''')
+    # Garde-fou d'idempotence pour les jobs planifiés (scheduler) : empêche un
+    # job de tourner deux fois le même jour (redémarrage du dyno, plusieurs
+    # workers gunicorn...).
+    cur.execute('''CREATE TABLE IF NOT EXISTS scheduler_runs (
+        job_name VARCHAR(100) NOT NULL,
+        run_date DATE NOT NULL,
+        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (job_name, run_date)
     )''')
     # ==================== TABLE PERMISSIONS (MODULE SÉPARÉ) ====================
     # Une permission fonctionne COMME un congé (demande → approbation/refus),
@@ -1484,6 +1495,124 @@ def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None):
             nb_creees += len(valeurs)
 
     return nb_creees
+
+
+def _envoyer_email_texte(destinataires, sujet, corps):
+    """Envoi d'un email texte simple (pas de template HTML dédié nécessaire ici)."""
+    if not app.config.get('MAIL_USERNAME'):
+        logger.info(f"[EMAIL DEMO] → {destinataires} | {sujet}")
+        return True
+    try:
+        admin = get_admin_email()
+        msg = Message(subject=sujet, recipients=destinataires, sender=admin)
+        msg.body = corps
+        mail.send(msg)
+        return True
+    except Exception as e:
+        logger.error("Erreur envoi email texte: %s", e, exc_info=True)
+        return False
+
+
+def job_generation_quotidienne_absences():
+    """Job planifié (1x/jour, voir `demarrer_scheduler`) : génère les absences
+    automatiques (remplace l'ancienne génération au chargement de la page, qui
+    empêchait les suppressions de "tenir"), puis notifie RH/admin ainsi que
+    chaque employé concerné.
+
+    Idempotent via `scheduler_runs` : si le job a déjà tourné aujourd'hui
+    (redémarrage du service, plusieurs workers gunicorn...), il ne s'exécute
+    pas deux fois et n'envoie donc pas deux fois les mêmes notifications/emails.
+    """
+    with app.app_context():
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                cur.execute("""
+                    INSERT INTO scheduler_runs (job_name, run_date)
+                    VALUES ('generation_absences', CURRENT_DATE)
+                    ON CONFLICT DO NOTHING
+                    RETURNING job_name
+                """)
+                if cur.fetchone() is None:
+                    logger.info("Job génération absences : déjà exécuté aujourd'hui, on saute.")
+                    return
+
+                nb = generer_absences_automatiques(cur)
+                logger.info("Job génération absences : %d absence(s) créée(s).", nb)
+                if nb == 0:
+                    return
+
+                motif_auto = "Aucune présence enregistrée (généré automatiquement)"
+                cur.execute("""
+                    SELECT a.employe_id, a.date, e.nom, e.prenom
+                    FROM absences a JOIN employes e ON a.employe_id = e.id
+                    WHERE a.date_enregistrement::date = CURRENT_DATE AND a.motif = %s
+                    ORDER BY a.date
+                """, (motif_auto,))
+                nouvelles = cur.fetchall()
+
+                # Notifier chaque employé concerné
+                cur.execute("SELECT id, employe_id FROM users WHERE employe_id IS NOT NULL")
+                user_id_par_employe = {u['employe_id']: u['id'] for u in cur.fetchall()}
+                for a in nouvelles:
+                    uid = user_id_par_employe.get(a['employe_id'])
+                    if uid:
+                        create_notification(
+                            uid, "Absence enregistrée",
+                            f"Aucune présence relevée le {a['date']} — une absence a été "
+                            f"enregistrée automatiquement.",
+                            "warning"
+                        )
+
+                # Notifier RH/admin (résumé global)
+                cur.execute("SELECT id FROM users WHERE role IN ('admin', 'rh')")
+                for u in cur.fetchall():
+                    create_notification(
+                        u['id'], "Absences générées automatiquement",
+                        f"{nb} nouvelle(s) absence(s) détectée(s) (aucune présence enregistrée). "
+                        f"Vérifiez la page Absences.",
+                        "info"
+                    )
+
+                # Email récapitulatif à l'admin
+                details = "\n".join(f"- {a['prenom']} {a['nom']} : {a['date']}" for a in nouvelles)
+                _envoyer_email_texte(
+                    [get_admin_email()],
+                    f"🚫 {nb} absence(s) générée(s) automatiquement",
+                    "Bonjour,\n\n"
+                    f"{nb} absence(s) ont été enregistrée(s) automatiquement cette nuit "
+                    "(aucune présence relevée le jour ouvré concerné) :\n\n"
+                    f"{details}\n\n"
+                    "Vous pouvez les consulter et les corriger si besoin sur la page Absences."
+                )
+        except Exception:
+            logger.exception("Erreur lors du job planifié de génération des absences")
+
+
+def demarrer_scheduler():
+    """Démarre le scheduler en tâche de fond (1 seul process gunicorn en
+    production, cf. render.yaml). Avec le rechargeur Flask (FLASK_DEBUG=true en
+    local), le module est importé deux fois : on ne démarre le job que dans le
+    process qui sert réellement les requêtes (WERKZEUG_RUN_MAIN), pas dans le
+    process de surveillance du rechargeur, pour éviter un double job.
+
+    Si l'appli est un jour déployée avec plusieurs workers (gunicorn -w N), la
+    table `scheduler_runs` empêche quand même toute double exécution/notif.
+    """
+    if os.environ.get('FLASK_ENV') == 'testing':
+        return  # jamais de job planifié pendant les tests automatisés
+    debug_actif = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    if debug_actif and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        return
+    scheduler = BackgroundScheduler(timezone='Indian/Antananarivo')
+    scheduler.add_job(
+        job_generation_quotidienne_absences, 'cron',
+        hour=1, minute=0, id='generation_absences_quotidienne', replace_existing=True
+    )
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown(wait=False))
+    logger.info("Scheduler démarré : génération automatique des absences tous les jours à 01h00.")
+
+
 @app.route('/absences')
 @login_required
 @role_required('admin', 'rh', 'manager')
@@ -2605,6 +2734,7 @@ def add_employee_alt():
 # tables créées via CREATE TABLE IF NOT EXISTS (comme `absences`) n'existent
 # jamais en production. Idempotent, donc sans risque même avec plusieurs workers.
 init_db()
+demarrer_scheduler()
 
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
