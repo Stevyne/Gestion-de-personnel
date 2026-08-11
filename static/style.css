@@ -2301,3 +2301,136 @@ footer {
 @media (prefers-reduced-motion: reduce) {
     .conn-badge.online .conn-dot { animation: none; }
 }
+
+/* =========================================================================
+   ESPACE PERSONNEL (/mon-profil)
+   ========================================================================= */
+.profil-wrap { max-width: 1080px; margin: 0 auto; }
+
+.profil-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+/* --- Colonne identité --- */
+.profil-side { text-align: center; position: sticky; top: 82px; }
+
+.profil-photo-zone { display: flex; justify-content: center; margin-bottom: 14px; }
+
+.profil-photo {
+    width: 128px;
+    height: 128px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    border: 4px solid #fff;
+    box-shadow: 0 4px 14px rgb(15 23 42 / .14);
+}
+
+.profil-photo-initiales {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+    font-size: 2.6rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.profil-nom { font-size: 1.2rem; margin: 0 0 3px; color: #0f172a; }
+.profil-poste { margin: 0 0 10px; color: #64748b; font-size: .9rem; }
+
+.profil-role {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: #1d4ed8;
+    font-size: .74rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.profil-photo-form { margin-top: 18px; }
+.btn-block { display: block; width: 100%; }
+
+.profil-hint { font-size: .78rem; color: #94a3b8; margin: 8px 0 0; }
+
+.profil-filename {
+    font-size: .8rem;
+    color: #1d4ed8;
+    font-weight: 600;
+    margin: 8px 0;
+    word-break: break-all;
+}
+
+.profil-photo-form .btn-primary { margin-top: 8px; }
+
+.btn-link-danger {
+    background: none;
+    border: none;
+    color: #b91c1c;
+    font-size: .82rem;
+    cursor: pointer;
+    margin-top: 12px;
+    text-decoration: underline;
+    padding: 4px;
+}
+.btn-link-danger:hover { color: #7f1d1d; }
+
+/* --- Colonne informations --- */
+.profil-main { display: flex; flex-direction: column; gap: 20px; }
+
+.profil-lock {
+    font-size: .74rem;
+    color: #94a3b8;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.profil-readonly { display: flex; flex-direction: column; gap: 1px; }
+
+.profil-readonly > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 2px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.profil-readonly > div:last-child { border-bottom: none; }
+.profil-readonly span { color: #64748b; font-size: .875rem; }
+.profil-readonly strong { color: #0f172a; font-size: .9rem; text-align: right; }
+
+/* Champs verrouillés (compte sans fiche employé) */
+.profil-main .form-control:disabled {
+    background: #f8fafc;
+    color: #94a3b8;
+    cursor: not-allowed;
+}
+
+/* --- Avatar photo dans la barre de navigation --- */
+.user-avatar-img {
+    object-fit: cover;
+    padding: 0;
+    background: #e2e8f0;
+}
+
+@media (max-width: 900px) {
+    .profil-grid { grid-template-columns: 1fr; }
+    .profil-side { position: static; }
+}
+
+@media (max-width: 768px) {
+    .profil-photo { width: 108px; height: 108px; }
+    .profil-photo-initiales { font-size: 2.2rem; }
+    .profil-readonly > div { flex-direction: column; align-items: flex-start; gap: 3px; }
+    .profil-readonly strong { text-align: left; }
+}
+
+/* L'attribut `hidden` doit l'emporter sur les règles d'affichage (.btn-block
+   déclare display:block, ce qui rendait visible un bouton pourtant masqué). */
+[hidden] { display: none !important; }

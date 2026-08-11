@@ -1,0 +1,190 @@
+{% extends layout|default("base.html") %}
+
+{% block content %}
+<div class="profil-wrap">
+
+    <div class="card-header" style="margin-bottom:18px;">
+        <h1>👤 Mon espace</h1>
+    </div>
+
+    {% if not emp %}
+    <div class="alert alert-warning" style="margin-bottom:18px;">
+        <strong>Aucune fiche employé n'est liée à votre compte.</strong>
+        Vos informations personnelles (nom, coordonnées) proviennent de cette fiche :
+        contactez le service RH pour qu'il rattache votre compte.
+        Vous pouvez néanmoins définir votre photo et changer votre mot de passe.
+    </div>
+    {% endif %}
+
+    <div class="profil-grid">
+
+        <!-- ================= Colonne gauche : identité ================= -->
+        <div class="card profil-side">
+            <div class="profil-photo-zone">
+                {% if user and user.photo %}
+                <img src="{{ url_for('static', filename='avatars/' ~ user.photo) }}"
+                     alt="Photo de profil" class="profil-photo">
+                {% else %}
+                <div class="profil-photo profil-photo-initiales">
+                    {% if emp %}{{ emp.prenom[0]|upper }}{{ emp.nom[0]|upper }}
+                    {% else %}{{ (user.username if user else 'U')[:1]|upper }}{% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <h2 class="profil-nom">
+                {% if emp %}{{ emp.prenom }} {{ emp.nom }}{% else %}{{ user.username }}{% endif %}
+            </h2>
+            <p class="profil-poste">
+                {% if emp and emp.poste %}{{ emp.poste }}{% else %}—{% endif %}
+            </p>
+            <span class="profil-role">{{ role_label or current_role }}</span>
+
+            <form action="{{ url_for('mon_profil_photo') }}" method="post"
+                  enctype="multipart/form-data" class="profil-photo-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="file" name="photo" id="photoInput" accept="image/png,image/jpeg" hidden>
+                <button type="button" class="btn btn-secondary btn-block" id="photoPick">
+                    📷 {% if user and user.photo %}Changer la photo{% else %}Ajouter une photo{% endif %}
+                </button>
+                <p class="profil-hint">PNG ou JPEG, 8 Mo maximum. L'image est automatiquement recadrée en carré.</p>
+                <p class="profil-filename" id="photoName" hidden></p>
+                <button type="submit" class="btn btn-primary btn-block" id="photoSend" hidden>
+                    Enregistrer la photo
+                </button>
+            </form>
+
+            {% if user and user.photo %}
+            <form action="{{ url_for('mon_profil_photo_supprimer') }}" method="post"
+                  class="confirm-form"
+                  data-confirm-title="Supprimer votre photo ?"
+                  data-confirm-subtitle="Retour aux initiales"
+                  data-confirm-icon="🖼️"
+                  data-confirm-confirm="Supprimer"
+                  data-confirm-warning="Votre photo sera définitivement supprimée.">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-link-danger">Supprimer la photo</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <!-- ================= Colonne droite : informations ================= -->
+        <div class="profil-main">
+
+            <div class="card">
+                <div class="card-header"><h2>Mes informations</h2></div>
+
+                <form action="{{ url_for('mon_profil_infos') }}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="prenom">Prénom *</label>
+                            <input type="text" id="prenom" name="prenom" class="form-control"
+                                   value="{{ emp.prenom if emp and emp.prenom else '' }}"
+                                   {% if not emp %}disabled{% endif %} required>
+                        </div>
+                        <div class="form-group">
+                            <label for="nom">Nom *</label>
+                            <input type="text" id="nom" name="nom" class="form-control"
+                                   value="{{ emp.nom if emp and emp.nom else '' }}"
+                                   {% if not emp %}disabled{% endif %} required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" name="email" class="form-control"
+                                   value="{{ emp.email if emp and emp.email else '' }}"
+                                   {% if not emp %}disabled{% endif %}>
+                        </div>
+                        <div class="form-group">
+                            <label for="telephone">Téléphone</label>
+                            <input type="tel" id="telephone" name="telephone" class="form-control"
+                                   value="{{ emp.telephone if emp and emp.telephone else '' }}"
+                                   {% if not emp %}disabled{% endif %}>
+                        </div>
+                    </div>
+
+                    {% if emp %}
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Enregistrer</button>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+
+            <!-- Informations contractuelles : lecture seule -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Informations professionnelles</h2>
+                    <span class="profil-lock">🔒 Gérées par les RH</span>
+                </div>
+                <div class="profil-readonly">
+                    <div><span>Identifiant</span><strong>{{ user.username if user else '—' }}</strong></div>
+                    <div><span>Rôle</span><strong>{{ role_label or current_role }}</strong></div>
+                    <div><span>Poste</span><strong>{{ emp.poste if emp and emp.poste else '—' }}</strong></div>
+                    <div><span>Département</span><strong>{{ emp.departement if emp and emp.departement else '—' }}</strong></div>
+                    <div><span>Date d'embauche</span>
+                        <strong>{{ emp.date_embauche.strftime('%d/%m/%Y') if emp and emp.date_embauche else '—' }}</strong>
+                    </div>
+                </div>
+                <p class="profil-hint" style="margin-top:12px;">
+                    Une erreur dans ces informations ? Signalez-la au service RH.
+                </p>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h2>Sécurité</h2></div>
+                <form action="{{ url_for('mon_profil_mot_de_passe') }}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="form-group">
+                        <label for="mdp_actuel">Mot de passe actuel *</label>
+                        <input type="password" id="mdp_actuel" name="mdp_actuel"
+                               class="form-control" autocomplete="current-password" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="nouveau_mdp">Nouveau mot de passe *</label>
+                            <input type="password" id="nouveau_mdp" name="nouveau_mdp"
+                                   class="form-control" minlength="6"
+                                   autocomplete="new-password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmer_mdp">Confirmer *</label>
+                            <input type="password" id="confirmer_mdp" name="confirmer_mdp"
+                                   class="form-control" minlength="6"
+                                   autocomplete="new-password" required>
+                        </div>
+                    </div>
+                    <p class="profil-hint">6 caractères minimum.</p>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Changer le mot de passe</button>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    // Le champ de fichier natif est masqué : un bouton lisible le déclenche,
+    // puis le nom du fichier choisi s'affiche avant l'envoi.
+    var pick = document.getElementById('photoPick');
+    var input = document.getElementById('photoInput');
+    var name = document.getElementById('photoName');
+    var send = document.getElementById('photoSend');
+    if (!pick || !input) return;
+    pick.addEventListener('click', function () { input.click(); });
+    input.addEventListener('change', function () {
+        if (!input.files.length) return;
+        name.textContent = input.files[0].name;
+        name.hidden = false;
+        send.hidden = false;
+    });
+})();
+</script>
+{% endblock %}

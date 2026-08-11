@@ -83,6 +83,24 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Les photos de profil vivent dans un sous-dossier séparé des documents RH :
+# elles sont servies publiquement par <img>, alors que les documents sont
+# protégés par une route de téléchargement contrôlée.
+AVATAR_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'avatars')
+AVATAR_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+# 8 Mo à l'envoi : une photo prise au smartphone dépasse presque toujours 2 Mo.
+# Elle est ensuite redimensionnée côté serveur, donc le fichier stocké reste petit.
+AVATAR_MAX_BYTES = 8 * 1024 * 1024   # 8 Mo
+AVATAR_MAX_SIDE = 512                # côté maximal de l'image stockée (px)
+os.makedirs(AVATAR_FOLDER, exist_ok=True)
+
+try:
+    from PIL import Image, ImageOps
+    PIL_DISPONIBLE = True
+except ImportError:      # l'envoi reste possible, sans redimensionnement
+    PIL_DISPONIBLE = False
+    logger.warning("Pillow indisponible : les photos de profil ne seront pas redimensionnées.")
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -419,6 +437,16 @@ def inject_context():
     # Les templates de formulaire font `{% extends layout %}`, ce qui évite de
     # dupliquer les formulaires entre la page classique et la popup.
     is_modal = request.args.get('modal') == '1'
+    # Photo de profil du compte connecté, pour l'avatar de la barre de navigation.
+    photo_profil = None
+    try:
+        if session.get('user_id'):
+            with db_cursor() as (conn, cur):
+                cur.execute("SELECT photo FROM users WHERE id = %s", (session['user_id'],))
+                row = cur.fetchone()
+                photo_profil = row['photo'] if row else None
+    except Exception:
+        photo_profil = None
     return {
         'unread_notifications': unread_count,
         'current_role': session.get('role', 'employe'),
@@ -426,6 +454,7 @@ def inject_context():
         'is_modal': is_modal,
         'layout': '_modal_layout.html' if is_modal else 'base.html',
         'session_online_window': SESSION_ONLINE_WINDOW_MIN,
+        'photo_profil': photo_profil,
     }
 
 # ==================== RETARD EMAIL (HTML) ====================
@@ -547,6 +576,89 @@ def calculer_retard(h):
         return max(0, (hh*60 + mm) - (ha*60 + ma))
     except:
         return 0
+
+def get_current_user_row():
+    """Renvoie la ligne `users` du compte connecté (identifiant, rôle, photo…)."""
+    if 'user_id' not in session:
+        return None
+    try:
+        with db_cursor() as (conn, cur):
+            cur.execute("SELECT id, username, role, employe_id, photo FROM users WHERE id = %s",
+                        (session['user_id'],))
+            return cur.fetchone()
+    except Exception as e:
+        logger.error("Erreur get_current_user_row: %s", e, exc_info=True)
+        return None
+
+
+def enregistrer_photo_profil(fichier, user_id):
+    """Valide puis enregistre une photo de profil.
+
+    Renvoie (nom_du_fichier, None) en cas de succès, sinon (None, message).
+    La validation porte sur le CONTENU réel (magic-bytes) et pas seulement sur
+    l'extension : un script renommé en .png est rejeté.
+    """
+    if not fichier or not fichier.filename:
+        return None, "Aucune image sélectionnée."
+
+    ext = fichier.filename.rsplit('.', 1)[-1].lower() if '.' in fichier.filename else ''
+    if ext not in AVATAR_EXTENSIONS:
+        return None, "Format non accepté. Utilisez une image PNG ou JPEG."
+
+    # Taille : on mesure sans charger tout le fichier en mémoire.
+    fichier.stream.seek(0, os.SEEK_END)
+    taille = fichier.stream.tell()
+    fichier.stream.seek(0)
+    if taille > AVATAR_MAX_BYTES:
+        return None, (f"Image trop volumineuse ({taille // (1024 * 1024)} Mo). "
+                      f"Maximum : {AVATAR_MAX_BYTES // (1024 * 1024)} Mo.")
+    if taille == 0:
+        return None, "Le fichier est vide."
+
+    if detect_file_type(fichier) not in AVATAR_EXTENSIONS:
+        return None, "Ce fichier n'est pas une image valide."
+
+    # Nom imprévisible : empêche de deviner l'URL de la photo d'autrui.
+    nom = f"u{user_id}_{secrets.token_hex(8)}.{ 'jpg' if ext == 'jpeg' else ext }"
+    chemin = os.path.join(AVATAR_FOLDER, secure_filename(nom))
+
+    if not PIL_DISPONIBLE:
+        fichier.save(chemin)
+        return nom, None
+
+    # Redimensionnement : l'image est recadrée en carré puis réduite. Le
+    # ré-encodage par Pillow supprime au passage toute charge utile cachée
+    # dans le fichier d'origine (métadonnées EXIF, données après l'image).
+    try:
+        fichier.stream.seek(0)
+        with Image.open(fichier.stream) as img:
+            img = ImageOps.exif_transpose(img)          # respecte l'orientation photo
+            img = ImageOps.fit(img, (AVATAR_MAX_SIDE, AVATAR_MAX_SIDE),
+                               method=Image.LANCZOS, centering=(0.5, 0.4))
+            if nom.endswith('.png'):
+                img.convert('RGBA').save(chemin, 'PNG', optimize=True)
+            else:
+                img.convert('RGB').save(chemin, 'JPEG', quality=88, optimize=True)
+    except Exception as e:
+        logger.error("Erreur de traitement de la photo de profil : %s", e, exc_info=True)
+        return None, "Cette image n'a pas pu être traitée. Essayez un autre fichier."
+
+    return nom, None
+
+
+def supprimer_photo_profil(nom_fichier):
+    """Efface le fichier d'une ancienne photo, sans jamais interrompre l'appelant."""
+    if not nom_fichier:
+        return
+    try:
+        chemin = os.path.join(AVATAR_FOLDER, secure_filename(nom_fichier))
+        # Garde-fou : on ne supprime rien en dehors du dossier des avatars.
+        if os.path.dirname(os.path.abspath(chemin)) == os.path.abspath(AVATAR_FOLDER) \
+                and os.path.isfile(chemin):
+            os.remove(chemin)
+    except Exception as e:
+        logger.error("Erreur supprimer_photo_profil: %s", e, exc_info=True)
+
 
 def get_current_employee():
     if 'user_id' not in session: return None
@@ -817,6 +929,9 @@ def init_db():
     # Date d'expiration optionnelle (CDD, visa, certification, contrat...) pour
     # les alertes automatiques avant échéance.
     cur.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS date_expiration DATE")
+    # Photo de profil : portée par le COMPTE et non par la fiche employé, afin
+    # que les comptes sans employé lié puissent aussi en avoir une.
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS photo VARCHAR(255)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_expiration ON documents(date_expiration)")
     # Empêche de renvoyer la même alerte d'expiration chaque jour : une seule
     # notif/email par document et par type d'alerte ('bientot' / 'expire').
@@ -955,6 +1070,133 @@ def logout():
     session.clear()
     flash('Déconnecté.', 'success')
     return redirect(url_for('login'))
+
+# ==================== ESPACE PERSONNEL (profil) ====================
+# Champs que l'utilisateur peut modifier lui-même sur sa propre fiche.
+# Poste, département, salaire et date d'embauche en sont volontairement exclus :
+# ce sont des données contractuelles, du ressort des RH.
+CHAMPS_PROFIL_MODIFIABLES = ('nom', 'prenom', 'email', 'telephone')
+
+
+@app.route('/mon-profil')
+@login_required
+def mon_profil():
+    """Espace personnel : consultation de ses informations et de sa photo."""
+    user = get_current_user_row()
+    emp = get_current_employee()
+    return render_template('mon_profil.html', user=user, emp=emp)
+
+
+@app.route('/mon-profil/infos', methods=['POST'])
+@login_required
+def mon_profil_infos():
+    """Mise à jour des informations personnelles de l'utilisateur connecté."""
+    user = get_current_user_row()
+    if not user or not user['employe_id']:
+        flash("Aucune fiche employé n'est liée à votre compte.", "warning")
+        return redirect(url_for('mon_profil'))
+
+    valeurs = {c: (request.form.get(c) or '').strip() for c in CHAMPS_PROFIL_MODIFIABLES}
+
+    if not valeurs['nom'] or not valeurs['prenom']:
+        flash("Le nom et le prénom sont obligatoires.", "danger")
+        return redirect(url_for('mon_profil'))
+
+    email = valeurs['email']
+    if email and ('@' not in email or '.' not in email.split('@')[-1]):
+        flash("L'adresse email n'est pas valide.", "danger")
+        return redirect(url_for('mon_profil'))
+
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("""
+            UPDATE employes
+               SET nom = %s, prenom = %s, email = %s, telephone = %s
+             WHERE id = %s
+        """, (valeurs['nom'], valeurs['prenom'], email or None,
+              valeurs['telephone'] or None, user['employe_id']))
+
+    log_action(session.get('user_id'), session.get('username'),
+               "UPDATE_PROFIL", "employe", user['employe_id'],
+               "Mise à jour de ses informations personnelles")
+    flash("Vos informations ont été enregistrées.", "success")
+    return redirect(url_for('mon_profil'))
+
+
+@app.route('/mon-profil/photo', methods=['POST'])
+@login_required
+def mon_profil_photo():
+    """Envoi ou remplacement de la photo de profil."""
+    user = get_current_user_row()
+    if not user:
+        return redirect(url_for('login'))
+
+    nom, erreur = enregistrer_photo_profil(request.files.get('photo'), user['id'])
+    if erreur:
+        flash(erreur, "danger")
+        return redirect(url_for('mon_profil'))
+
+    ancienne = user['photo']
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("UPDATE users SET photo = %s WHERE id = %s", (nom, user['id']))
+    supprimer_photo_profil(ancienne)   # on ne la retire qu'après la mise à jour
+
+    log_action(session.get('user_id'), session.get('username'),
+               "UPDATE_PHOTO", "user", user['id'], "Photo de profil modifiée")
+    flash("Votre photo de profil a été mise à jour.", "success")
+    return redirect(url_for('mon_profil'))
+
+
+@app.route('/mon-profil/photo/supprimer', methods=['POST'])
+@login_required
+def mon_profil_photo_supprimer():
+    """Retire la photo de profil et revient aux initiales."""
+    user = get_current_user_row()
+    if not user:
+        return redirect(url_for('login'))
+    if not user['photo']:
+        flash("Vous n'avez pas de photo de profil.", "info")
+        return redirect(url_for('mon_profil'))
+
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("UPDATE users SET photo = NULL WHERE id = %s", (user['id'],))
+    supprimer_photo_profil(user['photo'])
+
+    log_action(session.get('user_id'), session.get('username'),
+               "DELETE_PHOTO", "user", user['id'], "Photo de profil supprimée")
+    flash("Votre photo de profil a été supprimée.", "success")
+    return redirect(url_for('mon_profil'))
+
+
+@app.route('/mon-profil/mot-de-passe', methods=['POST'])
+@login_required
+def mon_profil_mot_de_passe():
+    """Changement de son propre mot de passe (ancien mot de passe exigé)."""
+    actuel = request.form.get('mdp_actuel', '')
+    nouveau = request.form.get('nouveau_mdp', '')
+    confirmation = request.form.get('confirmer_mdp', '')
+
+    if len(nouveau) < 6:
+        flash("Le nouveau mot de passe doit contenir au moins 6 caractères.", "danger")
+        return redirect(url_for('mon_profil'))
+    if nouveau != confirmation:
+        flash("La confirmation ne correspond pas au nouveau mot de passe.", "danger")
+        return redirect(url_for('mon_profil'))
+
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT password_hash FROM users WHERE id = %s", (session['user_id'],))
+        row = cur.fetchone()
+        if not row or not check_password_hash(row['password_hash'], actuel):
+            flash("Votre mot de passe actuel est incorrect.", "danger")
+            return redirect(url_for('mon_profil'))
+        cur.execute("UPDATE users SET password_hash = %s WHERE id = %s",
+                    (generate_password_hash(nouveau), session['user_id']))
+
+    log_action(session.get('user_id'), session.get('username'),
+               "CHANGE_PASSWORD", "user", session['user_id'],
+               "Changement de son propre mot de passe")
+    flash("Votre mot de passe a été modifié.", "success")
+    return redirect(url_for('mon_profil'))
+
 
 # ==================== SELF-SERVICE ====================
 @app.route('/self-service')

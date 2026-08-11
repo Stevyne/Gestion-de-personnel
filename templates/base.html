@@ -343,7 +343,11 @@
                 {# --- Menu du compte : évite d'exposer « Déconnexion » en permanence --- #}
                 <div class="nav-dropdown user-menu">
                     <button type="button" class="user-trigger nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Menu du compte">
+                        {% if photo_profil %}
+                        <img src="{{ url_for('static', filename='avatars/' ~ photo_profil) }}" alt="" class="user-avatar user-avatar-img">
+                        {% else %}
                         <span class="user-avatar">{{ _uname[:1]|upper }}</span>
+                        {% endif %}
                         <span class="user-info">
                             <span class="user-name">{{ _uname }}</span>
                             <span class="user-role-text">{{ role_label or current_role }}</span>
@@ -352,12 +356,19 @@
                     </button>
                     <div class="nav-dropdown-menu user-menu-panel">
                         <div class="user-menu-head">
+                            {% if photo_profil %}
+                            <img src="{{ url_for('static', filename='avatars/' ~ photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
+                            {% else %}
                             <span class="user-avatar lg">{{ _uname[:1]|upper }}</span>
+                            {% endif %}
                             <span class="user-menu-id">
                                 <strong>{{ _uname }}</strong>
                                 <span class="user-role">{{ role_label or current_role }}</span>
                             </span>
                         </div>
+                        <a href="{{ url_for('mon_profil') }}" class="nav-dropdown-link {% if request.endpoint == 'mon_profil' %}active{% endif %}">
+                            {{ icon('user', 17) }}<span>Mon espace</span>
+                        </a>
                         <a href="{{ url_for('notifications') }}" class="nav-dropdown-link">
                             {{ icon('bell', 17) }}<span>Notifications</span>
                             {% if unread_notifications and unread_notifications > 0 %}
@@ -401,13 +412,17 @@
         
         <div class="drawer-links">
             {% if session.get('user_id') %}
-                <div class="drawer-user-card">
+                <a href="{{ url_for('mon_profil') }}" class="drawer-user-card">
+                    {% if photo_profil %}
+                    <img src="{{ url_for('static', filename='avatars/' ~ photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
+                    {% else %}
                     <span class="user-avatar lg">{{ _uname[:1]|upper }}</span>
+                    {% endif %}
                     <span class="drawer-user-id">
                         <strong>{{ _uname }}</strong>
                         <span class="user-role">{{ role_label or current_role }}</span>
                     </span>
-                </div>
+                </a>
 
                 <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">{{ icon('dashboard') }}<span>Tableau de bord</span></a>
 
@@ -437,6 +452,9 @@
                 {% endif %}
 
                 <div class="drawer-user-section">
+                    <a href="{{ url_for('mon_profil') }}" class="nav-link {% if request.endpoint == 'mon_profil' %}active{% endif %}">
+                        {{ icon('user') }}<span>Mon espace</span>
+                    </a>
                     <a href="{{ url_for('notifications') }}" class="nav-link {% if request.endpoint == 'notifications' %}active{% endif %}">
                         {{ icon('bell') }}<span>Notifications</span>
                         {% if unread_notifications and unread_notifications > 0 %}

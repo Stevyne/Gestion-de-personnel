@@ -1,0 +1,5 @@
+# Les photos de profil sont des données utilisateur : elles ne doivent pas
+# entrer dans le dépôt. Seule la structure du dossier est versionnée.
+*
+!.gitkeep
+!.gitignore
