@@ -201,9 +201,13 @@
     </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    if (typeof Chart === 'undefined') {
+        console.error("Chart.js n'a pas pu être chargé (static/js/chart.umd.min.js).");
+        return;
+    }
     const couleurPrimaire = '#2563eb';
     const couleurs = {
         vert: '#16a34a', rouge: '#dc2626', jaune: '#ca8a04', bleu: '#2563eb', gris: '#94a3b8'
