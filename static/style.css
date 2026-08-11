@@ -2434,3 +2434,34 @@ footer {
 /* L'attribut `hidden` doit l'emporter sur les règles d'affichage (.btn-block
    déclare display:block, ce qui rendait visible un bouton pourtant masqué). */
 [hidden] { display: none !important; }
+
+/* ==========================================================================
+   AVATAR DANS LA LISTE DES COMPTES (/utilisateurs)
+   ========================================================================== */
+.user-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-cell-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+/* Variante photo : recadrage sans déformation, fond neutre le temps du
+   chargement pour éviter que le dégradé n'apparaisse derrière l'image. */
+.user-cell-avatar-img {
+    object-fit: cover;
+    background: #e2e8f0;
+    border: 1px solid #e2e8f0;
+}

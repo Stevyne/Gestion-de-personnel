@@ -6,9 +6,15 @@
     <div class="card employee-header-card">
         <div class="employee-header">
             <div class="employee-identity">
+                {% if employee.photo %}
+                <img src="{{ url_for('static', filename='avatars/' ~ employee.photo) }}"
+                     alt="Photo de {{ employee.prenom }} {{ employee.nom }}"
+                     class="avatar-large avatar-img">
+                {% else %}
                 <div class="avatar-large">
                     {{ employee.prenom[0] }}{{ employee.nom[0] }}
                 </div>
+                {% endif %}
                 <div class="employee-meta">
                     <h1>{{ employee.prenom }} {{ employee.nom }}</h1>
                     <div class="employee-title">{{ employee.poste }}</div>
@@ -341,6 +347,11 @@
     justify-content: center;
     flex-shrink: 0;
     box-shadow: 0 4px 12px rgb(37 99 235 / 0.25);
+}
+
+.avatar-large.avatar-img {
+    object-fit: cover;
+    background: #e2e8f0;
 }
 
 .employee-meta h1 {

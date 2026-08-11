@@ -2625,7 +2625,17 @@ def index():
     total = cur.fetchone()['nb']
     pg = pagination_info(total, page, per_page)
     offset = (pg['page'] - 1) * per_page
-    cur.execute(f"SELECT * FROM employes WHERE 1=1{where}{order_clause} LIMIT %s OFFSET %s", params + [per_page, offset])
+    # La photo est portée par le compte (users.photo), pas par la fiche employé.
+    # Sous-requête scalaire plutôt que JOIN : un même employé peut avoir
+    # plusieurs comptes, une jointure dupliquerait la ligne. On privilégie le
+    # compte qui a effectivement une photo.
+    cur.execute(f"""SELECT e.*, (
+                        SELECT u.photo FROM users u
+                         WHERE u.employe_id = e.id AND u.photo IS NOT NULL
+                         ORDER BY u.id LIMIT 1
+                    ) AS photo
+                    FROM employes e WHERE 1=1{where}{order_clause} LIMIT %s OFFSET %s""",
+                params + [per_page, offset])
     employes = cur.fetchall()
 
     for emp in employes:
@@ -2668,7 +2678,13 @@ def index():
 def view_employee(id):
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute("SELECT * FROM employes WHERE id = %s", (id,))
+    # `photo` vient du compte lié (voir la remarque dans index()).
+    cur.execute("""SELECT e.*, (
+                       SELECT u.photo FROM users u
+                        WHERE u.employe_id = e.id AND u.photo IS NOT NULL
+                        ORDER BY u.id LIMIT 1
+                   ) AS photo
+                   FROM employes e WHERE e.id = %s""", (id,))
     employee = cur.fetchone()
     if not employee:
         cur.close()
@@ -3253,7 +3269,7 @@ def utilisateurs_page():
         # On joint le registre des sessions pour connaître l'état de connexion
         # de chaque compte : nombre de sessions ouvertes et dernière activité.
         cur.execute("""
-            SELECT u.id, u.username, u.role, u.employe_id, e.nom, e.prenom,
+            SELECT u.id, u.username, u.role, u.employe_id, u.photo, e.nom, e.prenom,
                    COALESCE(s.nb_sessions, 0) AS nb_sessions,
                    s.last_seen,
                    (s.last_seen > CURRENT_TIMESTAMP - (%s * INTERVAL '1 minute')) AS en_ligne

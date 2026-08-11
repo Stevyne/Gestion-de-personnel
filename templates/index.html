@@ -113,7 +113,12 @@
                     <tr>
                         <td data-label="Employé">
                             <div class="employee-cell">
+                                {% if emp.photo %}
+                                <img src="{{ url_for('static', filename='avatars/' ~ emp.photo) }}"
+                                     alt="" class="avatar-small avatar-img">
+                                {% else %}
                                 <div class="avatar-small">{{ emp.prenom[0] }}{{ emp.nom[0] }}</div>
+                                {% endif %}
                                 <div class="employee-info">
                                     <div class="employee-name">{{ emp.prenom }} {{ emp.nom }}</div>
                                     {% if emp.email %}
@@ -335,6 +340,14 @@
     font-weight: 700;
     font-size: 0.95rem;
     flex-shrink: 0;
+}
+
+/* Variante photo : l'image remplit le cercle sans se déformer et le dégradé
+   de secours ne doit pas transparaître derrière elle. */
+.avatar-small.avatar-img {
+    object-fit: cover;
+    background: #e2e8f0;
+    border: 1px solid #e2e8f0;
 }
 
 .employee-info {

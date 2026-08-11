@@ -29,10 +29,20 @@
                 {% set peut_modifier = (session.get('role') == 'admin') or (not cible_admin) %}
                 <tr>
                     <td data-label="Identifiant">
-                        <strong>{{ u.username }}</strong>
-                        {% if is_self %}
-                        <span class="badge" style="background:#e0e7ff;color:#3730a3;margin-left:6px;">vous</span>
-                        {% endif %}
+                        <div class="user-cell">
+                            {% if u.photo %}
+                            <img src="{{ url_for('static', filename='avatars/' ~ u.photo) }}"
+                                 alt="" class="user-cell-avatar user-cell-avatar-img">
+                            {% else %}
+                            <div class="user-cell-avatar">{{ u.username[0]|upper }}</div>
+                            {% endif %}
+                            <div>
+                                <strong>{{ u.username }}</strong>
+                                {% if is_self %}
+                                <span class="badge" style="background:#e0e7ff;color:#3730a3;margin-left:6px;">vous</span>
+                                {% endif %}
+                            </div>
+                        </div>
                     </td>
                     <td data-label="Statut">
                         {% if u.en_ligne %}
