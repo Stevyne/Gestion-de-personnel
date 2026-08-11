@@ -295,6 +295,34 @@ def get_all_notifications(user_id=None, limit=30):
         logger.error("Erreur get_all_notifications: %s", e, exc_info=True)
         return []
 
+@app.after_request
+def modal_redirect_passthrough(response):
+    """Ne pas suivre les redirections pour les soumissions de la popup.
+
+    Le JS de la fenêtre modale poste en AJAX (`fetch`) avec l'en-tête
+    X-Requested-With. Si le navigateur suit lui-même la redirection 302,
+    la page de destination est rendue dans le fetch : les messages flash
+    sont alors consommés et « perdus » avant que le navigateur ne recharge
+    réellement la liste.
+
+    On transforme donc la redirection en réponse 204 portant l'URL cible
+    dans l'en-tête X-Redirect-To ; le JS lit cet en-tête et navigue
+    lui-même, ce qui laisse le flash intact pour le vrai chargement.
+    """
+    try:
+        if (response.status_code in (301, 302, 303, 307, 308)
+                and request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+                and request.method == 'POST'):
+            target = response.headers.get('Location')
+            if target:
+                resp = make_response('', 204)
+                resp.headers['X-Redirect-To'] = target
+                return resp
+    except Exception:
+        pass
+    return response
+
+
 @app.context_processor
 def inject_context():
     try:
@@ -302,10 +330,18 @@ def inject_context():
         unread_count = len(get_unread_notifications(user_id)) if user_id else 0
     except:
         unread_count = 0
+    # Mode « popup » : quand une page de formulaire est demandée avec ?modal=1
+    # (par le JS d'ouverture de la fenêtre modale), on l'affiche via un layout
+    # réduit au seul contenu, sans <html>/navigation/pied de page.
+    # Les templates de formulaire font `{% extends layout %}`, ce qui évite de
+    # dupliquer les formulaires entre la page classique et la popup.
+    is_modal = request.args.get('modal') == '1'
     return {
         'unread_notifications': unread_count,
         'current_role': session.get('role', 'employe'),
-        'role_label': session.get('role_label') or get_role_label(session.get('role', 'employe'))
+        'role_label': session.get('role_label') or get_role_label(session.get('role', 'employe')),
+        'is_modal': is_modal,
+        'layout': '_modal_layout.html' if is_modal else 'base.html',
     }
 
 # ==================== RETARD EMAIL (HTML) ====================

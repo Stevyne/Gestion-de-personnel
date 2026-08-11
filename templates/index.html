@@ -10,7 +10,7 @@
             <div class="header-subtitle">{{ stats.total }} employés • Gestion du personnel</div>
         </div>
         <div class="header-actions">
-            <a href="{{ url_for('add_employee') }}" class="btn btn-primary">
+            <a data-modal-title="Nouvel employé" href="{{ url_for('add_employee') }}" class="js-modal-form btn btn-primary">
                 <span>+</span> Nouvel employé
             </a>
             <a href="{{ url_for('rapports') }}" class="btn btn-secondary">📊 Rapports</a>
@@ -166,8 +166,8 @@
                                 <a href="{{ url_for('view_employee', id=emp.id) }}" 
                                    class="action-btn" title="Voir le profil">👁️</a>
                                 
-                                <a href="{{ url_for('edit_employee', id=emp.id) }}" 
-                                   class="action-btn" title="Modifier">✏️</a>
+                                <a data-modal-title="Modifier l'employé" href="{{ url_for('edit_employee', id=emp.id) }}" 
+                                   class="js-modal-form action-btn" title="Modifier">✏️</a>
                                 
                                 <form action="{{ url_for('clock_in', employe_id=emp.id) }}" method="post" style="display:inline;">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -202,7 +202,7 @@
                                     <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm">Effacer les filtres</a>
                                 </div>
                             {% else %}
-                                <a href="{{ url_for('add_employee') }}" class="btn btn-primary btn-sm" style="margin-top:8px;">
+                                <a data-modal-title="Nouvel employé" href="{{ url_for('add_employee') }}" class="js-modal-form btn btn-primary btn-sm" style="margin-top:8px;">
                                     + Ajouter le premier employé
                                 </a>
                             {% endif %}
@@ -217,7 +217,7 @@
 
         <div class="table-footer">
             <span>Affichage de {{ employes|length }} employé(s)</span>
-            <a href="{{ url_for('add_employee') }}" class="btn btn-primary btn-sm">+ Nouvel employé</a>
+            <a data-modal-title="Nouvel employé" href="{{ url_for('add_employee') }}" class="js-modal-form btn btn-primary btn-sm">+ Nouvel employé</a>
         </div>
     </div>
 </div>

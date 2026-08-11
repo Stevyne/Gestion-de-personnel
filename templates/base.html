@@ -390,6 +390,26 @@
         </div>
     </div>
 
+    <!-- ==================== POPUP GÉNÉRIQUE DE FORMULAIRE ====================
+         Ouverte par tout lien portant la classe "js-modal-form".
+         Le contenu est chargé depuis l'URL du lien (avec ?modal=1), donc les
+         formulaires ne sont définis qu'à un seul endroit : leur template.
+         Sans JavaScript, les liens continuent de fonctionner normalement.
+    -->
+    <div id="formModal" class="modal-backdrop" role="dialog" aria-modal="true"
+         aria-labelledby="formModalTitle" aria-hidden="true">
+        <div class="delete-modal form-modal">
+            <div class="form-modal-head">
+                <h3 class="form-modal-title" id="formModalTitle">Chargement…</h3>
+                <button type="button" class="form-modal-close" id="formModalClose"
+                        aria-label="Fermer">&times;</button>
+            </div>
+            <div class="form-modal-body" id="formModalBody">
+                <div class="form-modal-loader"><span class="spinner"></span> Chargement…</div>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         // ===== ROBUST MOBILE DRAWER (no blur + no tap-through + clickable) =====
@@ -581,6 +601,165 @@
             currentForm = null;
         }
 
+        /* ==================== POPUP GÉNÉRIQUE DE FORMULAIRE ====================
+           Tout lien <a class="js-modal-form" href="..."> ouvre la page cible
+           dans une fenêtre modale au lieu de naviguer.
+
+           Principe : on récupère la page avec ?modal=1 (le serveur renvoie
+           alors le seul contenu du formulaire), on l'injecte, puis on soumet
+           en AJAX. Si le serveur répond par une redirection, l'opération a
+           réussi : on recharge la page pour afficher la liste à jour et le
+           message flash. S'il renvoie à nouveau le formulaire (erreur de
+           validation), on le réaffiche dans la popup.
+
+           Sans JavaScript, les liens restent de simples liens : les pages
+           de formulaire existantes continuent de fonctionner.
+        */
+        let formModalLastFocus = null;
+
+        function openFormModal(url, title) {
+            const modal = document.getElementById('formModal');
+            const body  = document.getElementById('formModalBody');
+            const titleEl = document.getElementById('formModalTitle');
+            if (!modal) return;
+
+            titleEl.textContent = title || 'Chargement…';
+            body.innerHTML = '<div class="form-modal-loader"><span class="spinner"></span> Chargement…</div>';
+            modal.classList.add('show');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+
+            const sep = url.includes('?') ? '&' : '?';
+            fetch(url + sep + 'modal=1', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            })
+                .then(r => {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.text();
+                })
+                .then(html => injectFormModal(html, url))
+                .catch(() => {
+                    // En cas d'échec (réseau, session expirée…), on retombe sur
+                    // la navigation classique plutôt que de bloquer l'utilisateur.
+                    window.location.href = url;
+                });
+        }
+
+        function injectFormModal(html, url) {
+            const body = document.getElementById('formModalBody');
+            const titleEl = document.getElementById('formModalTitle');
+            body.innerHTML = html;
+
+            // Le titre de la popup reprend le <h1>/<h2> du formulaire, qu'on
+            // retire ensuite pour ne pas l'afficher deux fois.
+            const heading = body.querySelector('.card-header h1, .card-header h2, h1, h2');
+            if (heading) {
+                titleEl.textContent = heading.textContent.trim();
+                const header = heading.closest('.card-header');
+                (header || heading).remove();
+            }
+
+            // La « carte » interne devient inutile dans la popup.
+            body.querySelectorAll('.card').forEach(c => {
+                c.style.boxShadow = 'none';
+                c.style.border = 'none';
+                c.style.padding = '0';
+                c.style.margin = '0';
+                c.style.maxWidth = '100%';
+                c.style.background = 'transparent';
+            });
+
+            const form = body.querySelector('form');
+            if (!form) return;
+
+            if (!form.getAttribute('action')) form.setAttribute('action', url);
+
+            // Les liens « Annuler » ferment la popup au lieu de naviguer.
+            body.querySelectorAll('a.btn-secondary, a.btn').forEach(a => {
+                const t = (a.textContent || '').trim().toLowerCase();
+                if (t === 'annuler' || t.startsWith('annuler') || t.startsWith('←')) {
+                    a.addEventListener('click', e => { e.preventDefault(); closeFormModal(); });
+                }
+            });
+
+            const firstField = form.querySelector(
+                'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])');
+            if (firstField) setTimeout(() => firstField.focus(), 60);
+
+            form.addEventListener('submit', e => {
+                e.preventDefault();
+                const btn = form.querySelector('button[type=submit]');
+                const label = btn ? btn.textContent : '';
+                if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+
+                fetch(form.action, {
+                    method: (form.method || 'POST').toUpperCase(),
+                    body: new FormData(form),
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                    redirect: 'follow'
+                })
+                    .then(r => {
+                        // Le serveur renvoie 204 + X-Redirect-To quand
+                        // l'enregistrement a réussi : on navigue nous-mêmes
+                        // pour que le message flash reste disponible.
+                        const target = r.headers.get('X-Redirect-To');
+                        if (target) {
+                            window.location.href = target;
+                            return null;
+                        }
+                        // Filet de sécurité : redirection suivie malgré tout.
+                        if (r.redirected || r.url.split('?')[0] !== form.action.split('?')[0]) {
+                            window.location.href = r.url;
+                            return null;
+                        }
+                        return r.text();
+                    })
+                    .then(html => {
+                        if (html === null) return;
+                        // Le serveur a renvoyé le formulaire : erreur de validation.
+                        injectFormModal(html, url);
+                    })
+                    .catch(() => {
+                        if (btn) { btn.disabled = false; btn.textContent = label; }
+                        alert("L'enregistrement a échoué. Vérifiez votre connexion.");
+                    });
+            });
+        }
+
+        function closeFormModal() {
+            const modal = document.getElementById('formModal');
+            if (!modal) return;
+            modal.classList.remove('show');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+            document.getElementById('formModalBody').innerHTML = '';
+            if (formModalLastFocus) formModalLastFocus.focus();
+        }
+
+        function setupFormModal() {
+            const modal = document.getElementById('formModal');
+            if (!modal) return;
+
+            document.querySelectorAll('a.js-modal-form').forEach(link => {
+                link.addEventListener('click', e => {
+                    // Respecte ctrl/cmd/clic-milieu : ouverture dans un onglet.
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                    e.preventDefault();
+                    formModalLastFocus = link;
+                    openFormModal(link.getAttribute('href'), link.dataset.modalTitle);
+                });
+            });
+
+            const closeBtn = document.getElementById('formModalClose');
+            if (closeBtn) closeBtn.addEventListener('click', closeFormModal);
+            modal.addEventListener('click', e => { if (e.target === modal) closeFormModal(); });
+            document.addEventListener('keydown', e => {
+                if (e.key === 'Escape' && modal.classList.contains('show')) closeFormModal();
+            });
+        }
+
         let currentGenericForm = null;
         function showGenericConfirm(formElement) {
             const modal = document.getElementById('genericConfirmModal');
@@ -637,6 +816,8 @@
                     }
                 });
             }
+
+            setupFormModal();
 
             setupAutoClose();
             setupHamburgerIcon();

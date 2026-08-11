@@ -27,7 +27,7 @@
             
             <!-- Quick actions -->
             <div class="employee-actions">
-                <a href="{{ url_for('edit_employee', id=employee.id) }}" class="btn btn-secondary">
+                <a data-modal-title="Modifier l'employé" href="{{ url_for('edit_employee', id=employee.id) }}" class="js-modal-form btn btn-secondary">
                     <span>✏️</span> Modifier
                 </a>
                 
@@ -177,7 +177,7 @@
                 {% else %}
                     <div class="presence-empty">
                         <p>Aucune présence enregistrée.</p>
-                        <a href="{{ url_for('add_presence') }}" class="btn btn-sm btn-secondary">Enregistrer une présence</a>
+                        <a data-modal-title="Enregistrer une présence" href="{{ url_for('add_presence') }}" class="js-modal-form btn btn-sm btn-secondary">Enregistrer une présence</a>
                     </div>
                 {% endif %}
             </div>
@@ -277,7 +277,7 @@
                     <a href="{{ url_for('presences') }}?employe_id={{ employee.id }}" class="quick-link">
                         🕒 Voir toutes les présences
                     </a>
-                    <a href="{{ url_for('add_presence') }}" class="quick-link">
+                    <a data-modal-title="Enregistrer une présence" href="{{ url_for('add_presence') }}" class="js-modal-form quick-link">
                         📝 Ajouter une présence manuelle
                     </a>
                     

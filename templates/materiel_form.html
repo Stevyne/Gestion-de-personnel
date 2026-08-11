@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends layout|default("base.html") %}
 
 {% block content %}
 <div class="card" style="max-width:720px; margin:0 auto;">
@@ -14,7 +14,7 @@
             <label for="nom">Nom du matériel <span style="color:#dc2626;">*</span></label>
             <input type="text" id="nom" name="nom" class="form-control" required
                    placeholder="Ex : Ramette papier A4, Stylo bille bleu, Classeur A4..."
-                   value="{{ materiel.nom if materiel else '' }}">
+                   value="{{ materiel.nom if materiel and materiel.nom else '' }}">
         </div>
 
         <div class="form-row">
@@ -82,7 +82,7 @@
                       placeholder="Référence, fournisseur, remarques...">{{ materiel.description if materiel and materiel.description else '' }}</textarea>
         </div>
 
-        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:20px;">
+        <div class="form-actions">
             <button type="submit" class="btn btn-primary">
                 {{ '💾 Enregistrer' if materiel else '+ Créer le matériel' }}
             </button>

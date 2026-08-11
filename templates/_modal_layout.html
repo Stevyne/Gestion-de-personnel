@@ -1,0 +1,13 @@
+{# ============================================================================
+   Layout minimal pour l'affichage d'un formulaire DANS une popup.
+
+   Les templates de formulaire font `{% extends layout %}` : `layout` vaut
+   "base.html" pour une visite normale, et ce fichier quand l'URL porte
+   `?modal=1` (voir inject_context() dans app.py).
+
+   On ne rend donc que le contenu utile — sans <html>, sans navigation, sans
+   pied de page — pour l'injecter tel quel dans la fenêtre modale.
+   Conséquence importante : il n'existe qu'UNE seule définition de chaque
+   formulaire, partagée entre la page classique et la popup.
+   ============================================================================ #}
+{% block content %}{% endblock %}

@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends layout|default("base.html") %}
 
 {% block content %}
 <div class="card" style="max-width: 750px; margin: 0 auto;">
@@ -13,12 +13,12 @@
             <div class="form-group">
                 <label for="nom">Nom *</label>
                 <input type="text" id="nom" name="nom" class="form-control" 
-                       value="{{ employee.nom if employee else '' }}" required>
+                       value="{{ employee.nom if employee and employee.nom else '' }}" required>
             </div>
             <div class="form-group">
                 <label for="prenom">Prénom *</label>
                 <input type="text" id="prenom" name="prenom" class="form-control" 
-                       value="{{ employee.prenom if employee else '' }}" required>
+                       value="{{ employee.prenom if employee and employee.prenom else '' }}" required>
             </div>
         </div>
 
@@ -26,12 +26,12 @@
             <div class="form-group">
                 <label for="poste">Poste *</label>
                 <input type="text" id="poste" name="poste" class="form-control" 
-                       value="{{ employee.poste if employee else '' }}" required>
+                       value="{{ employee.poste if employee and employee.poste else '' }}" required>
             </div>
             <div class="form-group">
                 <label for="departement">Département *</label>
                 <input type="text" id="departement" name="departement" class="form-control" 
-                       value="{{ employee.departement if employee else '' }}" required 
+                       value="{{ employee.departement if employee and employee.departement else '' }}" required 
                        list="departments">
                 <datalist id="departments">
                     {% for dept in depts %}
@@ -45,12 +45,12 @@
             <div class="form-group">
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" class="form-control" 
-                       value="{{ employee.email if employee else '' }}">
+                       value="{{ employee.email if employee and employee.email else '' }}">
             </div>
             <div class="form-group">
                 <label for="telephone">Téléphone</label>
                 <input type="tel" id="telephone" name="telephone" class="form-control" 
-                       value="{{ employee.telephone if employee else '' }}">
+                       value="{{ employee.telephone if employee and employee.telephone else '' }}">
             </div>
         </div>
 
@@ -61,9 +61,9 @@
                        value="{{ employee.date_embauche.strftime('%Y-%m-%d') if employee and employee.date_embauche else '' }}">
             </div>
             <div class="form-group">
-                <label for="salaire">Salaire annuel (€)</label>
+                <label for="salaire">Salaire annuel (Ar)</label>
                 <input type="number" id="salaire" name="salaire" step="100" class="form-control" 
-                       value="{{ employee.salaire if employee else '' }}">
+                       value="{{ employee.salaire if employee and employee.salaire else '' }}">
             </div>
         </div>
 

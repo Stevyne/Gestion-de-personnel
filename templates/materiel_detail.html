@@ -6,7 +6,7 @@
         <h1>📦 {{ materiel.nom }}</h1>
         <div>
             {% if peut_gerer_materiels %}
-            <a href="{{ url_for('edit_materiel', id=materiel.id) }}" class="btn btn-secondary">✏️ Modifier</a>
+            <a data-modal-title="Modifier le matériel" href="{{ url_for('edit_materiel', id=materiel.id) }}" class="js-modal-form btn btn-secondary">✏️ Modifier</a>
             {% endif %}
             <a href="{{ url_for('materiels') }}" class="btn btn-secondary">← Retour</a>
         </div>

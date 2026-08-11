@@ -1707,3 +1707,140 @@ footer {
         width: 100%;
     }
 }
+
+
+/* ============================================= */
+/* POPUP GÉNÉRIQUE DE FORMULAIRE                 */
+/* ============================================= */
+
+/* Plus large que les popups de confirmation : accueille de vrais formulaires */
+#formModal .form-modal {
+    max-width: 680px;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+
+.form-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 22px;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.form-modal-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.25;
+}
+
+.form-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.7rem;
+    line-height: 1;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 0 6px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.form-modal-close:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+/* Seule cette zone défile : l'en-tête reste visible */
+.form-modal-body {
+    padding: 20px 22px 22px;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+/* Neutralise la mise en page « pleine page » des formulaires réutilisés */
+.form-modal-body .card {
+    box-shadow: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    max-width: 100%;
+    background: transparent;
+}
+
+.form-modal-body .form-group {
+    margin-bottom: 14px;
+}
+
+.form-modal-body .form-actions,
+.form-modal-body .form-group:last-child {
+    margin-bottom: 0;
+}
+
+/* Barre de boutons du formulaire, alignée à droite comme les autres popups */
+.form-modal-body .form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    padding-top: 16px;
+    margin-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.form-modal-loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 40px 0;
+    color: #64748b;
+    font-size: 0.92rem;
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #cbd5e1;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    display: inline-block;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+    /* Comme la popup utilisateur : ancrée en bas, plus accessible au pouce */
+    #formModal.modal-backdrop {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    #formModal .form-modal {
+        max-width: 100%;
+        border-radius: 18px 18px 0 0;
+        max-height: 92vh;
+    }
+
+    .form-modal-body .form-actions {
+        flex-direction: column-reverse;
+    }
+
+    .form-modal-body .form-actions .btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* Les grilles à 2 colonnes des formulaires passent en 1 colonne */
+    .form-modal-body .form-row {
+        grid-template-columns: 1fr;
+    }
+}

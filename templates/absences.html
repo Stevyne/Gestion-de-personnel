@@ -10,7 +10,7 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-secondary">🔄 Synchroniser</button>
             </form>
-            <a href="{{ url_for('add_absence') }}" class="btn btn-primary">+ Enregistrer une absence</a>
+            <a data-modal-title="Enregistrer une absence" href="{{ url_for('add_absence') }}" class="js-modal-form btn btn-primary">+ Enregistrer une absence</a>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
         </div>
     </div>

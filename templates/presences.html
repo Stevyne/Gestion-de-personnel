@@ -6,7 +6,7 @@
     <div class="card-header">
         <h1>🕒 Gestion des Présences</h1>
         <div style="display: flex; gap: 10px;">
-            <a href="{{ url_for('add_presence') }}" class="btn btn-primary">+ Enregistrer / Modifier</a>
+            <a data-modal-title="Enregistrer / modifier une présence" href="{{ url_for('add_presence') }}" class="js-modal-form btn btn-primary">+ Enregistrer / Modifier</a>
             <a href="{{ url_for('historique') }}" class="btn btn-secondary">📋 Historique complet</a>
             <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Tableau de bord</a>
         </div>
@@ -184,8 +184,8 @@
                                 <input type="hidden" name="date" value="{{ p.date }}">
                                 <button type="submit" class="btn" style="padding:3px 8px; font-size:0.65rem; background:#ca8a04; color:white;">⏱️ Sortie</button>
                             </form>
-                            <a href="{{ url_for('add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}" 
-                               class="btn btn-secondary" style="padding:3px 8px;font-size:0.7rem;">✏️</a>
+                            <a data-modal-title="Enregistrer / modifier une présence" href="{{ url_for('add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}" 
+                               class="js-modal-form btn btn-secondary" style="padding:3px 8px;font-size:0.7rem;">✏️</a>
                             
                             <form action="{{ url_for('delete_presence', id=p.id) }}" method="post" style="display:inline;"
                                   class="confirm-form"
