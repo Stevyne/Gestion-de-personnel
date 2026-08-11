@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 import os
+import secrets
 import logging
 from datetime import date, datetime, timedelta
 from functools import wraps
@@ -201,6 +202,86 @@ ROLE_LABELS = {'admin':'Administrateur', 'rh':'Responsable RH', 'manager':'Manag
 def get_role_label(role):
     return ROLE_LABELS.get(role, role or 'Employé')
 
+# ==================== SESSIONS ACTIVES (présence + déconnexion à distance) ====================
+# Durée d'inactivité au-delà de laquelle une session n'est plus considérée
+# comme « en ligne » dans l'interface (elle reste valide tant qu'elle n'est
+# ni expirée ni révoquée).
+SESSION_ONLINE_WINDOW_MIN = int(os.environ.get('SESSION_ONLINE_WINDOW_MIN', 5))
+
+def _client_ip():
+    fwd = request.headers.get('X-Forwarded-For', '')
+    if fwd:
+        return fwd.split(',')[0].strip()[:45]
+    return (request.remote_addr or '')[:45]
+
+
+def enregistrer_session(user_id, username):
+    """Inscrit la session courante au registre et renvoie son identifiant."""
+    sid = secrets.token_urlsafe(32)
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("""
+                INSERT INTO sessions_actives (sid, user_id, username, ip_address, user_agent)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (sid, user_id, username, _client_ip(),
+                  (request.headers.get('User-Agent') or '')[:300]))
+    except Exception as e:
+        logger.error("Erreur enregistrer_session: %s", e, exc_info=True)
+        return None
+    return sid
+
+
+def cloturer_session(sid, par=None):
+    """Marque une session comme terminée (déconnexion volontaire ou révocation)."""
+    if not sid:
+        return
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("""
+                UPDATE sessions_actives
+                   SET revoked_at = CURRENT_TIMESTAMP, revoked_by = %s
+                 WHERE sid = %s AND revoked_at IS NULL
+            """, (par, sid))
+    except Exception as e:
+        logger.error("Erreur cloturer_session: %s", e, exc_info=True)
+
+
+def session_active():
+    """Vrai si la session présentée par le navigateur est toujours valide.
+
+    Rafraîchit `last_seen` au passage, ce qui alimente l'indicateur de présence.
+    En cas d'incident base, on renvoie True : mieux vaut laisser passer que
+    déconnecter tout le monde parce que la base est momentanément indisponible.
+    """
+    sid = session.get('sid')
+    if not sid:
+        # Session ouverte avant la mise en place du registre : on la tolère.
+        return True
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT revoked_at FROM sessions_actives WHERE sid = %s", (sid,))
+            row = cur.fetchone()
+            if row is None:
+                return True          # inconnue (base réinitialisée) : on tolère
+            if row['revoked_at'] is not None:
+                return False         # révoquée par un administrateur
+            cur.execute("UPDATE sessions_actives SET last_seen = CURRENT_TIMESTAMP WHERE sid = %s", (sid,))
+    except Exception as e:
+        logger.error("Erreur session_active: %s", e, exc_info=True)
+    return True
+
+
+def _refuser_session_revoquee():
+    """Termine proprement une session dont l'accès vient d'être retiré."""
+    session.clear()
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        resp = make_response('', 204)
+        resp.headers['X-Redirect-To'] = url_for('login')
+        return resp
+    flash("Votre session a été fermée par un administrateur.", "warning")
+    return redirect(url_for('login'))
+
+
 def role_required(*allowed_roles):
     def decorator(f):
         @wraps(f)
@@ -208,6 +289,8 @@ def role_required(*allowed_roles):
             if 'user_id' not in session:
                 flash('Veuillez vous connecter.', 'warning')
                 return redirect(url_for('login'))
+            if not session_active():
+                return _refuser_session_revoquee()
             role = session.get('role', 'employe')
             if role == 'admin' or role in allowed_roles:
                 return f(*args, **kwargs)
@@ -342,6 +425,7 @@ def inject_context():
         'role_label': session.get('role_label') or get_role_label(session.get('role', 'employe')),
         'is_modal': is_modal,
         'layout': '_modal_layout.html' if is_modal else 'base.html',
+        'session_online_window': SESSION_ONLINE_WINDOW_MIN,
     }
 
 # ==================== RETARD EMAIL (HTML) ====================
@@ -446,6 +530,9 @@ def login_required(f):
         if 'user_id' not in session:
             flash('Veuillez vous connecter.', 'warning')
             return redirect(url_for('login'))
+        # Une session révoquée à distance est rejetée dès la requête suivante.
+        if not session_active():
+            return _refuser_session_revoquee()
         return f(*args, **kwargs)
     return decorated
 
@@ -693,6 +780,27 @@ def init_db():
     cur.execute('''CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id INTEGER, username VARCHAR(80), action VARCHAR(100), entity_type VARCHAR(50), entity_id INTEGER, details TEXT, ip_address VARCHAR(45), timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs(timestamp DESC)")
 
+    # ---- Registre des sessions actives -------------------------------------
+    # Flask stocke la session dans un cookie signé côté navigateur : le serveur
+    # ne sait donc pas qui est connecté et ne peut pas « reprendre » un cookie
+    # déjà émis. Ce registre comble ce manque : chaque connexion y inscrit un
+    # identifiant de session, que l'on peut révoquer à distance. Chaque requête
+    # vérifie que la session présentée est toujours valide (voir session_active).
+    cur.execute('''CREATE TABLE IF NOT EXISTS sessions_actives (
+        id SERIAL PRIMARY KEY,
+        sid VARCHAR(64) UNIQUE NOT NULL,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        username VARCHAR(80),
+        ip_address VARCHAR(45),
+        user_agent VARCHAR(300),
+        login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        revoked_at TIMESTAMP,
+        revoked_by VARCHAR(80)
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions_actives(user_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_sessions_seen ON sessions_actives(last_seen DESC)")
+
     # Table documents
     cur.execute('''CREATE TABLE IF NOT EXISTS documents (
         id SERIAL PRIMARY KEY,
@@ -831,6 +939,9 @@ def login():
             session['username'] = user['username']
             session['role'] = user['role']
             session['role_label'] = get_role_label(user['role'])
+            # Inscription au registre des sessions : permet l'indicateur de
+            # présence et la déconnexion à distance par un administrateur.
+            session['sid'] = enregistrer_session(user['id'], user['username'])
             log_action(user_id=user['id'], username=user['username'], action="LOGIN")
             flash(f'Bienvenue, {user["username"]} !', 'success')
             return redirect(url_for('dashboard'))
@@ -840,6 +951,7 @@ def login():
 @app.route('/logout')
 def logout():
     log_action(session.get('user_id'), session.get('username'), "LOGOUT")
+    cloturer_session(session.get('sid'), par='(déconnexion volontaire)')
     session.clear()
     flash('Déconnecté.', 'success')
     return redirect(url_for('login'))
@@ -1856,6 +1968,26 @@ def job_generation_quotidienne_absences():
             logger.exception("Erreur lors du job planifié de génération des absences")
 
 
+def job_purge_sessions():
+    """Efface les sessions expirées ou révoquées de plus de 30 jours.
+
+    Sans cela, le registre grossit indéfiniment et le compteur de sessions
+    ouvertes finit par inclure des navigateurs fermés depuis longtemps.
+    """
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("""
+                DELETE FROM sessions_actives
+                 WHERE (revoked_at IS NOT NULL AND revoked_at < CURRENT_TIMESTAMP - INTERVAL '30 days')
+                    OR (revoked_at IS NULL     AND last_seen  < CURRENT_TIMESTAMP - INTERVAL '30 days')
+            """)
+            n = cur.rowcount
+        if n:
+            logger.info("Purge des sessions : %s entrée(s) supprimée(s).", n)
+    except Exception as e:
+        logger.error("Erreur job_purge_sessions: %s", e, exc_info=True)
+
+
 def job_recalcul_soldes_conges():
     """Job planifié (1x/jour, voir `demarrer_scheduler`) : recalcule le nombre
     de jours de congé acquis (`jours_acquis`) de chaque employé pour l'année en
@@ -1923,6 +2055,10 @@ def demarrer_scheduler():
     scheduler.add_job(
         job_recalcul_soldes_conges, 'cron',
         hour=2, minute=0, id='recalcul_soldes_conges', replace_existing=True
+    )
+    scheduler.add_job(
+        job_purge_sessions, 'cron',
+        hour=3, minute=0, id='purge_sessions_actives', replace_existing=True
     )
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
@@ -2872,12 +3008,26 @@ def delete_departement(id):
 def utilisateurs_page():
     """Page de gestion des comptes utilisateurs (admin/rh)."""
     with db_cursor() as (conn, cur):
+        # On joint le registre des sessions pour connaître l'état de connexion
+        # de chaque compte : nombre de sessions ouvertes et dernière activité.
         cur.execute("""
-            SELECT u.id, u.username, u.role, u.employe_id, e.nom, e.prenom
+            SELECT u.id, u.username, u.role, u.employe_id, e.nom, e.prenom,
+                   COALESCE(s.nb_sessions, 0) AS nb_sessions,
+                   s.last_seen,
+                   (s.last_seen > CURRENT_TIMESTAMP - (%s * INTERVAL '1 minute')) AS en_ligne
             FROM users u
             LEFT JOIN employes e ON u.employe_id = e.id
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS nb_sessions, MAX(last_seen) AS last_seen
+                  FROM sessions_actives
+                 WHERE revoked_at IS NULL
+                   -- Au-delà de la durée de vie d'une session Flask, le cookie
+                   -- n'est plus valable : la session ne compte plus comme ouverte.
+                   AND last_seen > CURRENT_TIMESTAMP - (%s * INTERVAL '1 second')
+                 GROUP BY user_id
+            ) s ON s.user_id = u.id
             ORDER BY u.role, u.username
-        """)
+        """, (SESSION_ONLINE_WINDOW_MIN, app.config['PERMANENT_SESSION_LIFETIME']))
         users_list = cur.fetchall()
         cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
         employees = cur.fetchall()
@@ -2956,6 +3106,46 @@ def reset_password_utilisateur(user_id):
     log_action(session.get('user_id'), session.get('username'), "RESET_PASSWORD", "user", user_id,
               f"Mot de passe réinitialisé pour {cible['username']}")
     flash(f"Mot de passe de '{cible['username']}' réinitialisé.", "success")
+    return redirect(url_for('utilisateurs_page'))
+
+
+@app.route('/utilisateurs/<int:user_id>/deconnecter', methods=['POST'])
+@login_required
+@role_required('admin')
+def deconnecter_utilisateur(user_id):
+    """Ferme toutes les sessions ouvertes d'un utilisateur (admin uniquement).
+
+    La révocation prend effet à la requête suivante de l'intéressé : son cookie
+    reste dans son navigateur, mais il n'est plus accepté par le serveur.
+    """
+    if user_id == session.get('user_id'):
+        flash("Utilisez le bouton Déconnexion pour fermer votre propre session.", "warning")
+        return redirect(url_for('utilisateurs_page'))
+
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+        cible = cur.fetchone()
+        if not cible:
+            flash("Utilisateur introuvable.", "danger")
+            return redirect(url_for('utilisateurs_page'))
+
+        cur.execute("""
+            UPDATE sessions_actives
+               SET revoked_at = CURRENT_TIMESTAMP, revoked_by = %s
+             WHERE user_id = %s AND revoked_at IS NULL
+        """, (session.get('username'), user_id))
+        nb = cur.rowcount
+
+    if nb:
+        log_action(session.get('user_id'), session.get('username'),
+                   "FORCE_LOGOUT", "user", user_id,
+                   f"{nb} session(s) fermée(s) pour {cible['username']}")
+        create_notification(user_id, "Session fermée",
+                            f"Votre session a été fermée par {session.get('username')}.",
+                            "warning")
+        flash(f"{nb} session(s) fermée(s) pour « {cible['username']} ».", "success")
+    else:
+        flash(f"« {cible['username']} » n'a aucune session ouverte.", "info")
     return redirect(url_for('utilisateurs_page'))
 
 

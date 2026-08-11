@@ -15,6 +15,7 @@
             <thead>
                 <tr>
                     <th>Identifiant</th>
+                    <th>Statut</th>
                     <th>Rôle</th>
                     <th>Employé lié</th>
                     <th>Actions</th>
@@ -31,6 +32,24 @@
                         <strong>{{ u.username }}</strong>
                         {% if is_self %}
                         <span class="badge" style="background:#e0e7ff;color:#3730a3;margin-left:6px;">vous</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Statut">
+                        {% if u.en_ligne %}
+                        <span class="conn-badge online" title="Actif il y a moins de {{ session_online_window }} minutes">
+                            <span class="conn-dot"></span>En ligne
+                        </span>
+                        {% elif u.nb_sessions and u.nb_sessions > 0 %}
+                        <span class="conn-badge idle" title="Session ouverte, sans activité récente">
+                            <span class="conn-dot"></span>Inactif
+                        </span>
+                        {% else %}
+                        <span class="conn-badge offline">
+                            <span class="conn-dot"></span>Hors ligne
+                        </span>
+                        {% endif %}
+                        {% if u.nb_sessions and u.nb_sessions > 1 %}
+                        <span class="conn-sessions" title="{{ u.nb_sessions }} sessions ouvertes">×{{ u.nb_sessions }}</span>
                         {% endif %}
                     </td>
                     <td data-label="Rôle">
@@ -67,6 +86,22 @@
                             </span>
                             {% endif %}
 
+                            {% if session.get('role') == 'admin' and not is_self and u.nb_sessions and u.nb_sessions > 0 %}
+                            <form action="{{ url_for('deconnecter_utilisateur', user_id=u.id) }}" method="post"
+                                  style="display:inline;"
+                                  class="confirm-form"
+                                  data-confirm-title="Déconnecter {{ u.username }} ?"
+                                  data-confirm-subtitle="Fermeture des sessions ouvertes"
+                                  data-confirm-icon="🚪"
+                                  data-confirm-confirm="Déconnecter"
+                                  data-confirm-warning="Cet utilisateur devra se reconnecter. Son travail non enregistré sera perdu.">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-xs btn-disconnect" title="Fermer les sessions de cet utilisateur">
+                                    🚪 Déconnecter
+                                </button>
+                            </form>
+                            {% endif %}
+
                             {% if not is_self %}
                             <form action="{{ url_for('delete_utilisateur', user_id=u.id) }}" method="post"
                                   style="display:inline;"
@@ -84,7 +119,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4" style="text-align:center; padding:40px; color:#64748b;">
+                    <td colspan="5" style="text-align:center; padding:40px; color:#64748b;">
                         Aucun utilisateur trouvé.
                     </td>
                 </tr>

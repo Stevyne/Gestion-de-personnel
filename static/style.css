@@ -2219,3 +2219,85 @@ footer {
 @media (min-width: 769px) {
     .navbar .nav-links.desktop-nav { flex-wrap: nowrap; }
 }
+
+/* =========================================================================
+   ÉTAT DE CONNEXION DES UTILISATEURS (page /utilisateurs)
+   ========================================================================= */
+.conn-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+.conn-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background: currentColor;
+}
+
+.conn-badge.online {
+    background: #dcfce7;
+    color: #15803d;
+    border-color: #bbf7d0;
+}
+
+/* Pastille pulsante : signale une présence réellement active */
+.conn-badge.online .conn-dot {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, .55);
+    animation: connPulse 2s infinite;
+}
+
+@keyframes connPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, .55); }
+    70%  { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+
+.conn-badge.idle {
+    background: #fef9c3;
+    color: #854d0e;
+    border-color: #fde68a;
+}
+
+.conn-badge.offline {
+    background: #f1f5f9;
+    color: #64748b;
+    border-color: #e2e8f0;
+}
+
+.conn-sessions {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: #e0e7ff;
+    color: #3730a3;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+/* Bouton « Déconnecter » : action sérieuse mais non destructive.
+   Orange plutôt que rouge, pour ne pas le confondre avec la suppression. */
+.btn-disconnect {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fed7aa;
+}
+
+.btn-disconnect:hover {
+    background: #ffedd5;
+    color: #9a3412;
+    border-color: #fdba74;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .conn-badge.online .conn-dot { animation: none; }
+}
