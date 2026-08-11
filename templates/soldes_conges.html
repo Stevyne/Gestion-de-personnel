@@ -40,6 +40,11 @@
                                    style="width:80px; padding:4px 8px; border-radius:6px; border:1px solid #cbd5e1;">
                             <button type="submit" class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem;">✓ Enregistrer</button>
                         </form>
+                        {% if s.jours_acquis_manuel %}
+                        <span class="badge" style="background:#e0e7ff;color:#3730a3;font-size:0.7rem;margin-top:4px;display:inline-block;" title="Valeur fixée manuellement — n'est plus recalculée automatiquement chaque jour">🔒 Manuel</span>
+                        {% else %}
+                        <span class="badge" style="background:#dcfce7;color:#166534;font-size:0.7rem;margin-top:4px;display:inline-block;" title="Calculé automatiquement (~2,08 j/mois)">🔄 Auto</span>
+                        {% endif %}
                     </td>
                     <td data-label="Jours utilisés">{{ s.jours_utilises }} j</td>
                     <td data-label="Jours restants">

@@ -436,6 +436,35 @@ def get_current_employee():
 
 # ==================== SOLDES DE CONGÉS (Phase 2) ====================
 
+TAUX_ACQUISITION_CONGES_PAR_MOIS = 25 / 12  # ≈ 2.0833 j/mois (25 j/an, convention jours ouvrés)
+
+
+def calculer_jours_acquis_prorata(date_embauche, annee):
+    """Accumulation mensuelle des congés : ~2,08 jour(s) acquis par mois
+    complet travaillé, proratisé sur l'année d'embauche. Pour une année déjà
+    terminée, retourne le total complet (jusqu'à 25). Pour l'année en cours,
+    retourne seulement ce qui est acquis à ce jour (pas les mois futurs).
+    """
+    debut_annee = date(annee, 1, 1)
+    fin_annee = date(annee, 12, 31)
+    aujourd_hui = date.today()
+
+    if date_embauche and date_embauche > debut_annee:
+        debut_calcul = date_embauche.replace(day=1)
+        if debut_calcul < debut_annee:
+            debut_calcul = debut_annee
+    else:
+        debut_calcul = debut_annee
+
+    fin_calcul = min(aujourd_hui, fin_annee)
+    if fin_calcul < debut_calcul:
+        return 0.0
+
+    mois_acquis = (fin_calcul.year - debut_calcul.year) * 12 + (fin_calcul.month - debut_calcul.month) + 1
+    mois_acquis = max(0, min(12, mois_acquis))
+    return round(mois_acquis * TAUX_ACQUISITION_CONGES_PAR_MOIS, 1)
+
+
 def get_solde_conges(employe_id, annee=None):
     """Retourne le solde de congés d'un employé (jours acquis, utilisés, restants)"""
     if annee is None:
@@ -449,11 +478,16 @@ def get_solde_conges(employe_id, annee=None):
             solde = cur.fetchone()
 
             if not solde:
+                cur.execute("SELECT date_embauche FROM employes WHERE id = %s", (employe_id,))
+                emp_row = cur.fetchone()
+                acquis_initial = calculer_jours_acquis_prorata(
+                    emp_row.get('date_embauche') if emp_row else None, annee
+                )
                 cur.execute("""
                     INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-                    VALUES (%s, %s, 25, 0)
+                    VALUES (%s, %s, %s, 0)
                     RETURNING *
-                """, (employe_id, annee))
+                """, (employe_id, annee, acquis_initial))
                 solde = cur.fetchone()
 
             acquis = float(solde.get('jours_acquis') or 25)
@@ -462,11 +496,13 @@ def get_solde_conges(employe_id, annee=None):
                 'jours_acquis': acquis,
                 'jours_utilises': utilises,
                 'jours_restants': round(acquis - utilises, 1),
+                'jours_acquis_manuel': bool(solde.get('jours_acquis_manuel')),
                 'annee': annee
             }
     except Exception as e:
         logger.error("Erreur get_solde_conges: %s", e, exc_info=True)
-        return {'jours_acquis': 25, 'jours_utilises': 0, 'jours_restants': 25, 'annee': annee}
+        return {'jours_acquis': 25, 'jours_utilises': 0, 'jours_restants': 25,
+                'jours_acquis_manuel': False, 'annee': annee}
 
 
 def mettre_a_jour_solde(employe_id, jours_delta, annee=None):
@@ -476,12 +512,17 @@ def mettre_a_jour_solde(employe_id, jours_delta, annee=None):
     try:
         conn = get_db()
         cur = get_cursor(conn)
+        cur.execute("SELECT date_embauche FROM employes WHERE id = %s", (employe_id,))
+        emp_row = cur.fetchone()
+        acquis_initial = calculer_jours_acquis_prorata(
+            emp_row.get('date_embauche') if emp_row else None, annee
+        )
         cur.execute("""
             INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (employe_id, annee) 
             DO UPDATE SET jours_utilises = GREATEST(0, soldes_conges.jours_utilises + %s)
-        """, (employe_id, annee, jours_delta, jours_delta))
+        """, (employe_id, annee, acquis_initial, jours_delta, jours_delta))
         conn.commit()
         cur.close()
         conn.close()
@@ -514,12 +555,17 @@ def recalculer_solde(employe_id, annee=None, cur=None):
         """, (employe_id, annee))
         total = float(cur.fetchone()['total'] or 0)
 
+        cur.execute("SELECT date_embauche FROM employes WHERE id = %s", (employe_id,))
+        emp_row = cur.fetchone()
+        acquis_initial = calculer_jours_acquis_prorata(
+            emp_row.get('date_embauche') if emp_row else None, annee
+        )
         cur.execute("""
             INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, 25, %s)
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (employe_id, annee) 
             DO UPDATE SET jours_utilises = %s
-        """, (employe_id, annee, total, total))
+        """, (employe_id, annee, acquis_initial, total, total))
         return total
 
     try:
@@ -559,6 +605,9 @@ def init_db():
         UNIQUE(employe_id, annee)
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_soldes_employe_annee ON soldes_conges(employe_id, annee)")
+    # Si RH fixe manuellement jours_acquis (ex: jours de congé exceptionnels
+    # accordés), le job de recalcul mensuel automatique ne doit PAS l'écraser.
+    cur.execute("ALTER TABLE soldes_conges ADD COLUMN IF NOT EXISTS jours_acquis_manuel BOOLEAN DEFAULT FALSE")
 
     cur.execute('''CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username VARCHAR(80) UNIQUE, password_hash VARCHAR(255), role VARCHAR(20) DEFAULT 'employe', employe_id INTEGER REFERENCES employes(id))''')
     # Absences non justifiées : jours d'absence qui ne relèvent ni d'un congé
@@ -669,13 +718,14 @@ def init_db():
     annee_courante = datetime.now().year
     cur.execute("SELECT COUNT(*) FROM soldes_conges WHERE annee = %s", (annee_courante,))
     if cur.fetchone()['count'] == 0:
-        cur.execute("SELECT id FROM employes")
+        cur.execute("SELECT id, date_embauche FROM employes")
         for emp in cur.fetchall():
+            acquis_initial = calculer_jours_acquis_prorata(emp.get('date_embauche'), annee_courante)
             cur.execute("""
                 INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-                VALUES (%s, %s, 25, 0)
+                VALUES (%s, %s, %s, 0)
                 ON CONFLICT (employe_id, annee) DO NOTHING
-            """, (emp['id'], annee_courante))
+            """, (emp['id'], annee_courante, acquis_initial))
 
     conn.commit()
     cur.close()
@@ -1691,6 +1741,46 @@ def job_generation_quotidienne_absences():
             logger.exception("Erreur lors du job planifié de génération des absences")
 
 
+def job_recalcul_soldes_conges():
+    """Job planifié (1x/jour, voir `demarrer_scheduler`) : recalcule le nombre
+    de jours de congé acquis (`jours_acquis`) de chaque employé pour l'année en
+    cours, selon l'accumulation mensuelle (~2,08 j/mois, proratisée pour les
+    nouveaux embauchés). Ne touche jamais les soldes fixés manuellement par
+    RH/admin (`jours_acquis_manuel = TRUE`).
+
+    Tourner ce job une fois par jour suffit très largement (le résultat ne
+    change qu'au changement de mois), mais c'est sans risque de le faire
+    tourner plus souvent : le calcul est idempotent.
+    """
+    with app.app_context():
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                annee_courante = datetime.now().year
+                cur.execute("""
+                    SELECT e.id, e.date_embauche
+                    FROM employes e
+                    LEFT JOIN soldes_conges s ON s.employe_id = e.id AND s.annee = %s
+                    WHERE COALESCE(s.jours_acquis_manuel, FALSE) = FALSE
+                """, (annee_courante,))
+                employes = cur.fetchall()
+
+                nb_mis_a_jour = 0
+                for emp in employes:
+                    nouveau_solde = calculer_jours_acquis_prorata(emp.get('date_embauche'), annee_courante)
+                    cur.execute("""
+                        INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
+                        VALUES (%s, %s, %s, 0)
+                        ON CONFLICT (employe_id, annee) DO UPDATE
+                        SET jours_acquis = %s
+                        WHERE soldes_conges.jours_acquis_manuel = FALSE
+                    """, (emp['id'], annee_courante, nouveau_solde, nouveau_solde))
+                    nb_mis_a_jour += 1
+                logger.info("Job recalcul soldes congés : %d employé(s) mis à jour (accumulation mensuelle).",
+                            nb_mis_a_jour)
+        except Exception:
+            logger.exception("Erreur lors du job planifié de recalcul des soldes de congés")
+
+
 def demarrer_scheduler():
     """Démarre le scheduler en tâche de fond (1 seul process gunicorn en
     production, cf. render.yaml). Avec le rechargeur Flask (FLASK_DEBUG=true en
@@ -1715,10 +1805,15 @@ def demarrer_scheduler():
         job_alertes_expiration_documents, 'cron',
         hour=1, minute=30, id='alertes_expiration_documents', replace_existing=True
     )
+    scheduler.add_job(
+        job_recalcul_soldes_conges, 'cron',
+        hour=2, minute=0, id='recalcul_soldes_conges', replace_existing=True
+    )
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
     logger.info("Scheduler démarré : génération auto des absences (01h00) + alertes "
-                "d'expiration de documents (01h30), tous les jours.")
+                "d'expiration de documents (01h30) + recalcul des soldes de congés "
+                "(02h00), tous les jours.")
 
 
 @app.route('/absences')
@@ -1967,10 +2062,10 @@ def update_solde_conges(employe_id):
 
     with db_cursor(commit=True) as (conn, cur):
         cur.execute("""
-            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-            VALUES (%s, %s, %s, 0)
+            INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises, jours_acquis_manuel)
+            VALUES (%s, %s, %s, 0, TRUE)
             ON CONFLICT (employe_id, annee)
-            DO UPDATE SET jours_acquis = %s
+            DO UPDATE SET jours_acquis = %s, jours_acquis_manuel = TRUE
         """, (employe_id, annee, jours_acquis, jours_acquis))
         cur.execute("SELECT nom, prenom FROM employes WHERE id = %s", (employe_id,))
         emp = cur.fetchone()
