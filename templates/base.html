@@ -229,6 +229,7 @@
                 <a href="{{ url_for('absences') }}" class="nav-link {% if request.endpoint == 'absences' %}active{% endif %}">🚫 Absences</a>
                 {% endif %}
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
+                <a href="{{ url_for('materiels') }}" class="nav-link {% if request.endpoint in ['materiels', 'add_materiel', 'edit_materiel', 'view_materiel'] %}active{% endif %}">📦 Matériels</a>
                 {% if session.get('role') in ['admin', 'rh'] %}
                 <a href="{{ url_for('utilisateurs_page') }}" class="nav-link btn-primary {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">👤 Utilisateurs</a>
                 {% endif %}
@@ -287,6 +288,7 @@
                 <a href="{{ url_for('absences') }}" class="nav-link {% if request.endpoint == 'absences' %}active{% endif %}">🚫 Absences</a>
                 {% endif %}
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
+                <a href="{{ url_for('materiels') }}" class="nav-link {% if request.endpoint in ['materiels', 'add_materiel', 'edit_materiel', 'view_materiel'] %}active{% endif %}">📦 Matériels</a>
                 {% if session.get('role') in ['admin', 'rh'] %}
                     <a href="{{ url_for('utilisateurs_page') }}" class="nav-link btn-primary {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">👤 Utilisateurs</a>
                 {% endif %}

@@ -696,6 +696,55 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_notif_unread ON notifications(user_id, is_read)")
 
+    # ==================== MATÉRIELS (stock par département) ====================
+    # Un matériel appartient à un département (papiers, stylos, classeurs...).
+    # `quantite` = stock actuel, recalculé à partir des mouvements.
+    cur.execute('''CREATE TABLE IF NOT EXISTS materiels (
+        id SERIAL PRIMARY KEY,
+        nom VARCHAR(150) NOT NULL,
+        categorie VARCHAR(50) DEFAULT 'fourniture',
+        departement_id INTEGER REFERENCES departements(id) ON DELETE CASCADE,
+        quantite INTEGER NOT NULL DEFAULT 0,
+        seuil_alerte INTEGER NOT NULL DEFAULT 0,
+        unite VARCHAR(30) DEFAULT 'unité',
+        description TEXT,
+        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_materiels_dept ON materiels(departement_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_materiels_nom ON materiels(nom)")
+
+    # Historique des mouvements : toute entrée/sortie est tracée (auditable).
+    # type_mouvement : 'entree' (approvisionnement) | 'sortie' (consommation)
+    cur.execute('''CREATE TABLE IF NOT EXISTS materiels_mouvements (
+        id SERIAL PRIMARY KEY,
+        materiel_id INTEGER REFERENCES materiels(id) ON DELETE CASCADE,
+        type_mouvement VARCHAR(10) NOT NULL,
+        quantite INTEGER NOT NULL,
+        employe_id INTEGER REFERENCES employes(id) ON DELETE SET NULL,
+        motif TEXT,
+        user_id INTEGER,
+        username VARCHAR(80),
+        date_mouvement TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_mvt_materiel ON materiels_mouvements(materiel_id, date_mouvement DESC)")
+
+    # Attributions durables (PC, téléphone, clés...) : remise à un employé
+    # puis retour éventuel. Une attribution active a date_retour IS NULL.
+    cur.execute('''CREATE TABLE IF NOT EXISTS materiels_attributions (
+        id SERIAL PRIMARY KEY,
+        materiel_id INTEGER REFERENCES materiels(id) ON DELETE CASCADE,
+        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
+        quantite INTEGER NOT NULL DEFAULT 1,
+        date_attribution DATE DEFAULT CURRENT_DATE,
+        date_retour DATE,
+        commentaire TEXT
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_attrib_materiel ON materiels_attributions(materiel_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_attrib_employe ON materiels_attributions(employe_id)")
+    # Évite de renvoyer l'alerte de stock bas en boucle : une seule notif tant
+    # que le stock n'est pas repassé au-dessus du seuil (remis à FALSE alors).
+    cur.execute("ALTER TABLE materiels ADD COLUMN IF NOT EXISTS alerte_envoyee BOOLEAN DEFAULT FALSE")
+
     # Seed employés
     cur.execute("SELECT COUNT(*) FROM employes")
     if cur.fetchone()['count'] == 0:
@@ -3048,6 +3097,466 @@ def calendrier_conges():
 @role_required('admin')
 def add_employee_alt():
     return redirect(url_for('index'))
+
+
+# ==================== GESTION DES MATÉRIELS ====================
+# Stock de fournitures et d'équipements par département (papiers, stylos,
+# classeurs, PC...). Chaque entrée/sortie est tracée dans
+# `materiels_mouvements`, et le stock `materiels.quantite` en découle.
+
+MATERIEL_CATEGORIES = [
+    ('fourniture', '✏️ Fourniture de bureau'),
+    ('papeterie', '📄 Papeterie'),
+    ('mobilier', '🪑 Mobilier'),
+    ('informatique', '💻 Informatique'),
+    ('entretien', '🧹 Entretien'),
+    ('autre', '📦 Autre'),
+]
+MATERIEL_CATEGORIES_DICT = dict(MATERIEL_CATEGORIES)
+
+# Catégories dont les articles sont attribuables durablement à un employé
+# (un PC se remet à quelqu'un ; une ramette de papier se consomme).
+MATERIEL_CAT_ATTRIBUABLES = {'informatique', 'mobilier', 'autre'}
+
+
+def _peut_gerer_materiels():
+    return session.get('role') in ('admin', 'rh', 'manager')
+
+
+@app.context_processor
+def inject_materiel_perms():
+    return {'peut_gerer_materiels': _peut_gerer_materiels()}
+
+
+def _notifier_stock_bas(cur, materiel_id):
+    """Notifie les gestionnaires quand un stock passe sous son seuil.
+
+    Anti-spam : `alerte_envoyee` empêche de renvoyer la notification tant que
+    le stock n'est pas repassé au-dessus du seuil.
+    """
+    try:
+        cur.execute("""
+            SELECT m.id, m.nom, m.quantite, m.seuil_alerte, m.unite,
+                   m.alerte_envoyee, COALESCE(d.nom, 'Sans département') AS dept
+            FROM materiels m
+            LEFT JOIN departements d ON d.id = m.departement_id
+            WHERE m.id = %s
+        """, (materiel_id,))
+        m = cur.fetchone()
+        if not m or not m['seuil_alerte']:
+            return
+
+        en_alerte = m['quantite'] <= m['seuil_alerte']
+
+        if en_alerte and not m['alerte_envoyee']:
+            cur.execute("SELECT id FROM users WHERE role IN ('admin', 'rh', 'manager')")
+            for u in cur.fetchall():
+                create_notification(
+                    u['id'],
+                    f"Stock bas : {m['nom']}",
+                    f"Il reste {m['quantite']} {m['unite']} de « {m['nom']} » "
+                    f"({m['dept']}), seuil d'alerte : {m['seuil_alerte']}.",
+                    "warning",
+                )
+            cur.execute("UPDATE materiels SET alerte_envoyee = TRUE WHERE id = %s", (materiel_id,))
+        elif not en_alerte and m['alerte_envoyee']:
+            # Stock réapprovisionné : on réarme l'alerte pour la prochaine fois.
+            cur.execute("UPDATE materiels SET alerte_envoyee = FALSE WHERE id = %s", (materiel_id,))
+    except Exception as e:
+        logger.error("Erreur alerte stock matériel %s: %s", materiel_id, e, exc_info=True)
+
+
+def _enregistrer_mouvement(cur, materiel_id, type_mouvement, quantite,
+                           employe_id=None, motif=None):
+    """Écrit un mouvement et met à jour le stock. Retourne le nouveau stock.
+
+    Lève ValueError si une sortie dépasse le stock disponible.
+    """
+    cur.execute("SELECT quantite FROM materiels WHERE id = %s FOR UPDATE", (materiel_id,))
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Matériel introuvable")
+
+    stock = row['quantite']
+    if type_mouvement == 'sortie':
+        if quantite > stock:
+            raise ValueError(f"Stock insuffisant : il ne reste que {stock} unité(s)")
+        nouveau = stock - quantite
+    else:
+        nouveau = stock + quantite
+
+    cur.execute("UPDATE materiels SET quantite = %s WHERE id = %s", (nouveau, materiel_id))
+    cur.execute("""
+        INSERT INTO materiels_mouvements
+            (materiel_id, type_mouvement, quantite, employe_id, motif, user_id, username)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (materiel_id, type_mouvement, quantite, employe_id, motif or None,
+          session.get('user_id'), session.get('username')))
+
+    _notifier_stock_bas(cur, materiel_id)
+    return nouveau
+
+
+@app.route('/materiels')
+@login_required
+def materiels():
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 10
+    search = (request.args.get('search') or '').strip()
+    dept_id = request.args.get('departement', type=int)
+    categorie = (request.args.get('categorie') or '').strip()
+    etat = (request.args.get('etat') or '').strip()  # '' | 'alerte' | 'rupture'
+
+    where, params = [], []
+    if search:
+        where.append("m.nom ILIKE %s")
+        params.append(f"%{search}%")
+    if dept_id:
+        where.append("m.departement_id = %s")
+        params.append(dept_id)
+    if categorie:
+        where.append("m.categorie = %s")
+        params.append(categorie)
+    if etat == 'alerte':
+        where.append("m.seuil_alerte > 0 AND m.quantite <= m.seuil_alerte")
+    elif etat == 'rupture':
+        where.append("m.quantite = 0")
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+
+    with db_cursor() as (conn, cur):
+        cur.execute(f"SELECT COUNT(*) AS total FROM materiels m {clause}", params)
+        total = cur.fetchone()['total'] or 0
+        pag = pagination_info(total, page, per_page)
+
+        cur.execute(f"""
+            SELECT m.*, COALESCE(d.nom, '—') AS departement_nom,
+                   COALESCE((
+                       SELECT SUM(a.quantite) FROM materiels_attributions a
+                       WHERE a.materiel_id = m.id AND a.date_retour IS NULL
+                   ), 0) AS nb_attribues
+            FROM materiels m
+            LEFT JOIN departements d ON d.id = m.departement_id
+            {clause}
+            ORDER BY (m.seuil_alerte > 0 AND m.quantite <= m.seuil_alerte) DESC,
+                     d.nom NULLS LAST, m.nom
+            LIMIT %s OFFSET %s
+        """, params + [per_page, (pag['page'] - 1) * per_page])
+        liste = cur.fetchall()
+
+        cur.execute("""
+            SELECT COUNT(*) AS nb_articles,
+                   COALESCE(SUM(quantite), 0) AS stock_total,
+                   COUNT(*) FILTER (WHERE seuil_alerte > 0 AND quantite <= seuil_alerte) AS nb_alertes,
+                   COUNT(*) FILTER (WHERE quantite = 0) AS nb_ruptures
+            FROM materiels
+        """)
+        stats = cur.fetchone()
+
+        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        depts = cur.fetchall()
+
+    filters = {'search': search, 'departement': dept_id or '',
+               'categorie': categorie, 'etat': etat}
+    return render_template('materiels.html',
+                           materiels=liste,
+                           stats=stats,
+                           departements=depts,
+                           categories=MATERIEL_CATEGORIES,
+                           categories_dict=MATERIEL_CATEGORIES_DICT,
+                           pg=pag,
+                           page_items=page_list(pag['page'], pag['pages']),
+                           base_qs=urlencode({k: v for k, v in filters.items() if v}),
+                           filters=filters)
+
+
+@app.route('/materiels/add', methods=['GET', 'POST'])
+@login_required
+@role_required('rh', 'manager')
+def add_materiel():
+    if request.method == 'POST':
+        nom = (request.form.get('nom') or '').strip()
+        categorie = (request.form.get('categorie') or 'fourniture').strip()
+        dept_id = request.form.get('departement_id', type=int)
+        quantite = request.form.get('quantite', type=int) or 0
+        seuil = request.form.get('seuil_alerte', type=int) or 0
+        unite = (request.form.get('unite') or 'unité').strip()
+        description = (request.form.get('description') or '').strip()
+
+        erreur = None
+        if not nom:
+            erreur = "Le nom du matériel est obligatoire"
+        elif not dept_id:
+            erreur = "Le département est obligatoire"
+        elif quantite < 0 or seuil < 0:
+            erreur = "Les quantités ne peuvent pas être négatives"
+
+        if erreur:
+            flash(erreur, "danger")
+        else:
+            try:
+                with db_cursor(commit=True) as (conn, cur):
+                    cur.execute("""
+                        INSERT INTO materiels
+                            (nom, categorie, departement_id, quantite, seuil_alerte, unite, description)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                    """, (nom, categorie, dept_id, quantite, seuil, unite, description or None))
+                    new_id = cur.fetchone()['id']
+                    # Stock initial = premier mouvement d'entrée, pour que
+                    # l'historique reste cohérent avec le stock affiché.
+                    if quantite > 0:
+                        cur.execute("""
+                            INSERT INTO materiels_mouvements
+                                (materiel_id, type_mouvement, quantite, motif, user_id, username)
+                            VALUES (%s, 'entree', %s, 'Stock initial', %s, %s)
+                        """, (new_id, quantite, session.get('user_id'), session.get('username')))
+                    _notifier_stock_bas(cur, new_id)
+                log_action(session.get('user_id'), session.get('username'),
+                           "Création matériel", "materiel", new_id, nom)
+                flash(f"Matériel « {nom} » ajouté avec succès", "success")
+                return redirect(url_for('materiels'))
+            except Exception as e:
+                logger.error("Erreur ajout matériel: %s", e, exc_info=True)
+                flash(f"Erreur : {e}", "danger")
+
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        depts = cur.fetchall()
+    return render_template('materiel_form.html', materiel=None, departements=depts,
+                           categories=MATERIEL_CATEGORIES, title="Nouveau matériel")
+
+
+@app.route('/materiels/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+@role_required('rh', 'manager')
+def edit_materiel(id):
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT * FROM materiels WHERE id = %s", (id,))
+        materiel = cur.fetchone()
+        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        depts = cur.fetchall()
+
+    if not materiel:
+        flash("Matériel introuvable", "danger")
+        return redirect(url_for('materiels'))
+
+    if request.method == 'POST':
+        nom = (request.form.get('nom') or '').strip()
+        categorie = (request.form.get('categorie') or 'fourniture').strip()
+        dept_id = request.form.get('departement_id', type=int)
+        seuil = request.form.get('seuil_alerte', type=int) or 0
+        unite = (request.form.get('unite') or 'unité').strip()
+        description = (request.form.get('description') or '').strip()
+
+        if not nom or not dept_id:
+            flash("Le nom et le département sont obligatoires", "danger")
+        else:
+            try:
+                with db_cursor(commit=True) as (conn, cur):
+                    # La quantité n'est volontairement pas modifiable ici :
+                    # elle ne change que via les mouvements (traçabilité).
+                    cur.execute("""
+                        UPDATE materiels
+                        SET nom = %s, categorie = %s, departement_id = %s,
+                            seuil_alerte = %s, unite = %s, description = %s
+                        WHERE id = %s
+                    """, (nom, categorie, dept_id, seuil, unite, description or None, id))
+                    _notifier_stock_bas(cur, id)
+                log_action(session.get('user_id'), session.get('username'),
+                           "Modification matériel", "materiel", id, nom)
+                flash("Matériel mis à jour", "success")
+                return redirect(url_for('materiels'))
+            except Exception as e:
+                logger.error("Erreur édition matériel: %s", e, exc_info=True)
+                flash(f"Erreur : {e}", "danger")
+
+    return render_template('materiel_form.html', materiel=materiel, departements=depts,
+                           categories=MATERIEL_CATEGORIES, title="Modifier le matériel")
+
+
+@app.route('/materiels/<int:id>')
+@login_required
+def view_materiel(id):
+    with db_cursor() as (conn, cur):
+        cur.execute("""
+            SELECT m.*, COALESCE(d.nom, '—') AS departement_nom
+            FROM materiels m
+            LEFT JOIN departements d ON d.id = m.departement_id
+            WHERE m.id = %s
+        """, (id,))
+        materiel = cur.fetchone()
+        if not materiel:
+            flash("Matériel introuvable", "danger")
+            return redirect(url_for('materiels'))
+
+        cur.execute("""
+            SELECT mv.*, e.nom AS emp_nom, e.prenom AS emp_prenom
+            FROM materiels_mouvements mv
+            LEFT JOIN employes e ON e.id = mv.employe_id
+            WHERE mv.materiel_id = %s
+            ORDER BY mv.date_mouvement DESC, mv.id DESC
+            LIMIT 50
+        """, (id,))
+        mouvements = cur.fetchall()
+
+        cur.execute("""
+            SELECT a.*, e.nom AS emp_nom, e.prenom AS emp_prenom
+            FROM materiels_attributions a
+            JOIN employes e ON e.id = a.employe_id
+            WHERE a.materiel_id = %s
+            ORDER BY a.date_retour NULLS FIRST, a.date_attribution DESC
+        """, (id,))
+        attributions = cur.fetchall()
+
+        # Employés du même département en priorité pour l'attribution.
+        cur.execute("""
+            SELECT e.id, e.nom, e.prenom
+            FROM employes e
+            LEFT JOIN departements d ON d.nom = e.departement
+            ORDER BY (d.id = %s) DESC NULLS LAST, e.nom, e.prenom
+        """, (materiel['departement_id'],))
+        employes = cur.fetchall()
+
+    return render_template('materiel_detail.html',
+                           materiel=materiel,
+                           mouvements=mouvements,
+                           attributions=attributions,
+                           employes=employes,
+                           categories_dict=MATERIEL_CATEGORIES_DICT,
+                           attribuable=materiel['categorie'] in MATERIEL_CAT_ATTRIBUABLES)
+
+
+@app.route('/materiels/<int:id>/mouvement', methods=['POST'])
+@login_required
+@role_required('rh', 'manager')
+def add_mouvement_materiel(id):
+    type_mvt = (request.form.get('type_mouvement') or '').strip()
+    quantite = request.form.get('quantite', type=int) or 0
+    motif = (request.form.get('motif') or '').strip()
+    employe_id = request.form.get('employe_id', type=int)
+
+    if type_mvt not in ('entree', 'sortie'):
+        flash("Type de mouvement invalide", "danger")
+    elif quantite <= 0:
+        flash("La quantité doit être supérieure à zéro", "danger")
+    else:
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                nouveau = _enregistrer_mouvement(cur, id, type_mvt, quantite,
+                                                 employe_id or None, motif)
+            libelle = "Entrée" if type_mvt == 'entree' else "Sortie"
+            log_action(session.get('user_id'), session.get('username'),
+                       f"{libelle} stock", "materiel", id, f"{quantite}")
+            flash(f"{libelle} de {quantite} enregistrée — nouveau stock : {nouveau}", "success")
+        except ValueError as e:
+            flash(str(e), "danger")
+        except Exception as e:
+            logger.error("Erreur mouvement matériel: %s", e, exc_info=True)
+            flash(f"Erreur : {e}", "danger")
+
+    return redirect(url_for('view_materiel', id=id))
+
+
+@app.route('/materiels/<int:id>/attribuer', methods=['POST'])
+@login_required
+@role_required('rh', 'manager')
+def attribuer_materiel(id):
+    employe_id = request.form.get('employe_id', type=int)
+    quantite = request.form.get('quantite', type=int) or 1
+    commentaire = (request.form.get('commentaire') or '').strip()
+
+    if not employe_id:
+        flash("Veuillez sélectionner un employé", "danger")
+    elif quantite <= 0:
+        flash("La quantité doit être supérieure à zéro", "danger")
+    else:
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                cur.execute("SELECT nom, prenom FROM employes WHERE id = %s", (employe_id,))
+                emp = cur.fetchone()
+                if not emp:
+                    raise ValueError("Employé introuvable")
+                nom_complet = f"{emp['prenom']} {emp['nom']}"
+                # L'attribution retire physiquement l'article du stock.
+                _enregistrer_mouvement(cur, id, 'sortie', quantite, employe_id,
+                                       f"Attribution à {nom_complet}")
+                cur.execute("""
+                    INSERT INTO materiels_attributions
+                        (materiel_id, employe_id, quantite, commentaire)
+                    VALUES (%s, %s, %s, %s)
+                """, (id, employe_id, quantite, commentaire or None))
+            log_action(session.get('user_id'), session.get('username'),
+                       "Attribution matériel", "materiel", id, nom_complet)
+            flash(f"Matériel attribué à {nom_complet}", "success")
+        except ValueError as e:
+            flash(str(e), "danger")
+        except Exception as e:
+            logger.error("Erreur attribution matériel: %s", e, exc_info=True)
+            flash(f"Erreur : {e}", "danger")
+
+    return redirect(url_for('view_materiel', id=id))
+
+
+@app.route('/materiels/attribution/<int:attribution_id>/retour', methods=['POST'])
+@login_required
+@role_required('rh', 'manager')
+def retour_materiel(attribution_id):
+    materiel_id = request.form.get('materiel_id', type=int)
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("""
+                SELECT a.*, e.nom AS emp_nom, e.prenom AS emp_prenom
+                FROM materiels_attributions a
+                JOIN employes e ON e.id = a.employe_id
+                WHERE a.id = %s
+            """, (attribution_id,))
+            attr = cur.fetchone()
+            if not attr:
+                raise ValueError("Attribution introuvable")
+            if attr['date_retour']:
+                raise ValueError("Ce matériel a déjà été retourné")
+
+            materiel_id = attr['materiel_id']
+            cur.execute("UPDATE materiels_attributions SET date_retour = CURRENT_DATE WHERE id = %s",
+                        (attribution_id,))
+            # Le retour réintègre l'article dans le stock.
+            _enregistrer_mouvement(
+                cur, materiel_id, 'entree', attr['quantite'], attr['employe_id'],
+                f"Retour de {attr['emp_prenom']} {attr['emp_nom']}")
+        flash("Retour enregistré, stock réintégré", "success")
+    except ValueError as e:
+        flash(str(e), "danger")
+    except Exception as e:
+        logger.error("Erreur retour matériel: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+
+    return redirect(url_for('view_materiel', id=materiel_id) if materiel_id
+                    else url_for('materiels'))
+
+
+@app.route('/materiels/delete/<int:id>', methods=['POST'])
+@login_required
+@role_required('rh')
+def delete_materiel(id):
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT nom FROM materiels WHERE id = %s", (id,))
+            row = cur.fetchone()
+            # ON DELETE CASCADE supprime mouvements et attributions liés.
+            cur.execute("DELETE FROM materiels WHERE id = %s", (id,))
+        log_action(session.get('user_id'), session.get('username'),
+                   "Suppression matériel", "materiel", id, row['nom'] if row else None)
+        flash("Matériel supprimé", "success")
+    except Exception as e:
+        logger.error("Erreur suppression matériel: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+    return redirect(url_for('materiels'))
+
+
+@app.route('/departements/<int:id>/materiels')
+@login_required
+def materiels_departement(id):
+    """Raccourci : stock filtré sur un département."""
+    return redirect(url_for('materiels', departement=id))
 
 
 # Doit s'exécuter que l'app soit lancée directement (python app.py) OU importée

@@ -273,3 +273,12 @@ Projet interne – 2026
 **Développé avec ❤️ en Flask + PostgreSQL**
 
 Pour toute question ou contribution, contactez l'administrateur système.
+### 📦 Gestion des matériels (par département)
+
+- Stock de fournitures et d'équipements rattaché à un **département** (papiers, stylos, classeurs, cartouches, mobilier, informatique...)
+- **Traçabilité complète** : chaque entrée / sortie est enregistrée dans `materiels_mouvements` (quantité, motif, employé concerné, auteur, horodatage). Le stock n'est jamais édité à la main, il découle des mouvements
+- **Attribution durable** à un employé (PC, téléphone, clés) : l'article sort du stock puis y revient au retour (`materiels_attributions`)
+- **Alerte de stock bas** : seuil configurable par article, badge dans la liste et notification interne aux admin/RH/managers. Anti-spam (une seule notif tant que le stock n'est pas réapprovisionné)
+- Filtres par nom, département, catégorie et état (stock bas / rupture), avec pagination
+- Rôles : `admin`, `rh` et `manager` gèrent le stock ; la suppression est réservée à `admin`/`rh` ; les autres rôles consultent
+- Routes : `/materiels`, `/materiels/add`, `/materiels/edit/<id>`, `/materiels/<id>`, `/materiels/<id>/mouvement`, `/materiels/<id>/attribuer`, `/materiels/attribution/<id>/retour`, `/materiels/delete/<id>`

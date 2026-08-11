@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width:720px; margin:0 auto;">
+    <div class="card-header">
+        <h1>📦 {{ title }}</h1>
+        <a href="{{ url_for('materiels') }}" class="btn btn-secondary">← Retour</a>
+    </div>
+
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+            <label for="nom">Nom du matériel <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="nom" name="nom" class="form-control" required
+                   placeholder="Ex : Ramette papier A4, Stylo bille bleu, Classeur A4..."
+                   value="{{ materiel.nom if materiel else '' }}">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="departement_id">Département <span style="color:#dc2626;">*</span></label>
+                <select id="departement_id" name="departement_id" class="form-control" required>
+                    <option value="">— Sélectionner —</option>
+                    {% for d in departements %}
+                    <option value="{{ d.id }}"
+                        {{ 'selected' if materiel and materiel.departement_id == d.id }}>{{ d.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="categorie">Catégorie</label>
+                <select id="categorie" name="categorie" class="form-control">
+                    {% for val, lib in categories %}
+                    <option value="{{ val }}"
+                        {{ 'selected' if materiel and materiel.categorie == val }}>{{ lib }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            {% if not materiel %}
+            <div class="form-group">
+                <label for="quantite">Quantité initiale</label>
+                <input type="number" id="quantite" name="quantite" class="form-control"
+                       min="0" value="0">
+                <small class="form-hint">Enregistrée comme première entrée de stock.</small>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="seuil_alerte">Seuil d'alerte</label>
+                <input type="number" id="seuil_alerte" name="seuil_alerte" class="form-control"
+                       min="0" value="{{ materiel.seuil_alerte if materiel else 0 }}">
+                <small class="form-hint">Notification quand le stock descend à ce niveau (0 = désactivé).</small>
+            </div>
+
+            <div class="form-group">
+                <label for="unite">Unité</label>
+                <input type="text" id="unite" name="unite" class="form-control"
+                       placeholder="unité, ramette, boîte..."
+                       value="{{ materiel.unite if materiel else 'unité' }}">
+            </div>
+        </div>
+
+        {% if materiel %}
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px 14px; margin-bottom:16px;">
+            <strong style="color:#1e40af;">Stock actuel : {{ materiel.quantite }} {{ materiel.unite }}</strong>
+            <div style="font-size:0.85rem; color:#475569; margin-top:4px;">
+                La quantité ne se modifie pas ici : elle évolue via les entrées et sorties,
+                depuis la <a href="{{ url_for('view_materiel', id=materiel.id) }}">fiche du matériel</a>.
+                Cela garantit un historique fiable.
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" class="form-control" rows="3"
+                      placeholder="Référence, fournisseur, remarques...">{{ materiel.description if materiel and materiel.description else '' }}</textarea>
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:20px;">
+            <button type="submit" class="btn btn-primary">
+                {{ '💾 Enregistrer' if materiel else '+ Créer le matériel' }}
+            </button>
+            <a href="{{ url_for('materiels') }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

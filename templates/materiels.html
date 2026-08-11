@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% from "base.html" import pagination %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>📦 Gestion des Matériels</h1>
+        <div>
+            {% if peut_gerer_materiels %}
+            <a href="{{ url_for('add_materiel') }}" class="btn btn-primary">+ Nouveau matériel</a>
+            {% endif %}
+            <a href="{{ url_for('departements') }}" class="btn btn-secondary">🏢 Départements</a>
+        </div>
+    </div>
+
+    <p style="color:#64748b; margin: 0 0 16px;">
+        Stock de fournitures et d'équipements <strong>par département</strong>
+        (papiers, stylos, classeurs...). Chaque entrée ou sortie est tracée dans
+        l'historique du matériel.
+    </p>
+
+    <!-- Statistiques -->
+    <div class="materiels-stats">
+        <div class="materiel-stat">
+            <div class="materiel-stat-value">{{ stats.nb_articles }}</div>
+            <div class="materiel-stat-label">Articles référencés</div>
+        </div>
+        <div class="materiel-stat" style="background:#eff6ff;">
+            <div class="materiel-stat-value" style="color:#1d4ed8;">{{ stats.stock_total }}</div>
+            <div class="materiel-stat-label">Unités en stock</div>
+        </div>
+        <div class="materiel-stat" style="background:#fef9c3;">
+            <div class="materiel-stat-value" style="color:#854d0e;">{{ stats.nb_alertes }}</div>
+            <div class="materiel-stat-label">Stock bas</div>
+        </div>
+        <div class="materiel-stat" style="background:#fee2e2;">
+            <div class="materiel-stat-value" style="color:#991b1b;">{{ stats.nb_ruptures }}</div>
+            <div class="materiel-stat-label">En rupture</div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <form method="get" action="{{ url_for('materiels') }}" class="materiels-filtres">
+        <div class="filtre-champ">
+            <label>🔎 Rechercher</label>
+            <input type="text" name="search" value="{{ filters.search }}"
+                   placeholder="Nom du matériel..." class="form-control">
+        </div>
+        <div class="filtre-champ">
+            <label>Département</label>
+            <select name="departement" class="form-control">
+                <option value="">Tous</option>
+                {% for d in departements %}
+                <option value="{{ d.id }}" {{ 'selected' if filters.departement == d.id }}>{{ d.nom }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filtre-champ">
+            <label>Catégorie</label>
+            <select name="categorie" class="form-control">
+                <option value="">Toutes</option>
+                {% for val, lib in categories %}
+                <option value="{{ val }}" {{ 'selected' if filters.categorie == val }}>{{ lib }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filtre-champ">
+            <label>État</label>
+            <select name="etat" class="form-control">
+                <option value="">Tous</option>
+                <option value="alerte" {{ 'selected' if filters.etat == 'alerte' }}>Stock bas</option>
+                <option value="rupture" {{ 'selected' if filters.etat == 'rupture' }}>En rupture</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Filtrer</button>
+        <a href="{{ url_for('materiels') }}" class="btn btn-secondary">Réinitialiser</a>
+    </form>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Matériel</th>
+                    <th>Département</th>
+                    <th>Catégorie</th>
+                    <th>Stock</th>
+                    <th>Seuil</th>
+                    <th>État</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in materiels %}
+                <tr>
+                    <td data-label="Matériel">
+                        <strong>{{ m.nom }}</strong>
+                        {% if m.nb_attribues %}
+                        <br><small style="color:#64748b;">{{ m.nb_attribues }} attribué(s)</small>
+                        {% endif %}
+                    </td>
+                    <td data-label="Département">{{ m.departement_nom }}</td>
+                    <td data-label="Catégorie">
+                        <small>{{ categories_dict.get(m.categorie, m.categorie) }}</small>
+                    </td>
+                    <td data-label="Stock">
+                        <strong>{{ m.quantite }}</strong> <small>{{ m.unite }}</small>
+                    </td>
+                    <td data-label="Seuil">{{ m.seuil_alerte or '—' }}</td>
+                    <td data-label="État">
+                        {% if m.quantite == 0 %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">Rupture</span>
+                        {% elif m.seuil_alerte and m.quantite <= m.seuil_alerte %}
+                            <span class="badge" style="background:#fef9c3;color:#854d0e;">Stock bas</span>
+                        {% else %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">OK</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Actions">
+                        <div class="materiel-actions">
+                            <a href="{{ url_for('view_materiel', id=m.id) }}"
+                               class="btn btn-secondary btn-xs">👁️ Détails</a>
+                            {% if peut_gerer_materiels %}
+                            <a href="{{ url_for('edit_materiel', id=m.id) }}"
+                               class="btn btn-secondary btn-xs">✏️ Modifier</a>
+                            {% endif %}
+                            {% if current_role in ['admin', 'rh'] %}
+                            <form action="{{ url_for('delete_materiel', id=m.id) }}" method="post"
+                                  style="display:inline;"
+                                  onsubmit="return confirm('Supprimer « {{ m.nom }} » ainsi que son historique ?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-xs"
+                                        style="background:#dc2626;color:white;">🗑️</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align:center; color:#94a3b8; padding:28px;">
+                        Aucun matériel enregistré.
+                        {% if peut_gerer_materiels %}
+                        <a href="{{ url_for('add_materiel') }}">Ajouter le premier</a>.
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {{ pagination('materiels', base_qs, pg, page_items) }}
+</div>
+{% endblock %}

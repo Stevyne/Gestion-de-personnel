@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>📦 {{ materiel.nom }}</h1>
+        <div>
+            {% if peut_gerer_materiels %}
+            <a href="{{ url_for('edit_materiel', id=materiel.id) }}" class="btn btn-secondary">✏️ Modifier</a>
+            {% endif %}
+            <a href="{{ url_for('materiels') }}" class="btn btn-secondary">← Retour</a>
+        </div>
+    </div>
+
+    <div class="materiels-stats">
+        <div class="materiel-stat {% if materiel.quantite == 0 %}stat-danger{% elif materiel.seuil_alerte and materiel.quantite <= materiel.seuil_alerte %}stat-warn{% else %}stat-ok{% endif %}">
+            <div class="materiel-stat-value">{{ materiel.quantite }}</div>
+            <div class="materiel-stat-label">En stock ({{ materiel.unite }})</div>
+        </div>
+        <div class="materiel-stat">
+            <div class="materiel-stat-value">{{ materiel.seuil_alerte or '—' }}</div>
+            <div class="materiel-stat-label">Seuil d'alerte</div>
+        </div>
+        <div class="materiel-stat">
+            <div class="materiel-stat-value" style="font-size:1.05rem;">{{ materiel.departement_nom }}</div>
+            <div class="materiel-stat-label">Département</div>
+        </div>
+        <div class="materiel-stat">
+            <div class="materiel-stat-value" style="font-size:1.05rem;">
+                {{ categories_dict.get(materiel.categorie, materiel.categorie) }}
+            </div>
+            <div class="materiel-stat-label">Catégorie</div>
+        </div>
+    </div>
+
+    {% if materiel.quantite == 0 %}
+        <div class="alerte-stock alerte-rupture">⛔ Ce matériel est en rupture de stock.</div>
+    {% elif materiel.seuil_alerte and materiel.quantite <= materiel.seuil_alerte %}
+        <div class="alerte-stock alerte-basse">
+            ⚠️ Stock bas : il reste {{ materiel.quantite }} {{ materiel.unite }}
+            (seuil : {{ materiel.seuil_alerte }}). Pensez à réapprovisionner.
+        </div>
+    {% endif %}
+
+    {% if materiel.description %}
+    <p style="color:#475569; background:#f8fafc; padding:12px 14px; border-radius:10px; border:1px solid #e2e8f0;">
+        {{ materiel.description }}
+    </p>
+    {% endif %}
+</div>
+
+{% if peut_gerer_materiels %}
+<div class="charts-grid">
+    <!-- Entrée de stock -->
+    <div class="card">
+        <h3 style="margin-bottom:12px;">➕ Entrée de stock</h3>
+        <form action="{{ url_for('add_mouvement_materiel', id=materiel.id) }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="type_mouvement" value="entree">
+            <div class="form-group">
+                <label>Quantité reçue</label>
+                <input type="number" name="quantite" class="form-control" min="1" value="1" required>
+            </div>
+            <div class="form-group">
+                <label>Motif</label>
+                <input type="text" name="motif" class="form-control"
+                       placeholder="Achat, réapprovisionnement...">
+            </div>
+            <button type="submit" class="btn btn-primary" style="background:#16a34a;">
+                Enregistrer l'entrée
+            </button>
+        </form>
+    </div>
+
+    <!-- Sortie de stock -->
+    <div class="card">
+        <h3 style="margin-bottom:12px;">➖ Sortie de stock</h3>
+        <form action="{{ url_for('add_mouvement_materiel', id=materiel.id) }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="type_mouvement" value="sortie">
+            <div class="form-group">
+                <label>Quantité sortie</label>
+                <input type="number" name="quantite" class="form-control"
+                       min="1" max="{{ materiel.quantite }}" value="1" required
+                       {{ 'disabled' if materiel.quantite == 0 }}>
+            </div>
+            <div class="form-group">
+                <label>Pour qui ? <small style="color:#94a3b8;">(facultatif)</small></label>
+                <select name="employe_id" class="form-control">
+                    <option value="">— Non précisé —</option>
+                    {% for e in employes %}
+                    <option value="{{ e.id }}">{{ e.prenom }} {{ e.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Motif</label>
+                <input type="text" name="motif" class="form-control" placeholder="Consommation, perte...">
+            </div>
+            <button type="submit" class="btn btn-primary" style="background:#dc2626;"
+                    {{ 'disabled' if materiel.quantite == 0 }}>
+                Enregistrer la sortie
+            </button>
+        </form>
+    </div>
+</div>
+
+{% if attribuable %}
+<div class="card">
+    <h3 style="margin-bottom:12px;">🤝 Attribuer à un employé</h3>
+    <p style="color:#64748b; font-size:0.88rem; margin-top:0;">
+        Pour le matériel remis durablement (PC, téléphone, clés...). L'article sort
+        du stock et y revient lors du retour.
+    </p>
+    <form action="{{ url_for('attribuer_materiel', id=materiel.id) }}" method="post"
+          class="materiels-filtres" style="margin-bottom:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="filtre-champ">
+            <label>Employé</label>
+            <select name="employe_id" class="form-control" required>
+                <option value="">— Sélectionner —</option>
+                {% for e in employes %}
+                <option value="{{ e.id }}">{{ e.prenom }} {{ e.nom }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filtre-champ">
+            <label>Quantité</label>
+            <input type="number" name="quantite" class="form-control" min="1"
+                   max="{{ materiel.quantite }}" value="1" style="max-width:110px;">
+        </div>
+        <div class="filtre-champ">
+            <label>Commentaire</label>
+            <input type="text" name="commentaire" class="form-control" placeholder="N° de série...">
+        </div>
+        <button type="submit" class="btn btn-primary" {{ 'disabled' if materiel.quantite == 0 }}>
+            Attribuer
+        </button>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+{% if attributions %}
+<div class="card">
+    <h3 style="margin-bottom:12px;">🤝 Attributions</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Employé</th><th>Quantité</th><th>Attribué le</th>
+                    <th>Statut</th><th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in attributions %}
+                <tr>
+                    <td data-label="Employé"><strong>{{ a.emp_prenom }} {{ a.emp_nom }}</strong>
+                        {% if a.commentaire %}<br><small style="color:#64748b;">{{ a.commentaire }}</small>{% endif %}
+                    </td>
+                    <td data-label="Quantité">{{ a.quantite }}</td>
+                    <td data-label="Attribué le">{{ a.date_attribution }}</td>
+                    <td data-label="Statut">
+                        {% if a.date_retour %}
+                            <span class="badge" style="background:#e2e8f0;color:#475569;">
+                                Retourné le {{ a.date_retour }}
+                            </span>
+                        {% else %}
+                            <span class="badge" style="background:#dbeafe;color:#1e40af;">En cours</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Actions">
+                        {% if not a.date_retour and peut_gerer_materiels %}
+                        <form action="{{ url_for('retour_materiel', attribution_id=a.id) }}" method="post"
+                              style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="materiel_id" value="{{ materiel.id }}">
+                            <button type="submit" class="btn btn-secondary btn-xs">↩️ Marquer rendu</button>
+                        </form>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3 style="margin-bottom:12px;">📜 Historique des mouvements</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th><th>Type</th><th>Quantité</th>
+                    <th>Employé</th><th>Motif</th><th>Par</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mv in mouvements %}
+                <tr>
+                    <td data-label="Date">
+                        <small>{{ mv.date_mouvement.strftime('%d/%m/%Y %H:%M') if mv.date_mouvement.strftime is defined else mv.date_mouvement }}</small>
+                    </td>
+                    <td data-label="Type">
+                        {% if mv.type_mouvement == 'entree' %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">↑ Entrée</span>
+                        {% else %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">↓ Sortie</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Quantité"><strong>{{ mv.quantite }}</strong></td>
+                    <td data-label="Employé">
+                        {% if mv.emp_nom %}{{ mv.emp_prenom }} {{ mv.emp_nom }}{% else %}—{% endif %}
+                    </td>
+                    <td data-label="Motif"><small>{{ mv.motif or '—' }}</small></td>
+                    <td data-label="Par"><small style="color:#64748b;">{{ mv.username or '—' }}</small></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" style="text-align:center; color:#94a3b8; padding:24px;">
+                        Aucun mouvement enregistré pour l'instant.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
