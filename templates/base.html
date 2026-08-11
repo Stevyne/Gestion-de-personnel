@@ -191,7 +191,54 @@
 <div style="text-align:center;color:#64748b;font-size:.82rem;margin-bottom:10px;">Page {{ pg.page }} / {{ pg.pages }} &mdash; {{ pg.total }} résultat(s)</div>
 {% endif %}
 {% endmacro %}
-    <nav class="navbar">
+    {# ===== Bibliothèque d'icônes SVG (remplace les emojis de la navigation) =====
+   Les emojis dépendent de la police du système : rendu incohérent d'un poste à
+   l'autre et aspect peu professionnel. Ces icônes héritent de la couleur du
+   texte (currentColor) et s'alignent parfaitement. #}
+{% macro icon(name, size=18) -%}
+<svg class="ico" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none"
+     stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"
+     aria-hidden="true" focusable="false">
+{%- if name == 'dashboard' -%}
+<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>
+{%- elif name == 'users' -%}
+<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+{%- elif name == 'user' -%}
+<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+{%- elif name == 'building' -%}
+<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01M12 6h.01M12 10h.01M12 14h.01"/>
+{%- elif name == 'clock' -%}
+<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{%- elif name == 'history' -%}
+<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>
+{%- elif name == 'user-x' -%}
+<path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M17 8l5 5M22 8l-5 5"/>
+{%- elif name == 'palm' -%}
+<path d="M8 2h8v2a4 4 0 0 1-4 4 4 4 0 0 1-4-4Z"/><path d="M12 8v13"/><path d="M5 21h14"/><path d="M12 8c-3 0-5 1.5-6 4M12 8c3 0 5 1.5 6 4"/>
+{%- elif name == 'file' -%}
+<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>
+{%- elif name == 'wallet' -%}
+<path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+{%- elif name == 'calendar' -%}
+<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+{%- elif name == 'box' -%}
+<path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
+{%- elif name == 'shield' -%}
+<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>
+{%- elif name == 'bell' -%}
+<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+{%- elif name == 'logout' -%}
+<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>
+{%- elif name == 'chevron' -%}
+<path d="m6 9 6 6 6-6"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{# Libellés courts pour l'avatar : initiales de l'utilisateur #}
+{% set _uname = session.get('username', 'U') %}
+
+<nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
                 <a href="{{ url_for('dashboard') }}">
@@ -207,49 +254,126 @@
             </button>
             
             {% if session.get('user_id') %}
-            <!-- Desktop navigation -->
+            <!-- Navigation desktop : 5 entrées de premier niveau au lieu de 9.
+                 Les rubriques proches sont regroupées en menus déroulants, ce qui
+                 tient sur une seule ligne même sur un écran d'ordinateur portable. -->
             <div class="nav-links desktop-nav">
-                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">📊 Tableau de Bord</a>
-                <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">👥 Employés</a>
-                <a href="{{ url_for('presences') }}" class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">🕒 Présences</a>
-                <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">📋 Historique</a>
-                <div class="nav-dropdown" id="congesDropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['conges', 'permissions', 'soldes_conges_page'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
-                        🏖️ Congés &amp; Permissions <span class="nav-caret">▾</span>
+                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    {{ icon('dashboard') }}<span>Tableau de bord</span>
+                </a>
+
+                {# --- Personnel : employés + départements --- #}
+                <div class="nav-dropdown">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements','add_employee','edit_employee','employee_detail','add_departement','edit_departement'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                        {{ icon('users') }}<span>Personnel</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
-                        <a href="{{ url_for('conges') }}" class="nav-dropdown-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
-                        <a href="{{ url_for('permissions') }}" class="nav-dropdown-link {% if request.endpoint == 'permissions' %}active{% endif %}">🧾 Permissions</a>
+                        <a href="{{ url_for('index') }}" class="nav-dropdown-link {% if request.endpoint == 'index' %}active{% endif %}">
+                            {{ icon('users', 17) }}<span>Employés</span>
+                        </a>
+                        <a href="{{ url_for('departements') }}" class="nav-dropdown-link {% if request.endpoint == 'departements' %}active{% endif %}">
+                            {{ icon('building', 17) }}<span>Départements</span>
+                        </a>
+                    </div>
+                </div>
+
+                {# --- Temps : présences, historique, absences --- #}
+                <div class="nav-dropdown">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['presences','historique','absences','add_presence','add_absence'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                        {{ icon('clock') }}<span>Temps</span>{{ icon('chevron', 14) }}
+                    </button>
+                    <div class="nav-dropdown-menu">
+                        <a href="{{ url_for('presences') }}" class="nav-dropdown-link {% if request.endpoint == 'presences' %}active{% endif %}">
+                            {{ icon('clock', 17) }}<span>Présences</span>
+                        </a>
+                        <a href="{{ url_for('historique') }}" class="nav-dropdown-link {% if request.endpoint == 'historique' %}active{% endif %}">
+                            {{ icon('history', 17) }}<span>Historique</span>
+                        </a>
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                        <a href="{{ url_for('soldes_conges_page') }}" class="nav-dropdown-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">💰 Soldes</a>
+                        <a href="{{ url_for('absences') }}" class="nav-dropdown-link {% if request.endpoint == 'absences' %}active{% endif %}">
+                            {{ icon('user-x', 17) }}<span>Absences</span>
+                        </a>
                         {% endif %}
                     </div>
                 </div>
-                {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                <a href="{{ url_for('absences') }}" class="nav-link {% if request.endpoint == 'absences' %}active{% endif %}">🚫 Absences</a>
-                {% endif %}
-                <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
-                <a href="{{ url_for('materiels') }}" class="nav-link {% if request.endpoint in ['materiels', 'add_materiel', 'edit_materiel', 'view_materiel'] %}active{% endif %}">📦 Matériels</a>
+
+                {# --- Congés : congés, permissions, soldes, calendrier --- #}
+                <div class="nav-dropdown">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['conges','permissions','soldes_conges_page','calendrier_conges','add_conge','add_permission'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                        {{ icon('palm') }}<span>Congés</span>{{ icon('chevron', 14) }}
+                    </button>
+                    <div class="nav-dropdown-menu">
+                        <a href="{{ url_for('conges') }}" class="nav-dropdown-link {% if request.endpoint == 'conges' %}active{% endif %}">
+                            {{ icon('palm', 17) }}<span>Congés</span>
+                        </a>
+                        <a href="{{ url_for('permissions') }}" class="nav-dropdown-link {% if request.endpoint == 'permissions' %}active{% endif %}">
+                            {{ icon('file', 17) }}<span>Permissions</span>
+                        </a>
+                        <a href="{{ url_for('calendrier_conges') }}" class="nav-dropdown-link {% if request.endpoint == 'calendrier_conges' %}active{% endif %}">
+                            {{ icon('calendar', 17) }}<span>Calendrier</span>
+                        </a>
+                        {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+                        <a href="{{ url_for('soldes_conges_page') }}" class="nav-dropdown-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">
+                            {{ icon('wallet', 17) }}<span>Soldes</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <a href="{{ url_for('materiels') }}" class="nav-link {% if request.endpoint in ['materiels', 'add_materiel', 'edit_materiel', 'view_materiel', 'materiels_departement'] %}active{% endif %}">
+                    {{ icon('box') }}<span>Matériels</span>
+                </a>
+
                 {% if session.get('role') in ['admin', 'rh'] %}
-                <a href="{{ url_for('utilisateurs_page') }}" class="nav-link btn-primary {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">👤 Utilisateurs</a>
+                <a href="{{ url_for('utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">
+                    {{ icon('shield') }}<span>Utilisateurs</span>
+                </a>
                 {% endif %}
             </div>
+
             <div class="nav-user-section desktop-nav">
-                <a href="{{ url_for('notifications') }}" class="nav-notif" style="position:relative;">
-                    🛎️
+                <a href="{{ url_for('notifications') }}" class="nav-notif {% if request.endpoint == 'notifications' %}active{% endif %}"
+                   aria-label="Notifications" title="Notifications">
+                    {{ icon('bell', 19) }}
                     {% if unread_notifications and unread_notifications > 0 %}
-                    <span class="notif-badge">{{ unread_notifications }}</span>
+                    <span class="notif-badge">{{ unread_notifications if unread_notifications < 100 else '99+' }}</span>
                     {% endif %}
                 </a>
-                
-                <div class="user-info">
-                    <span class="user-name">{{ session.get('username', 'Utilisateur') }}</span>
-                    {% if session.get('role') == 'admin' %}
-                    <span class="user-role">admin</span>
-                    {% endif %}
+
+                {# --- Menu du compte : évite d'exposer « Déconnexion » en permanence --- #}
+                <div class="nav-dropdown user-menu">
+                    <button type="button" class="user-trigger nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Menu du compte">
+                        <span class="user-avatar">{{ _uname[:1]|upper }}</span>
+                        <span class="user-info">
+                            <span class="user-name">{{ _uname }}</span>
+                            <span class="user-role-text">{{ role_label or current_role }}</span>
+                        </span>
+                        {{ icon('chevron', 14) }}
+                    </button>
+                    <div class="nav-dropdown-menu user-menu-panel">
+                        <div class="user-menu-head">
+                            <span class="user-avatar lg">{{ _uname[:1]|upper }}</span>
+                            <span class="user-menu-id">
+                                <strong>{{ _uname }}</strong>
+                                <span class="user-role">{{ role_label or current_role }}</span>
+                            </span>
+                        </div>
+                        <a href="{{ url_for('notifications') }}" class="nav-dropdown-link">
+                            {{ icon('bell', 17) }}<span>Notifications</span>
+                            {% if unread_notifications and unread_notifications > 0 %}
+                            <span class="menu-count">{{ unread_notifications }}</span>
+                            {% endif %}
+                        </a>
+                        {% if session.get('role') in ['admin', 'rh'] %}
+                        <a href="{{ url_for('utilisateurs_page') }}" class="nav-dropdown-link">
+                            {{ icon('shield', 17) }}<span>Gestion des accès</span>
+                        </a>
+                        {% endif %}
+                        <a href="{{ url_for('logout') }}" class="nav-dropdown-link danger">
+                            {{ icon('logout', 17) }}<span>Déconnexion</span>
+                        </a>
+                    </div>
                 </div>
-                
-                <a href="{{ url_for('logout') }}" class="nav-link logout-btn">Déconnexion</a>
             </div>
             {% else %}
             <div class="nav-links desktop-nav">
@@ -277,48 +401,54 @@
         
         <div class="drawer-links">
             {% if session.get('user_id') %}
-                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">📊 Tableau de Bord</a>
-                <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">👥 Employés</a>
-                <a href="{{ url_for('presences') }}" class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">🕒 Présences</a>
-                <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">📋 Historique</a>
-                <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">🏖️ Congés</a>
-                <a href="{{ url_for('permissions') }}" class="nav-link {% if request.endpoint == 'permissions' %}active{% endif %}">🧾 Permissions</a>
+                <div class="drawer-user-card">
+                    <span class="user-avatar lg">{{ _uname[:1]|upper }}</span>
+                    <span class="drawer-user-id">
+                        <strong>{{ _uname }}</strong>
+                        <span class="user-role">{{ role_label or current_role }}</span>
+                    </span>
+                </div>
+
+                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">{{ icon('dashboard') }}<span>Tableau de bord</span></a>
+
+                <p class="drawer-section">Personnel</p>
+                <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">{{ icon('users') }}<span>Employés</span></a>
+                <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">{{ icon('building') }}<span>Départements</span></a>
+
+                <p class="drawer-section">Temps</p>
+                <a href="{{ url_for('presences') }}" class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">{{ icon('clock') }}<span>Présences</span></a>
+                <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">{{ icon('history') }}<span>Historique</span></a>
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                <a href="{{ url_for('soldes_conges_page') }}" class="nav-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">💰 Soldes</a>
-                <a href="{{ url_for('absences') }}" class="nav-link {% if request.endpoint == 'absences' %}active{% endif %}">🚫 Absences</a>
+                <a href="{{ url_for('absences') }}" class="nav-link {% if request.endpoint == 'absences' %}active{% endif %}">{{ icon('user-x') }}<span>Absences</span></a>
                 {% endif %}
-                <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">🏢 Départements</a>
-                <a href="{{ url_for('materiels') }}" class="nav-link {% if request.endpoint in ['materiels', 'add_materiel', 'edit_materiel', 'view_materiel'] %}active{% endif %}">📦 Matériels</a>
+
+                <p class="drawer-section">Congés</p>
+                <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">{{ icon('palm') }}<span>Congés</span></a>
+                <a href="{{ url_for('permissions') }}" class="nav-link {% if request.endpoint == 'permissions' %}active{% endif %}">{{ icon('file') }}<span>Permissions</span></a>
+                <a href="{{ url_for('calendrier_conges') }}" class="nav-link {% if request.endpoint == 'calendrier_conges' %}active{% endif %}">{{ icon('calendar') }}<span>Calendrier</span></a>
+                {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+                <a href="{{ url_for('soldes_conges_page') }}" class="nav-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">{{ icon('wallet') }}<span>Soldes</span></a>
+                {% endif %}
+
+                <p class="drawer-section">Ressources</p>
+                <a href="{{ url_for('materiels') }}" class="nav-link {% if request.endpoint in ['materiels', 'add_materiel', 'edit_materiel', 'view_materiel', 'materiels_departement'] %}active{% endif %}">{{ icon('box') }}<span>Matériels</span></a>
                 {% if session.get('role') in ['admin', 'rh'] %}
-                    <a href="{{ url_for('utilisateurs_page') }}" class="nav-link btn-primary {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">👤 Utilisateurs</a>
+                <a href="{{ url_for('utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">{{ icon('shield') }}<span>Utilisateurs</span></a>
                 {% endif %}
-                
-                <!-- User section -->
+
                 <div class="drawer-user-section">
-                    <div class="drawer-user-info">
-                        <span>👤</span>
-                        <span class="user-name">{{ session.get('username', 'Utilisateur') }}</span>
-                        {% if session.get('role') == 'admin' %}
-                            <span class="user-role">admin</span>
-                        {% endif %}
-                    </div>
-                    
-                    <a href="{{ url_for('notifications') }}" class="nav-link" style="padding: 10px 16px; margin: 0 0 8px 0;">
-                        🛎️ Notifications 
+                    <a href="{{ url_for('notifications') }}" class="nav-link {% if request.endpoint == 'notifications' %}active{% endif %}">
+                        {{ icon('bell') }}<span>Notifications</span>
                         {% if unread_notifications and unread_notifications > 0 %}
-                            <span style="background:#dc2626;color:white;font-size:0.7rem;padding:1px 6px;border-radius:999px;margin-left:4px;">{{ unread_notifications }}</span>
+                        <span class="menu-count">{{ unread_notifications }}</span>
                         {% endif %}
                     </a>
-                    
-                    <a href="{{ url_for('logout') }}" class="drawer-logout">
-                        Déconnexion
-                    </a>
+                    <a href="{{ url_for('logout') }}" class="drawer-logout">{{ icon('logout') }}<span>Déconnexion</span></a>
                 </div>
             {% else %}
-
                 {% if current_role == 'admin' %}
-                <a href="{{ url_for('register') }}" class="nav-link" style="background:#e0e7ff;color:#1e40af;padding:12px 20px;border-radius:10px;margin:8px 20px;justify-content:center;font-weight:600;">
-                    👤 Inscrire
+                <a href="{{ url_for('register') }}" class="nav-link" style="margin:8px 20px;justify-content:center;font-weight:600;">
+                    {{ icon('user') }}<span>Inscrire</span>
                 </a>
                 {% endif %}
             {% endif %}

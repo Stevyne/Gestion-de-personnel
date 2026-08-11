@@ -1844,3 +1844,378 @@ footer {
         grid-template-columns: 1fr;
     }
 }
+
+/* =========================================================================
+   BARRE DE NAVIGATION — refonte UI/UX
+   Ce bloc est en fin de fichier : il l'emporte sur les règles antérieures
+   à spécificité égale, ce qui évite d'aller les modifier une par une.
+   ========================================================================= */
+
+/* --- Icônes SVG (remplacent les emojis) --- */
+.ico {
+    flex: 0 0 auto;
+    display: block;
+    stroke: currentColor;
+}
+
+/* --- Barre --- */
+.navbar {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    padding: 0;
+    border-bottom: 1px solid #e8edf3;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.navbar .nav-container {
+    max-width: 1360px;
+    min-height: 62px;
+    padding: 0 22px;
+    column-gap: 20px;
+}
+
+/* Une seule ligne : plus de retour à la ligne des onglets */
+.navbar .nav-links.desktop-nav {
+    flex-wrap: nowrap;
+    gap: 2px;
+    row-gap: 0;
+}
+
+/* --- Onglets --- */
+.navbar .nav-link {
+    position: relative;
+    padding: 8px 13px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #556274;
+    gap: 8px;
+    white-space: nowrap;
+    transition: background-color .16s ease, color .16s ease;
+}
+
+.navbar .nav-link:hover {
+    background: #f2f5f9;
+    color: #0f172a;
+    transform: none; /* on supprime le décalage vertical, source de scintillement */
+}
+
+.navbar .nav-link .ico { color: #8592a6; transition: color .16s ease; }
+.navbar .nav-link:hover .ico { color: #475569; }
+
+/* Onglet actif : à plat, souligné — plus sobre que la pastille colorée */
+.navbar .nav-link.active {
+    background: transparent;
+    color: var(--primary, #2563eb);
+    font-weight: 650;
+    box-shadow: none;
+}
+
+.navbar .nav-link.active .ico { color: var(--primary, #2563eb); }
+
+.navbar .nav-link.active::after {
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: -11px;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--primary, #2563eb);
+}
+
+/* L'onglet « Utilisateurs » redevient un onglet normal : le bouton bleu plein
+   attirait l'œil plus que l'élément actif, ce qui brouillait la lecture. */
+.navbar .nav-link.btn-primary {
+    background: transparent;
+    color: #556274 !important;
+    font-weight: 500;
+    box-shadow: none;
+}
+.navbar .nav-link.btn-primary:hover { background: #f2f5f9; color: #0f172a !important; }
+
+/* --- Menus déroulants --- */
+.navbar .nav-dropdown-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.navbar .nav-dropdown-toggle .ico:last-child {
+    color: #97a3b6;
+    margin-left: -2px;
+    transition: transform .18s ease;
+}
+
+.navbar .nav-dropdown.open .nav-dropdown-toggle .ico:last-child { transform: rotate(180deg); }
+.navbar .nav-dropdown.open .nav-dropdown-toggle { background: #f2f5f9; color: #0f172a; }
+
+.navbar .nav-dropdown-menu {
+    top: calc(100% + 10px);
+    min-width: 232px;
+    padding: 7px;
+    border: 1px solid #e8edf3;
+    border-radius: 13px;
+    box-shadow: 0 12px 28px -8px rgb(15 23 42 / 0.16), 0 4px 10px -4px rgb(15 23 42 / 0.08);
+    transform: translateY(-4px) scale(.985);
+    transform-origin: top left;
+    transition: opacity .14s ease, transform .14s ease, visibility .14s;
+}
+
+.navbar .nav-dropdown.open .nav-dropdown-menu { transform: translateY(0) scale(1); }
+
+.navbar .nav-dropdown-link {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 9px 11px;
+    border-radius: 9px;
+    font-size: 0.895rem;
+    color: #475569;
+}
+
+.navbar .nav-dropdown-link .ico { color: #97a3b6; }
+.navbar .nav-dropdown-link:hover { background: #f2f5f9; color: #0f172a; }
+.navbar .nav-dropdown-link:hover .ico { color: #475569; }
+
+.navbar .nav-dropdown-link.active {
+    background: #eef4ff;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+.navbar .nav-dropdown-link.active .ico { color: #1d4ed8; }
+
+.navbar .nav-dropdown-link.danger { color: #b91c1c; }
+.navbar .nav-dropdown-link.danger .ico { color: #dc2626; }
+.navbar .nav-dropdown-link.danger:hover { background: #fef2f2; color: #991b1b; }
+
+/* --- Zone compte --- */
+.navbar .nav-user-section {
+    gap: 6px;
+    margin-left: 0;
+    padding-left: 14px;
+    border-left: 1px solid #e8edf3;
+}
+
+.navbar .nav-notif {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    color: #64748b;
+    transition: background-color .16s ease, color .16s ease;
+}
+
+.navbar .nav-notif:hover { background: #f2f5f9; color: #0f172a; }
+.navbar .nav-notif.active { background: #eef4ff; color: #1d4ed8; }
+
+.navbar .notif-badge {
+    top: 3px;
+    right: 2px;
+    min-width: 17px;
+    padding: 1px 4px;
+    font-size: 0.62rem;
+    line-height: 15px;
+    text-align: center;
+    border: 2px solid #fff;
+    box-shadow: none;
+}
+
+/* Déclencheur du menu compte */
+.user-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 5px 9px 5px 6px;
+    background: none;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font: inherit;
+    transition: background-color .16s ease;
+}
+
+.user-trigger:hover { background: #f2f5f9; }
+.nav-dropdown.user-menu.open .user-trigger { background: #f2f5f9; }
+.user-trigger .ico { color: #97a3b6; transition: transform .18s ease; }
+.nav-dropdown.user-menu.open .user-trigger .ico { transform: rotate(180deg); }
+
+.user-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 33px;
+    height: 33px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.86rem;
+    letter-spacing: .3px;
+    box-shadow: 0 1px 3px rgb(37 99 235 / .35);
+}
+
+.user-avatar.lg { width: 42px; height: 42px; font-size: 1.05rem; }
+
+.navbar .user-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.25;
+}
+
+.navbar .user-name {
+    font-size: 0.855rem;
+    font-weight: 600;
+    color: #1e293b;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-role-text {
+    font-size: 0.715rem;
+    color: #8592a6;
+    text-transform: capitalize;
+}
+
+/* Panneau du menu compte */
+.nav-dropdown.user-menu { position: relative; }
+
+.user-menu-panel {
+    left: auto;
+    right: 0;
+    transform-origin: top right;
+    min-width: 252px;
+}
+
+.user-menu-head {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 11px 11px 12px;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #eef1f6;
+}
+
+.user-menu-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.user-menu-id strong {
+    font-size: 0.92rem;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-menu-id .user-role,
+.drawer-user-id .user-role {
+    align-self: flex-start;
+    font-size: 0.68rem;
+    background: #eef4ff;
+    color: #1d4ed8;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.menu-count {
+    margin-left: auto;
+    background: #dc2626;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+}
+
+/* --- Marque --- */
+.navbar .nav-brand { gap: 10px; }
+.navbar .brand-text-img { width: 168px; height: 34px; }
+
+/* =================== TIROIR MOBILE =================== */
+.drawer-user-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px 16px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #eef1f6;
+}
+
+.drawer-user-id { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.drawer-user-id strong { font-size: 0.98rem; color: #0f172a; }
+
+.drawer-section {
+    margin: 14px 20px 5px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+.drawer-links .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.95rem;
+}
+
+.drawer-links .nav-link .ico { color: #8592a6; }
+.drawer-links .nav-link.active .ico { color: #1d4ed8; }
+.drawer-links .nav-link.active::after { display: none; } /* pas de soulignement dans le tiroir */
+
+.drawer-links .nav-link.active {
+    background: #eef4ff;
+    color: #1d4ed8;
+}
+
+.drawer-logout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+}
+
+/* =================== ADAPTATIONS ÉCRAN =================== */
+
+/* Portables : on resserre pour garder une seule ligne */
+@media (min-width: 769px) and (max-width: 1150px) {
+    .navbar .nav-link { padding: 8px 10px; font-size: 0.865rem; gap: 6px; }
+    .navbar .nav-container { column-gap: 10px; padding: 0 16px; }
+    .navbar .brand-text-img { width: 140px; }
+    .navbar .user-info { display: none; }   /* l'avatar suffit à identifier le compte */
+    .navbar .user-trigger { padding: 5px; }
+}
+
+/* Écrans étroits : les libellés cèdent la place, les icônes restent */
+@media (min-width: 769px) and (max-width: 1070px) {
+    /* On masque uniquement les libellés des onglets — surtout pas l'avatar
+       ni le badge de notification, qui sont aussi des <span>. */
+    .navbar .nav-links.desktop-nav .nav-link > span,
+    .navbar .nav-links.desktop-nav .nav-dropdown-toggle > span { display: none; }
+    .navbar .nav-links.desktop-nav .nav-link { padding: 9px; }
+    /* Les libellés restent visibles à l'intérieur des menus déroulants. */
+    .navbar .nav-dropdown-menu span { display: inline; }
+}
+
+@media (max-width: 768px) {
+    .navbar .nav-container { min-height: 58px; }
+    .navbar .brand-text-img { width: 150px; height: 32px; }
+}
+
+/* Le soulignement de l'onglet actif ne doit pas traverser le menu ouvert */
+.navbar .nav-dropdown.open .nav-link.active::after { opacity: 0; }
+
+/* Une ancienne règle (@media max-width:992px) remet `flex-wrap: wrap` sur les
+   onglets, ce qui réintroduit le retour à la ligne entre 769 et 992px.
+   On la neutralise : au-dessus de 768px la barre reste sur une seule ligne. */
+@media (min-width: 769px) {
+    .navbar .nav-links.desktop-nav { flex-wrap: nowrap; }
+}
