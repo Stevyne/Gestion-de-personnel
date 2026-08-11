@@ -1379,3 +1379,68 @@ footer {
         background: rgba(15, 23, 42, 0.55);
     }
 }
+
+/* ============================================= */
+/* DASHBOARD — GRILLES & GRAPHIQUES RESPONSIVES  */
+/* ============================================= */
+
+/* Grille des deux graphiques circulaires (présences du jour / congés) */
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 18px;
+}
+
+.charts-grid > .card {
+    padding: 16px;
+    margin: 0;
+    min-width: 0; /* évite qu'un canvas force le débordement de la colonne */
+}
+
+/* Conteneur générique d'un graphique : hauteur fluide, jamais écrasé */
+.chart-box {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    height: 220px;
+}
+
+/* Les donuts ont besoin d'une zone plutôt carrée pour rester lisibles.
+   La hauteur suit la largeur de la carte, avec des bornes. */
+.chart-box--donut {
+    height: clamp(200px, 22vw, 260px);
+}
+
+/* Tablette : les deux donuts deviennent étroits, on leur redonne de l'air */
+@media (max-width: 992px) {
+    .charts-grid {
+        gap: 14px;
+    }
+
+    .chart-box--donut {
+        height: clamp(190px, 30vw, 240px);
+    }
+}
+
+/* Mobile : une seule colonne, sinon chaque donut fait ~140px de large
+   et la légende passe par-dessus le graphique */
+@media (max-width: 768px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        margin-top: 14px;
+    }
+
+    .chart-box,
+    .chart-box--donut {
+        height: 260px;
+    }
+}
+
+@media (max-width: 480px) {
+    .chart-box,
+    .chart-box--donut {
+        height: 240px;
+    }
+}

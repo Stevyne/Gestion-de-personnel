@@ -118,21 +118,21 @@
     <!-- Analyses graphiques -->
     <div class="card" style="margin-top:18px; padding:16px;">
         <h3 style="margin-bottom:14px;">📈 Tendance des présences (30 derniers jours)</h3>
-        <div style="position:relative; height:220px;">
+        <div class="chart-box">
             <canvas id="chartTendance"></canvas>
         </div>
     </div>
 
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:18px; margin-top:18px;">
-        <div class="card" style="padding:16px; margin:0;">
+    <div class="charts-grid">
+        <div class="card">
             <h3 style="margin-bottom:10px;">🕒 Présences du jour</h3>
-            <div style="position:relative; height:200px;">
+            <div class="chart-box chart-box--donut">
                 <canvas id="chartPresencesJour"></canvas>
             </div>
         </div>
-        <div class="card" style="padding:16px; margin:0;">
+        <div class="card">
             <h3 style="margin-bottom:10px;">🏖️ Répartition des congés</h3>
-            <div style="position:relative; height:200px;">
+            <div class="chart-box chart-box--donut">
                 <canvas id="chartConges"></canvas>
             </div>
         </div>
@@ -141,7 +141,7 @@
     <!-- Répartition départements -->
     <div class="card" style="margin-top:18px; padding:16px;">
         <h3 style="margin-bottom:10px;">🏢 Répartition par département</h3>
-        <div style="position:relative; height:220px; margin-bottom:18px;">
+        <div class="chart-box" style="margin-bottom:18px;">
             <canvas id="chartDepartements"></canvas>
         </div>
         <div class="table-container">
@@ -237,6 +237,39 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    // Options communes aux graphiques circulaires (donuts)
+    const optionsDonut = {
+        responsive: true,
+        maintainAspectRatio: false,
+        resizeDelay: 100,           // évite les recalculs en rafale pendant le redimensionnement
+        cutout: '58%',
+        layout: { padding: 4 },
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    boxWidth: 12,
+                    boxHeight: 12,
+                    padding: 12,
+                    usePointStyle: true,
+                    pointStyle: 'circle',
+                    font: { size: 12 },
+                }
+            },
+            tooltip: {
+                callbacks: {
+                    label: function (ctx) {
+                        const data = ctx.chart.data.datasets[0].data;
+                        const total = data.reduce((a, b) => a + (Number(b) || 0), 0);
+                        const val = Number(ctx.parsed) || 0;
+                        const pct = total ? Math.round((val / total) * 100) : 0;
+                        return ` ${ctx.label} : ${val} (${pct}%)`;
+                    }
+                }
+            }
+        }
+    };
+
     // Présences du jour
     new Chart(document.getElementById('chartPresencesJour'), {
         type: 'doughnut',
@@ -248,7 +281,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 borderWidth: 0,
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        options: optionsDonut
     });
 
     // Répartition des congés
@@ -262,7 +295,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 borderWidth: 0,
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        options: optionsDonut
     });
 
     // Répartition par département
