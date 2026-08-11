@@ -22,8 +22,17 @@
             </thead>
             <tbody>
                 {% for u in users %}
+                {% set is_self = (u.id == session.get('user_id')) %}
+                {% set cible_admin = (u.role == 'admin') %}
+                {# Le backend refuse qu'un RH touche à un compte admin : on le reflète ici #}
+                {% set peut_modifier = (session.get('role') == 'admin') or (not cible_admin) %}
                 <tr>
-                    <td data-label="Identifiant"><strong>{{ u.username }}</strong></td>
+                    <td data-label="Identifiant">
+                        <strong>{{ u.username }}</strong>
+                        {% if is_self %}
+                        <span class="badge" style="background:#e0e7ff;color:#3730a3;margin-left:6px;">vous</span>
+                        {% endif %}
+                    </td>
                     <td data-label="Rôle">
                         {% if u.role == 'admin' %}
                             <span class="badge" style="background:#ede9fe;color:#5b21b6;">Admin</span>
@@ -39,52 +48,38 @@
                         {% if u.nom %}{{ u.prenom }} {{ u.nom }}{% else %}<span style="color:#94a3b8;">— Aucun —</span>{% endif %}
                     </td>
                     <td data-label="Actions">
-                        <details style="display:inline-block; margin-right:6px;">
-                            <summary class="btn btn-secondary" style="display:inline-block; padding:4px 8px; font-size:0.7rem; cursor:pointer;">✏️ Modifier</summary>
-                            <form action="{{ url_for('edit_utilisateur', user_id=u.id) }}" method="post"
-                                  style="margin-top:8px; padding:10px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; display:flex; flex-direction:column; gap:6px; min-width:220px;">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <label style="font-size:0.75rem; font-weight:600; color:#475569;">Rôle</label>
-                                <select name="role" style="padding:4px 6px; border-radius:6px; border:1px solid #cbd5e1;">
-                                    <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
-                                    <option value="rh" {% if u.role == 'rh' %}selected{% endif %}>RH</option>
-                                    <option value="manager" {% if u.role == 'manager' %}selected{% endif %}>Manager</option>
-                                    <option value="employe" {% if u.role == 'employe' %}selected{% endif %}>Employé</option>
-                                </select>
-                                <label style="font-size:0.75rem; font-weight:600; color:#475569;">Employé lié</label>
-                                <select name="employe_id" style="padding:4px 6px; border-radius:6px; border:1px solid #cbd5e1;">
-                                    <option value="">— Aucun —</option>
-                                    {% for emp in employees %}
-                                    <option value="{{ emp.id }}" {% if u.employe_id == emp.id %}selected{% endif %}>{{ emp.prenom }} {{ emp.nom }}</option>
-                                    {% endfor %}
-                                </select>
-                                <button type="submit" class="btn btn-secondary" style="padding:4px 8px; font-size:0.75rem;">✓ Enregistrer</button>
-                            </form>
-                        </details>
+                        <div class="user-actions">
+                            {% if peut_modifier %}
+                            <button type="button" class="btn btn-secondary btn-xs js-edit-user"
+                                    data-user-id="{{ u.id }}"
+                                    data-username="{{ u.username }}"
+                                    data-role="{{ u.role }}"
+                                    data-employe-id="{{ u.employe_id or '' }}"
+                                    data-is-self="{{ '1' if is_self else '0' }}"
+                                    data-edit-url="{{ url_for('edit_utilisateur', user_id=u.id) }}"
+                                    data-password-url="{{ url_for('reset_password_utilisateur', user_id=u.id) }}">
+                                ✏️ Modifier
+                            </button>
+                            {% else %}
+                            <span class="btn btn-secondary btn-xs" style="opacity:.5;cursor:not-allowed;"
+                                  title="Seul un administrateur peut modifier un compte administrateur">
+                                🔒 Modifier
+                            </span>
+                            {% endif %}
 
-                        <details style="display:inline-block; margin-right:6px;">
-                            <summary class="btn btn-secondary" style="display:inline-block; padding:4px 8px; font-size:0.7rem; cursor:pointer;">🔑 Mot de passe</summary>
-                            <form action="{{ url_for('reset_password_utilisateur', user_id=u.id) }}" method="post"
-                                  style="margin-top:8px; padding:10px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; display:flex; flex-direction:column; gap:6px; min-width:200px;">
+                            {% if not is_self %}
+                            <form action="{{ url_for('delete_utilisateur', user_id=u.id) }}" method="post"
+                                  style="display:inline;"
+                                  class="confirm-form"
+                                  data-confirm-title="Supprimer cet utilisateur ?"
+                                  data-confirm-subtitle="Action irréversible"
+                                  data-confirm-icon="👤"
+                                  data-confirm-warning="Ce compte perdra tout accès à la plateforme.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <label style="font-size:0.75rem; font-weight:600; color:#475569;">Nouveau mot de passe</label>
-                                <input type="password" name="nouveau_mdp" minlength="6" required
-                                       style="padding:5px 8px; border-radius:6px; border:1px solid #cbd5e1;">
-                                <button type="submit" class="btn btn-secondary" style="padding:4px 8px; font-size:0.75rem;">✓ Réinitialiser</button>
+                                <button type="submit" class="btn btn-danger btn-xs">🗑️</button>
                             </form>
-                        </details>
-
-                        {% if u.id != session.get('user_id') %}
-                        <form action="{{ url_for('delete_utilisateur', user_id=u.id) }}" method="post" style="display:inline;"
-                              class="confirm-form"
-                              data-confirm-title="Supprimer cet utilisateur ?"
-                              data-confirm-subtitle="Action irréversible"
-                              data-confirm-icon="👤"
-                              data-confirm-warning="Ce compte perdra tout accès à la plateforme.">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-danger" style="padding:4px 7px; font-size:0.7rem;">🗑️</button>
-                        </form>
-                        {% endif %}
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% else %}
@@ -98,4 +93,203 @@
         </table>
     </div>
 </div>
+
+<!-- ==================== POPUP DE MODIFICATION D'UTILISATEUR ==================== -->
+<div id="editUserModal" class="modal-backdrop" role="dialog" aria-modal="true"
+     aria-labelledby="editUserTitle" aria-hidden="true">
+    <div class="delete-modal user-modal">
+        <div class="modal-header" style="padding-bottom:10px;">
+            <div class="modal-icon user-modal-icon" id="editUserAvatar">?</div>
+            <h3 class="modal-title" id="editUserTitle">Modifier l'utilisateur</h3>
+            <p class="modal-subtitle" id="editUserSubtitle">—</p>
+        </div>
+
+        <!-- Onglets -->
+        <div class="user-modal-tabs" role="tablist">
+            <button type="button" class="user-tab active" data-tab="infos" role="tab"
+                    aria-selected="true">Informations</button>
+            <button type="button" class="user-tab" data-tab="mdp" role="tab"
+                    aria-selected="false">Mot de passe</button>
+        </div>
+
+        <!-- Onglet 1 : rôle + employé lié -->
+        <form method="post" id="editUserForm" class="user-tab-panel active"
+              role="tabpanel" aria-label="Informations" data-panel="infos">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="role" id="editUserRoleHidden" disabled>
+
+            <div class="modal-body" style="padding-top:18px;">
+                <div class="form-group">
+                    <label for="editUserRole">Rôle</label>
+                    <select name="role" id="editUserRole" class="form-control">
+                        <option value="admin">Administrateur</option>
+                        <option value="rh">Responsable RH</option>
+                        <option value="manager">Manager</option>
+                        <option value="employe">Employé</option>
+                    </select>
+                    <small class="form-hint" id="editUserRoleHint" style="display:none;">
+                        Vous ne pouvez pas modifier votre propre rôle.
+                    </small>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label for="editUserEmploye">Employé lié</label>
+                    <select name="employe_id" id="editUserEmploye" class="form-control">
+                        <option value="">— Aucun —</option>
+                        {% for emp in employees %}
+                        <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-hint">
+                        Rattache ce compte à une fiche employé (présences, congés, self-service).
+                    </small>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="modal-btn cancel js-close-user-modal">Annuler</button>
+                <button type="submit" class="modal-btn primary">💾 Enregistrer</button>
+            </div>
+        </form>
+
+        <!-- Onglet 2 : mot de passe -->
+        <form method="post" id="resetPasswordForm" class="user-tab-panel"
+              role="tabpanel" aria-label="Mot de passe" data-panel="mdp">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="modal-body" style="padding-top:18px;">
+                <div class="form-group">
+                    <label for="editUserPassword">Nouveau mot de passe</label>
+                    <div class="password-wrap">
+                        <input type="password" name="nouveau_mdp" id="editUserPassword"
+                               class="form-control" minlength="6" required autocomplete="new-password"
+                               placeholder="6 caractères minimum">
+                        <button type="button" class="password-toggle" id="togglePassword"
+                                aria-label="Afficher le mot de passe">👁️</button>
+                    </div>
+                    <small class="form-hint">
+                        L'utilisateur devra se connecter avec ce nouveau mot de passe.
+                    </small>
+                </div>
+
+                <div class="warning-text" style="background:#fffbeb;border-color:#fde68a;color:#854d0e;">
+                    <strong>Attention :</strong> le mot de passe actuel sera définitivement remplacé.
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="modal-btn cancel js-close-user-modal">Annuler</button>
+                <button type="submit" class="modal-btn danger">🔑 Réinitialiser</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    const modal = document.getElementById('editUserModal');
+    if (!modal) return;
+
+    const editForm   = document.getElementById('editUserForm');
+    const pwdForm    = document.getElementById('resetPasswordForm');
+    const roleSelect = document.getElementById('editUserRole');
+    const roleHidden = document.getElementById('editUserRoleHidden');
+    const roleHint   = document.getElementById('editUserRoleHint');
+    const empSelect  = document.getElementById('editUserEmploye');
+    const avatar     = document.getElementById('editUserAvatar');
+    const subtitle   = document.getElementById('editUserSubtitle');
+    const pwdInput   = document.getElementById('editUserPassword');
+
+    let lastFocused = null;
+
+    function setTab(name) {
+        modal.querySelectorAll('.user-tab').forEach(t => {
+            const on = t.dataset.tab === name;
+            t.classList.toggle('active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        modal.querySelectorAll('.user-tab-panel').forEach(p => {
+            p.classList.toggle('active', p.dataset.panel === name);
+        });
+    }
+
+    function openModal(btn) {
+        const d = btn.dataset;
+        lastFocused = btn;
+
+        editForm.action = d.editUrl;
+        pwdForm.action  = d.passwordUrl;
+
+        subtitle.textContent = '@' + d.username;
+        avatar.textContent   = (d.username || '?').trim().charAt(0).toUpperCase();
+
+        roleSelect.value = d.role || 'employe';
+        empSelect.value  = d.employeId || '';
+
+        // Le backend interdit de changer son propre rôle : on désactive le champ
+        // et on renvoie la valeur courante via un input caché (un select désactivé
+        // n'est pas soumis, ce qui provoquerait une erreur « Rôle invalide »).
+        const isSelf = d.isSelf === '1';
+        roleSelect.disabled = isSelf;
+        roleHidden.disabled = !isSelf;
+        roleHidden.value = d.role || 'employe';
+        roleHint.style.display = isSelf ? 'block' : 'none';
+
+        pwdInput.value = '';
+        setTab('infos');
+
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => (isSelf ? empSelect : roleSelect).focus(), 60);
+    }
+
+    function closeModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        if (lastFocused) lastFocused.focus();
+    }
+
+    document.querySelectorAll('.js-edit-user').forEach(btn => {
+        btn.addEventListener('click', () => openModal(btn));
+    });
+
+    modal.querySelectorAll('.js-close-user-modal').forEach(b => {
+        b.addEventListener('click', closeModal);
+    });
+
+    modal.querySelectorAll('.user-tab').forEach(t => {
+        t.addEventListener('click', () => setTab(t.dataset.tab));
+    });
+
+    // Clic sur le fond, mais pas à l'intérieur de la fenêtre
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && modal.classList.contains('show')) closeModal();
+    });
+
+    // Affichage / masquage du mot de passe
+    const toggle = document.getElementById('togglePassword');
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            const show = pwdInput.type === 'password';
+            pwdInput.type = show ? 'text' : 'password';
+            toggle.textContent = show ? '🙈' : '👁️';
+            toggle.setAttribute('aria-label',
+                show ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+            pwdInput.focus();
+        });
+    }
+
+    // Évite le double envoi
+    [editForm, pwdForm].forEach(f => {
+        f.addEventListener('submit', () => {
+            const b = f.querySelector('button[type="submit"]');
+            if (b) { b.disabled = true; b.textContent = 'Enregistrement...'; }
+        });
+    });
+})();
+</script>
 {% endblock %}
