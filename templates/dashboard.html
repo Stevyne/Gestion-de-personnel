@@ -115,9 +115,35 @@
 
     </div>
 
+    <!-- Analyses graphiques -->
+    <div class="card" style="margin-top:18px; padding:16px;">
+        <h3 style="margin-bottom:14px;">📈 Tendance des présences (30 derniers jours)</h3>
+        <div style="position:relative; height:220px;">
+            <canvas id="chartTendance"></canvas>
+        </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:18px; margin-top:18px;">
+        <div class="card" style="padding:16px; margin:0;">
+            <h3 style="margin-bottom:10px;">🕒 Présences du jour</h3>
+            <div style="position:relative; height:200px;">
+                <canvas id="chartPresencesJour"></canvas>
+            </div>
+        </div>
+        <div class="card" style="padding:16px; margin:0;">
+            <h3 style="margin-bottom:10px;">🏖️ Répartition des congés</h3>
+            <div style="position:relative; height:200px;">
+                <canvas id="chartConges"></canvas>
+            </div>
+        </div>
+    </div>
+
     <!-- Répartition départements -->
     <div class="card" style="margin-top:18px; padding:16px;">
         <h3 style="margin-bottom:10px;">🏢 Répartition par département</h3>
+        <div style="position:relative; height:220px; margin-bottom:18px;">
+            <canvas id="chartDepartements"></canvas>
+        </div>
         <div class="table-container">
         <table>
             <thead>
@@ -174,4 +200,85 @@
         <a href="{{ url_for('presences') }}" class="btn btn-primary">Gérer les présences</a>
     </div>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const couleurPrimaire = '#2563eb';
+    const couleurs = {
+        vert: '#16a34a', rouge: '#dc2626', jaune: '#ca8a04', bleu: '#2563eb', gris: '#94a3b8'
+    };
+    Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+    Chart.defaults.color = '#475569';
+
+    // Tendance des présences (30 derniers jours)
+    new Chart(document.getElementById('chartTendance'), {
+        type: 'line',
+        data: {
+            labels: {{ chart_tendance.labels | tojson }},
+            datasets: [{
+                label: 'Présences enregistrées',
+                data: {{ chart_tendance.valeurs | tojson }},
+                borderColor: couleurPrimaire,
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 2,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+
+    // Présences du jour
+    new Chart(document.getElementById('chartPresencesJour'), {
+        type: 'doughnut',
+        data: {
+            labels: {{ chart_presences_jour.labels | tojson }},
+            datasets: [{
+                data: {{ chart_presences_jour.valeurs | tojson }},
+                backgroundColor: [couleurs.vert, couleurs.rouge, couleurs.jaune],
+                borderWidth: 0,
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // Répartition des congés
+    new Chart(document.getElementById('chartConges'), {
+        type: 'doughnut',
+        data: {
+            labels: {{ chart_conges.labels | tojson }},
+            datasets: [{
+                data: {{ chart_conges.valeurs | tojson }},
+                backgroundColor: [couleurs.jaune, couleurs.vert, couleurs.rouge],
+                borderWidth: 0,
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // Répartition par département
+    new Chart(document.getElementById('chartDepartements'), {
+        type: 'bar',
+        data: {
+            labels: {{ chart_departements.labels | tojson }},
+            datasets: [{
+                label: 'Employés',
+                data: {{ chart_departements.valeurs | tojson }},
+                backgroundColor: couleurPrimaire,
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+});
+</script>
 {% endblock %}

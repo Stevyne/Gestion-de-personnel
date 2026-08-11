@@ -1099,6 +1099,32 @@ def dashboard():
     cur.execute("SELECT c.*, e.nom, e.prenom FROM conges c JOIN employes e ON c.employe_id = e.id ORDER BY c.date_demande DESC LIMIT 5")
     recent_conges = cur.fetchall()
 
+    # === Données pour les graphiques (Chart.js) ===
+    cur.execute("""
+        SELECT d::date AS jour, COUNT(p.id) AS nb
+        FROM generate_series(CURRENT_DATE - INTERVAL '29 days', CURRENT_DATE, INTERVAL '1 day') AS d
+        LEFT JOIN presences p ON p.date = d::date
+        GROUP BY d
+        ORDER BY d
+    """)
+    tendance_rows = cur.fetchall()
+    chart_tendance = {
+        'labels': [r['jour'].strftime('%d/%m') for r in tendance_rows],
+        'valeurs': [r['nb'] for r in tendance_rows],
+    }
+    chart_presences_jour = {
+        'labels': ['Présent', 'Absent', 'Télétravail'],
+        'valeurs': [presences_stat['present'], presences_stat['absent'], presences_stat['teletravail']],
+    }
+    chart_conges = {
+        'labels': ['En attente', 'Approuvés', 'Refusés'],
+        'valeurs': [conges_stat['en_attente'], conges_stat['approuve'], conges_stat['refuse']],
+    }
+    chart_departements = {
+        'labels': [d['nom'] for d in dept_stats],
+        'valeurs': [d['nb_employes'] for d in dept_stats],
+    }
+
     cur.close()
     conn.close()
 
@@ -1117,7 +1143,11 @@ def dashboard():
         heures_totales=heures_totales,
         dept_stats=dept_stats,
         recent_presences=recent_presences,
-        recent_conges=recent_conges
+        recent_conges=recent_conges,
+        chart_tendance=chart_tendance,
+        chart_presences_jour=chart_presences_jour,
+        chart_conges=chart_conges,
+        chart_departements=chart_departements
     )
 
 @app.route('/presences', methods=['GET', 'POST'])
