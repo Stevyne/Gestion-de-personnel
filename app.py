@@ -2091,9 +2091,60 @@ def view_employee(id):
     cur.execute("SELECT * FROM documents WHERE employe_id = %s ORDER BY date_upload DESC", (id,))
     employee_documents = cur.fetchall()
 
+    # Dernière présence enregistrée (n'était auparavant jamais transmise au
+    # template : la carte "Dernière présence" affichait donc toujours "aucune
+    # présence enregistrée", même quand des présences existaient).
+    cur.execute("""
+        SELECT date, heure_arrivee, heure_depart, statut
+        FROM presences WHERE employe_id = %s ORDER BY date DESC LIMIT 1
+    """, (id,))
+    last = cur.fetchone()
+    last_presence = None
+    if last:
+        last_presence = dict(last)
+        if last_presence.get('heure_arrivee'):
+            last_presence['heure_arrivee'] = str(last_presence['heure_arrivee'])[:5]
+        if last_presence.get('heure_depart'):
+            last_presence['heure_depart'] = str(last_presence['heure_depart'])[:5]
+
+    # Statistiques présence / absence / congés de l'année en cours
+    annee_courante = date.today().year
+    cur.execute("""
+        SELECT COUNT(*) AS nb FROM presences
+        WHERE employe_id = %s AND EXTRACT(YEAR FROM date) = %s
+    """, (id, annee_courante))
+    nb_presences = cur.fetchone()['nb']
+
+    cur.execute("""
+        SELECT heure_arrivee FROM presences
+        WHERE employe_id = %s AND EXTRACT(YEAR FROM date) = %s AND heure_arrivee IS NOT NULL
+    """, (id, annee_courante))
+    nb_retards = sum(1 for r in cur.fetchall() if calculer_retard(r['heure_arrivee']) > 0)
+
+    cur.execute("""
+        SELECT COUNT(*) AS nb FROM absences
+        WHERE employe_id = %s AND EXTRACT(YEAR FROM date) = %s
+    """, (id, annee_courante))
+    nb_absences = cur.fetchone()['nb']
+
+    cur.execute("""
+        SELECT COALESCE(SUM(nombre_jours), 0) AS nb FROM conges
+        WHERE employe_id = %s AND statut = 'approuvé' AND EXTRACT(YEAR FROM date_debut) = %s
+    """, (id, annee_courante))
+    nb_jours_conges = cur.fetchone()['nb']
+
+    stats_presence = {
+        'annee': annee_courante,
+        'presences': nb_presences,
+        'retards': nb_retards,
+        'absences': nb_absences,
+        'jours_conges': nb_jours_conges,
+    }
+
     cur.close()
     conn.close()
     return render_template('detail.html', employee=employee, documents=employee_documents,
+                           last_presence=last_presence, stats_presence=stats_presence,
                            today=date.today(),
                            bientot=date.today() + timedelta(days=SEUIL_ALERTE_EXPIRATION_DOCUMENTS_JOURS))
 

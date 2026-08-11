@@ -102,6 +102,7 @@
                 </div>
                 
                 <div class="info-grid">
+                    {% if current_role in ['admin', 'rh'] %}
                     <div class="info-row">
                         <div class="info-label">Salaire annuel</div>
                         <div class="info-value">
@@ -114,6 +115,7 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% endif %}
                     
                     <div class="info-row">
                         <div class="info-label">Date d'embauche</div>
@@ -179,6 +181,33 @@
                     </div>
                 {% endif %}
             </div>
+
+            <!-- Statistiques de présence / absence -->
+            {% if current_role in ['admin', 'rh', 'manager'] %}
+            <div class="card">
+                <div class="card-header" style="margin-bottom:10px;">
+                    <h3 style="margin:0; font-size:1.05rem;">📊 Statistiques {{ stats_presence.annee }}</h3>
+                </div>
+                <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); gap:10px;">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats_presence.presences }}</div>
+                        <div class="stat-label">Présences</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color:#b45309;">{{ stats_presence.retards }}</div>
+                        <div class="stat-label">Retards</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color:#991b1b;">{{ stats_presence.absences }}</div>
+                        <div class="stat-label">Absences</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color:#166534;">{{ stats_presence.jours_conges }}</div>
+                        <div class="stat-label">Jours de congé</div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Documents (contrat, etc.) -->
             {% if current_role in ['admin', 'rh', 'manager'] %}
