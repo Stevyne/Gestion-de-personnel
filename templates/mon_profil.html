@@ -22,7 +22,7 @@
         <div class="card profil-side">
             <div class="profil-photo-zone">
                 {% if user and user.photo %}
-                <img src="{{ url_for('static', filename='avatars/' ~ user.photo) }}"
+                <img src="{{ url_for('avatar_image', filename=user.photo) }}"
                      alt="Photo de profil" class="profil-photo">
                 {% else %}
                 <div class="profil-photo profil-photo-initiales">

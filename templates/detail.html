@@ -7,7 +7,7 @@
         <div class="employee-header">
             <div class="employee-identity">
                 {% if employee.photo %}
-                <img src="{{ url_for('static', filename='avatars/' ~ employee.photo) }}"
+                <img src="{{ url_for('avatar_image', filename=employee.photo) }}"
                      alt="Photo de {{ employee.prenom }} {{ employee.nom }}"
                      class="avatar-large avatar-img">
                 {% else %}

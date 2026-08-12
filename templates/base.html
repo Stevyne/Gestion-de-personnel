@@ -344,7 +344,7 @@
                 <div class="nav-dropdown user-menu">
                     <button type="button" class="user-trigger nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Menu du compte">
                         {% if photo_profil %}
-                        <img src="{{ url_for('static', filename='avatars/' ~ photo_profil) }}" alt="" class="user-avatar user-avatar-img">
+                        <img src="{{ url_for('avatar_image', filename=photo_profil) }}" alt="" class="user-avatar user-avatar-img">
                         {% else %}
                         <span class="user-avatar">{{ _uname[:1]|upper }}</span>
                         {% endif %}
@@ -357,7 +357,7 @@
                     <div class="nav-dropdown-menu user-menu-panel">
                         <div class="user-menu-head">
                             {% if photo_profil %}
-                            <img src="{{ url_for('static', filename='avatars/' ~ photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
+                            <img src="{{ url_for('avatar_image', filename=photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
                             {% else %}
                             <span class="user-avatar lg">{{ _uname[:1]|upper }}</span>
                             {% endif %}
@@ -414,7 +414,7 @@
             {% if session.get('user_id') %}
                 <a href="{{ url_for('mon_profil') }}" class="drawer-user-card">
                     {% if photo_profil %}
-                    <img src="{{ url_for('static', filename='avatars/' ~ photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
+                    <img src="{{ url_for('avatar_image', filename=photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
                     {% else %}
                     <span class="user-avatar lg">{{ _uname[:1]|upper }}</span>
                     {% endif %}

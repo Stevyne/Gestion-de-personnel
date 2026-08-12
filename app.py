@@ -594,16 +594,22 @@ def get_current_user_row():
 def enregistrer_photo_profil(fichier, user_id):
     """Valide puis enregistre une photo de profil.
 
-    Renvoie (nom_du_fichier, None) en cas de succès, sinon (None, message).
-    La validation porte sur le CONTENU réel (magic-bytes) et pas seulement sur
-    l'extension : un script renommé en .png est rejeté.
+    Renvoie (nom_du_fichier, None, contenu_bytes) en cas de succès, sinon
+    (None, message, None). La validation porte sur le CONTENU réel
+    (magic-bytes) et pas seulement sur l'extension : un script renommé en
+    .png est rejeté.
+
+    Le fichier est toujours écrit sur disque (cache pour la durée de vie de
+    l'instance) ET ses octets sont renvoyés pour être stockés en base
+    (persistant) par l'appelant — voir la remarque sur le disque éphémère
+    dans `job_alertes_expiration_documents` / `_traiter_upload_document`.
     """
     if not fichier or not fichier.filename:
-        return None, "Aucune image sélectionnée."
+        return None, "Aucune image sélectionnée.", None
 
     ext = fichier.filename.rsplit('.', 1)[-1].lower() if '.' in fichier.filename else ''
     if ext not in AVATAR_EXTENSIONS:
-        return None, "Format non accepté. Utilisez une image PNG ou JPEG."
+        return None, "Format non accepté. Utilisez une image PNG ou JPEG.", None
 
     # Taille : on mesure sans charger tout le fichier en mémoire.
     fichier.stream.seek(0, os.SEEK_END)
@@ -611,20 +617,23 @@ def enregistrer_photo_profil(fichier, user_id):
     fichier.stream.seek(0)
     if taille > AVATAR_MAX_BYTES:
         return None, (f"Image trop volumineuse ({taille // (1024 * 1024)} Mo). "
-                      f"Maximum : {AVATAR_MAX_BYTES // (1024 * 1024)} Mo.")
+                      f"Maximum : {AVATAR_MAX_BYTES // (1024 * 1024)} Mo."), None
     if taille == 0:
-        return None, "Le fichier est vide."
+        return None, "Le fichier est vide.", None
 
     if detect_file_type(fichier) not in AVATAR_EXTENSIONS:
-        return None, "Ce fichier n'est pas une image valide."
+        return None, "Ce fichier n'est pas une image valide.", None
 
     # Nom imprévisible : empêche de deviner l'URL de la photo d'autrui.
     nom = f"u{user_id}_{secrets.token_hex(8)}.{ 'jpg' if ext == 'jpeg' else ext }"
     chemin = os.path.join(AVATAR_FOLDER, secure_filename(nom))
 
     if not PIL_DISPONIBLE:
-        fichier.save(chemin)
-        return nom, None
+        fichier.stream.seek(0)
+        contenu = fichier.stream.read()
+        with open(chemin, 'wb') as f:
+            f.write(contenu)
+        return nom, None, contenu
 
     # Redimensionnement : l'image est recadrée en carré puis réduite. Le
     # ré-encodage par Pillow supprime au passage toute charge utile cachée
@@ -635,15 +644,19 @@ def enregistrer_photo_profil(fichier, user_id):
             img = ImageOps.exif_transpose(img)          # respecte l'orientation photo
             img = ImageOps.fit(img, (AVATAR_MAX_SIDE, AVATAR_MAX_SIDE),
                                method=Image.LANCZOS, centering=(0.5, 0.4))
+            buffer = io.BytesIO()
             if nom.endswith('.png'):
-                img.convert('RGBA').save(chemin, 'PNG', optimize=True)
+                img.convert('RGBA').save(buffer, 'PNG', optimize=True)
             else:
-                img.convert('RGB').save(chemin, 'JPEG', quality=88, optimize=True)
+                img.convert('RGB').save(buffer, 'JPEG', quality=88, optimize=True)
+            contenu = buffer.getvalue()
+            with open(chemin, 'wb') as f:
+                f.write(contenu)
     except Exception as e:
         logger.error("Erreur de traitement de la photo de profil : %s", e, exc_info=True)
-        return None, "Cette image n'a pas pu être traitée. Essayez un autre fichier."
+        return None, "Cette image n'a pas pu être traitée. Essayez un autre fichier.", None
 
-    return nom, None
+    return nom, None, contenu
 
 
 def supprimer_photo_profil(nom_fichier):
@@ -929,9 +942,19 @@ def init_db():
     # Date d'expiration optionnelle (CDD, visa, certification, contrat...) pour
     # les alertes automatiques avant échéance.
     cur.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS date_expiration DATE")
+    # Le contenu du fichier est stocké EN BASE (persistant), pas sur le disque
+    # local du service (éphémère sur Render : perdu après une inactivité
+    # prolongée ou un redéploiement). Les documents uploadés avant ce
+    # correctif n'ont pas de `contenu` (colonne NULL) : leur fichier disque
+    # est probablement déjà perdu, voir download_document().
+    cur.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS contenu BYTEA")
     # Photo de profil : portée par le COMPTE et non par la fiche employé, afin
     # que les comptes sans employé lié puissent aussi en avoir une.
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS photo VARCHAR(255)")
+    # Contenu de la photo stocké EN BASE (persistant), pas sur le disque local
+    # du service (éphémère sur Render : perdu après une inactivité prolongée
+    # ou un redéploiement — c'était la cause des photos cassées).
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_contenu BYTEA")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_expiration ON documents(date_expiration)")
     # Empêche de renvoyer la même alerte d'expiration chaque jour : une seule
     # notif/email par document et par type d'alerte ('bientot' / 'expire').
@@ -1130,14 +1153,15 @@ def mon_profil_photo():
     if not user:
         return redirect(url_for('login'))
 
-    nom, erreur = enregistrer_photo_profil(request.files.get('photo'), user['id'])
+    nom, erreur, contenu = enregistrer_photo_profil(request.files.get('photo'), user['id'])
     if erreur:
         flash(erreur, "danger")
         return redirect(url_for('mon_profil'))
 
     ancienne = user['photo']
     with db_cursor(commit=True) as (conn, cur):
-        cur.execute("UPDATE users SET photo = %s WHERE id = %s", (nom, user['id']))
+        cur.execute("UPDATE users SET photo = %s, photo_contenu = %s WHERE id = %s",
+                    (nom, psycopg2.Binary(contenu), user['id']))
     supprimer_photo_profil(ancienne)   # on ne la retire qu'après la mise à jour
 
     log_action(session.get('user_id'), session.get('username'),
@@ -1158,13 +1182,42 @@ def mon_profil_photo_supprimer():
         return redirect(url_for('mon_profil'))
 
     with db_cursor(commit=True) as (conn, cur):
-        cur.execute("UPDATE users SET photo = NULL WHERE id = %s", (user['id'],))
+        cur.execute("UPDATE users SET photo = NULL, photo_contenu = NULL WHERE id = %s", (user['id'],))
     supprimer_photo_profil(user['photo'])
 
     log_action(session.get('user_id'), session.get('username'),
                "DELETE_PHOTO", "user", user['id'], "Photo de profil supprimée")
     flash("Votre photo de profil a été supprimée.", "success")
     return redirect(url_for('mon_profil'))
+
+
+@app.route('/avatar/<path:filename>')
+@login_required
+def avatar_image(filename):
+    """Sert une photo de profil. Lit d'abord en base (persistant, survit à un
+    redémarrage du service), puis retombe sur le disque local si besoin
+    (photo uploadée avant ce correctif et jamais perdue depuis)."""
+    filename = secure_filename(filename)
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT photo_contenu FROM users WHERE photo = %s LIMIT 1", (filename,))
+        row = cur.fetchone()
+
+    mimetype = 'image/png' if filename.lower().endswith('.png') else 'image/jpeg'
+
+    if row and row.get('photo_contenu') is not None:
+        resp = send_file(io.BytesIO(bytes(row['photo_contenu'])), mimetype=mimetype)
+        resp.headers['Cache-Control'] = 'private, max-age=86400'
+        return resp
+
+    chemin = os.path.join(AVATAR_FOLDER, filename)
+    if os.path.dirname(os.path.abspath(chemin)) == os.path.abspath(AVATAR_FOLDER) and os.path.isfile(chemin):
+        resp = send_file(chemin, mimetype=mimetype)
+        resp.headers['Cache-Control'] = 'private, max-age=86400'
+        return resp
+
+    # Photo perdue (redémarrage du service avant ce correctif) : image par
+    # défaut plutôt qu'une icône cassée dans le navigateur.
+    return redirect(url_for('static', filename='Logo.png'))
 
 
 @app.route('/mon-profil/mot-de-passe', methods=['POST'])
@@ -2914,7 +2967,16 @@ def rapports():
 def _traiter_upload_document(conn, cur, employe_id, titre, description, date_expiration):
     """Valide et enregistre un document uploadé (fichier dans request.files).
     Retourne (ok: bool, message: str). Réutilisée par /documents et par
-    l'upload direct depuis la fiche employé."""
+    l'upload direct depuis la fiche employé.
+
+    IMPORTANT : le contenu est stocké directement dans PostgreSQL (colonne
+    `contenu`, BYTEA), PAS sur le disque local. Render (comme la plupart des
+    hébergeurs gratuits) a un système de fichiers ÉPHÉMÈRE : tout ce qui est
+    écrit sur disque est perdu à chaque redémarrage du service — y compris
+    après une période d'inactivité prolongée (le service "spin down" puis
+    redémarre). La base de données Postgres, elle, est persistante. C'était la
+    cause des documents/photos qui ne s'affichaient plus après inactivité.
+    """
     if 'fichier' not in request.files or request.files['fichier'].filename == '':
         return False, 'Aucun fichier sélectionné'
 
@@ -2931,14 +2993,13 @@ def _traiter_upload_document(conn, cur, employe_id, titre, description, date_exp
     filename = secure_filename(fichier.filename)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"{timestamp}_{filename}"
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    fichier.save(filepath)
+    contenu = fichier.stream.read()
 
     cur.execute("""
-        INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description, date_expiration)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    """, (employe_id, titre or filename, filename, filepath,
-          filename.rsplit('.', 1)[1].lower(), os.path.getsize(filepath), description, date_expiration))
+        INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description, date_expiration, contenu)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, (employe_id, titre or filename, filename, filename,
+          filename.rsplit('.', 1)[1].lower(), len(contenu), description, date_expiration, psycopg2.Binary(contenu)))
     conn.commit()
     log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", None, f"{titre} ({filename})")
     return True, 'Document uploadé avec succès'
@@ -3025,7 +3086,7 @@ def delete_document(doc_id):
 @login_required
 def download_document(doc_id):
     with db_cursor() as (conn, cur):
-        cur.execute("SELECT nom_fichier, employe_id FROM documents WHERE id = %s", (doc_id,))
+        cur.execute("SELECT nom_fichier, employe_id, contenu, type_fichier FROM documents WHERE id = %s", (doc_id,))
         doc = cur.fetchone()
     if not doc:
         flash('Document introuvable.', 'danger')
@@ -3037,18 +3098,31 @@ def download_document(doc_id):
         if not emp or doc.get('employe_id') != emp['id']:
             flash('Accès refusé : ce document ne vous appartient pas.', 'danger')
             return redirect(url_for('documents'))
+
     filename = secure_filename(doc['nom_fichier'])
+
+    # Fichier stocké en base (cas normal depuis ce correctif) : persistant,
+    # ne dépend pas du disque local éphémère du service.
+    if doc.get('contenu') is not None:
+        resp = send_file(io.BytesIO(bytes(doc['contenu'])), as_attachment=True, download_name=filename)
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
+
+    # Repli pour un document uploadé AVANT ce correctif : son fichier n'a
+    # peut-être jamais survécu à un redémarrage du service. On tente quand
+    # même le disque local (cas où le service n'a jamais redémarré depuis).
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    # Anti-path-traversal : on ne sert que depuis le dossier uploads autorisé
     if os.path.dirname(os.path.abspath(filepath)) != os.path.abspath(app.config['UPLOAD_FOLDER']):
         flash('Accès refusé.', 'danger')
         return redirect(url_for('documents'))
-    if not os.path.isfile(filepath):
-        flash('Fichier indisponible sur le serveur.', 'danger')
-        return redirect(url_for('documents'))
-    resp = send_file(filepath, as_attachment=True, download_name=filename)
-    resp.headers['X-Content-Type-Options'] = 'nosniff'
-    return resp
+    if os.path.isfile(filepath):
+        resp = send_file(filepath, as_attachment=True, download_name=filename)
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
+
+    flash("Ce fichier a été perdu suite à un redémarrage du service (ancien document, "
+          "uploadé avant la correction du stockage). Merci de le réimporter.", 'danger')
+    return redirect(url_for('documents'))
 
 
 # ==================== MAIN ====================

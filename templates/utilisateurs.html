@@ -31,7 +31,7 @@
                     <td data-label="Identifiant">
                         <div class="user-cell">
                             {% if u.photo %}
-                            <img src="{{ url_for('static', filename='avatars/' ~ u.photo) }}"
+                            <img src="{{ url_for('avatar_image', filename=u.photo) }}"
                                  alt="" class="user-cell-avatar user-cell-avatar-img">
                             {% else %}
                             <div class="user-cell-avatar">{{ u.username[0]|upper }}</div>
