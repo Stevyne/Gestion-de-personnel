@@ -2845,9 +2845,11 @@ footer {
         min-width: 0;
         max-width: 100%;
         justify-self: center;
-        /* Sans cela, un onglet trop long (« Utilisateurs ») sort du conteneur
-           et glisse sous le champ de recherche, qui intercepte alors le clic. */
-        overflow: hidden;
+        /* Pas de `overflow` ici : il rognerait les menus déroulants, qui sont
+           positionnés en absolu SOUS la barre (ils débordent donc légitimement
+           de cette zone). Le débordement des onglets est traité autrement :
+           ils se compriment (règles ci-dessous) et les libellés s'effacent
+           avant que la place ne manque. */
     }
     /* Les onglets acceptent de rétrécir plutôt que de déborder. */
     .navbar .nav-links.desktop-nav > * { flex: 0 1 auto; min-width: 0; }
