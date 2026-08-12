@@ -229,6 +229,8 @@
 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
 {%- elif name == 'logout' -%}
 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>
+{%- elif name == 'search' -%}
+<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
 {%- elif name == 'chevron' -%}
 <path d="m6 9 6 6 6-6"/>
 {%- endif -%}
@@ -332,6 +334,18 @@
             </div>
 
             <div class="nav-user-section desktop-nav">
+                {# --- Recherche globale : aperçu instantané + page de résultats --- #}
+                <div class="nav-search" id="navSearch">
+                    <form action="{{ url_for('recherche_page') }}" method="get" role="search" autocomplete="off">
+                        <span class="nav-search-ico">{{ icon('search', 17) }}</span>
+                        <input type="search" name="q" id="globalSearchInput" class="nav-search-input"
+                               placeholder="Rechercher…" aria-label="Recherche globale"
+                               aria-expanded="false" aria-controls="globalSearchPanel" role="combobox">
+                        <kbd class="nav-search-kbd" aria-hidden="true">Ctrl K</kbd>
+                    </form>
+                    <div class="nav-search-panel" id="globalSearchPanel" role="listbox" hidden></div>
+                </div>
+
                 <a href="{{ url_for('notifications') }}" class="nav-notif {% if request.endpoint == 'notifications' %}active{% endif %}"
                    aria-label="Notifications" title="Notifications">
                     {{ icon('bell', 19) }}
@@ -423,6 +437,9 @@
                         <span class="user-role">{{ role_label or current_role }}</span>
                     </span>
                 </a>
+
+                {# La barre de recherche n'existe pas en mobile : on y accède par ce lien #}
+                <a href="{{ url_for('recherche_page') }}" class="nav-link {% if request.endpoint == 'recherche_page' %}active{% endif %}">{{ icon('search') }}<span>Rechercher</span></a>
 
                 <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">{{ icon('dashboard') }}<span>Tableau de bord</span></a>
 
@@ -1010,5 +1027,135 @@
             console.log('%c✅ Super fluid animation + auto-close + responsive ready', 'color:#16a34a');
         });
     </script>
+
+    {# ==================== RECHERCHE GLOBALE ==================== #}
+    <script>
+    (function () {
+        const wrap  = document.getElementById('navSearch');
+        if (!wrap) return;
+        const input = document.getElementById('globalSearchInput');
+        const panel = document.getElementById('globalSearchPanel');
+        const urlApi = "{{ url_for('api_recherche') }}";
+        const urlPage = "{{ url_for('recherche_page') }}";
+
+        let debounce = null;      // évite une requête à chaque frappe
+        let requeteEnCours = null;
+        let items = [];           // liens actuellement affichés, pour les flèches
+        let actif = -1;
+
+        const echapper = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+            c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+        function fermer() {
+            panel.hidden = true; panel.innerHTML = '';
+            input.setAttribute('aria-expanded', 'false');
+            items = []; actif = -1;
+        }
+
+        function surligner(texte, terme) {
+            const t = echapper(texte);
+            if (!terme) return t;
+            // Le terme est échappé avant d'être injecté dans la regex, puis
+            // comparé sur le texte déjà échappé : pas d'injection possible.
+            const motif = echapper(terme).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            try { return t.replace(new RegExp('(' + motif + ')', 'ig'), '<mark>$1</mark>'); }
+            catch (e) { return t; }
+        }
+
+        function afficher(data) {
+            const terme = data.terme || '';
+            if (!data.groupes || !data.groupes.length) {
+                panel.innerHTML = '<div class="ns-vide">Aucun résultat pour « '
+                                + echapper(terme) + ' »</div>';
+                panel.hidden = false;
+                input.setAttribute('aria-expanded', 'true');
+                items = []; actif = -1;
+                return;
+            }
+            let html = '';
+            data.groupes.forEach(g => {
+                html += '<div class="ns-groupe"><div class="ns-groupe-titre">'
+                     +  echapper(g.libelle) + '<span>' + g.total + '</span></div>';
+                g.resultats.forEach(r => {
+                    const av = r.photo
+                        ? '<img class="ns-avatar" src="{{ url_for('static', filename='avatars/') }}'
+                          + encodeURIComponent(r.photo) + '" alt="">'
+                        : '<span class="ns-puce"></span>';
+                    html += '<a class="ns-item" href="' + encodeURI(r.url) + '">' + av
+                         +  '<span class="ns-texte"><span class="ns-titre">'
+                         +  surligner(r.titre, terme) + '</span>'
+                         +  (r.sous_titre ? '<span class="ns-sous">' + echapper(r.sous_titre) + '</span>' : '')
+                         +  '</span></a>';
+                });
+                // Catégorie tronquée : on propose d'aller voir le reste.
+                if (g.url_liste && g.total > g.resultats.length) {
+                    html += '<a class="ns-plus" href="' + encodeURI(g.url_liste) + '">+ '
+                         +  (g.total - g.resultats.length) + ' autre'
+                         +  ((g.total - g.resultats.length) > 1 ? 's' : '') + '</a>';
+                }
+                html += '</div>';
+            });
+            html += '<a class="ns-tout" href="' + urlPage + '?q=' + encodeURIComponent(terme) + '">'
+                 +  'Voir tous les résultats (' + data.total + ')</a>';
+            panel.innerHTML = html;
+            panel.hidden = false;
+            input.setAttribute('aria-expanded', 'true');
+            items = Array.from(panel.querySelectorAll('.ns-item, .ns-tout'));
+            actif = -1;
+        }
+
+        function chercher(terme) {
+            if (requeteEnCours) requeteEnCours.abort();
+            requeteEnCours = new AbortController();
+            fetch(urlApi + '?q=' + encodeURIComponent(terme), {
+                signal: requeteEnCours.signal, headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(r => r.ok ? r.json() : Promise.reject(r.status))
+            .then(afficher)
+            .catch(err => { if (err && err.name !== 'AbortError') fermer(); });
+        }
+
+        input.addEventListener('input', () => {
+            const terme = input.value.trim();
+            clearTimeout(debounce);
+            if (terme.length < 2) { fermer(); return; }
+            debounce = setTimeout(() => chercher(terme), 220);
+        });
+
+        input.addEventListener('focus', () => {
+            if (input.value.trim().length >= 2 && panel.innerHTML) {
+                panel.hidden = false;
+                input.setAttribute('aria-expanded', 'true');
+            }
+        });
+
+        function surligneActif() {
+            items.forEach((el, i) => el.classList.toggle('actif', i === actif));
+            if (actif >= 0 && items[actif]) items[actif].scrollIntoView({block: 'nearest'});
+        }
+
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { fermer(); input.blur(); return; }
+            if (panel.hidden || !items.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault(); actif = (actif + 1) % items.length; surligneActif();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault(); actif = (actif - 1 + items.length) % items.length; surligneActif();
+            } else if (e.key === 'Enter' && actif >= 0) {
+                e.preventDefault(); items[actif].click();
+            }
+        });
+
+        // Ctrl+K / Cmd+K : ouvre la recherche depuis n'importe quelle page.
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+                e.preventDefault(); input.focus(); input.select();
+            }
+        });
+
+        document.addEventListener('click', e => { if (!wrap.contains(e.target)) fermer(); });
+    })();
+    </script>
+
 </body>
 </html>

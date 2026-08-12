@@ -2465,3 +2465,307 @@ footer {
     background: #e2e8f0;
     border: 1px solid #e2e8f0;
 }
+
+/* ==========================================================================
+   RECHERCHE GLOBALE (barre de navigation + panneau d'aperçu)
+   ========================================================================== */
+.nav-search {
+    position: relative;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.nav-search form {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.nav-search-ico {
+    position: absolute;
+    left: 10px;
+    display: flex;
+    color: #94a3b8;
+    pointer-events: none;
+}
+
+.nav-search-input {
+    width: 230px;
+    max-width: 100%;
+    padding: 8px 58px 8px 34px;
+    border: 1px solid #e2e8f0;
+    border-radius: 9999px;
+    background: #f8fafc;
+    font-size: 0.88rem;
+    color: #0f172a;
+    transition: border-color .15s, background .15s, width .15s;
+}
+
+.nav-search-input::placeholder { color: #94a3b8; }
+
+.nav-search-input:focus {
+    outline: none;
+    border-color: #2563eb;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.12);
+}
+
+/* Indice du raccourci clavier, masqué dès que le champ est utilisé */
+.nav-search-kbd {
+    position: absolute;
+    right: 8px;
+    padding: 2px 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    background: #fff;
+    color: #94a3b8;
+    font-size: 0.68rem;
+    font-family: inherit;
+    letter-spacing: .02em;
+    pointer-events: none;
+}
+
+.nav-search-input:focus ~ .nav-search-kbd { opacity: 0; }
+
+/* ---- Panneau d'aperçu ---- */
+.nav-search-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 400px;
+    max-height: 70vh;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #e8edf3;
+    border-radius: 14px;
+    box-shadow: 0 18px 40px rgb(15 23 42 / 0.16);
+    z-index: 1200;
+    padding: 6px;
+}
+
+.ns-groupe + .ns-groupe { border-top: 1px solid #f1f5f9; margin-top: 4px; padding-top: 4px; }
+
+.ns-groupe-titre {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 10px 5px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #94a3b8;
+}
+
+.ns-groupe-titre span {
+    background: #f1f5f9;
+    color: #64748b;
+    border-radius: 9999px;
+    padding: 1px 7px;
+    font-size: 0.7rem;
+}
+
+.ns-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    text-decoration: none;
+    color: #0f172a;
+}
+
+.ns-item:hover, .ns-item.actif { background: #f1f5f9; }
+
+.ns-avatar {
+    width: 30px; height: 30px;
+    border-radius: 9999px;
+    object-fit: cover;
+    background: #e2e8f0;
+    flex-shrink: 0;
+}
+
+.ns-puce {
+    width: 30px; height: 30px;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #dbeafe, #eff6ff);
+    flex-shrink: 0;
+}
+
+.ns-texte { display: flex; flex-direction: column; min-width: 0; }
+
+.ns-titre {
+    font-size: 0.88rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ns-titre mark { background: #fef08a; color: inherit; padding: 0 1px; border-radius: 2px; }
+
+.ns-sous {
+    font-size: 0.76rem;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ns-vide { padding: 18px 12px; text-align: center; color: #64748b; font-size: 0.86rem; }
+
+.ns-tout {
+    display: block;
+    margin-top: 4px;
+    padding: 9px;
+    border-top: 1px solid #f1f5f9;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #2563eb;
+    text-decoration: none;
+    border-radius: 9px;
+}
+
+.ns-tout:hover, .ns-tout.actif { background: #eff6ff; }
+
+/* ---- Adaptation aux paliers de la navbar ---- */
+@media (min-width: 769px) and (max-width: 1150px) {
+    .nav-search-input { width: 170px; padding-right: 12px; }
+    .nav-search-kbd { display: none; }
+}
+
+@media (min-width: 769px) and (max-width: 1070px) {
+    /* Place trop contrainte : le champ disparaît, le lien du tiroir prend le relais */
+    .nav-search { display: none; }
+}
+
+/* ==========================================================================
+   PAGE DE RÉSULTATS (/recherche)
+   ========================================================================== */
+.recherche-wrap { max-width: 900px; margin: 0 auto; }
+
+.recherche-page-form {
+    display: flex;
+    gap: 10px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.recherche-page-input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.95rem;
+}
+
+.recherche-page-input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.12);
+}
+
+.recherche-vide { padding: 28px; text-align: center; color: #475569; }
+.recherche-hint { color: #94a3b8; font-size: 0.85rem; margin-top: 6px; }
+.recherche-compteur { color: #64748b; margin: 0 0 12px 2px; font-size: 0.9rem; }
+
+.recherche-groupe { padding: 16px 18px; margin-bottom: 14px; }
+
+.recherche-groupe-tete {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.recherche-groupe-tete h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 1.02rem;
+    color: #0f172a;
+}
+
+.recherche-groupe-nb {
+    background: #eff6ff;
+    color: #2563eb;
+    border-radius: 9999px;
+    padding: 2px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.recherche-liste { list-style: none; margin: 0; padding: 0; }
+
+.recherche-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 8px;
+    border-radius: 9px;
+    text-decoration: none;
+    color: #0f172a;
+}
+
+.recherche-item:hover { background: #f8fafc; }
+
+.recherche-item-avatar, .recherche-item-icone {
+    width: 34px; height: 34px;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.recherche-item-avatar-img { object-fit: cover; background: #e2e8f0; }
+
+.recherche-item-icone { background: #eff6ff; color: #2563eb; }
+
+.recherche-item-texte { display: flex; flex-direction: column; min-width: 0; }
+.recherche-item-titre { font-weight: 600; font-size: 0.93rem; }
+.recherche-item-sous { color: #64748b; font-size: 0.82rem; }
+
+.recherche-voir-plus {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 6px 2px;
+    color: #2563eb;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.recherche-voir-plus:hover { text-decoration: underline; }
+
+@media (max-width: 768px) {
+    .recherche-page-form { flex-direction: column; }
+    .recherche-groupe { padding: 14px; }
+}
+
+/* La 3e colonne de la grille de navigation contient désormais la recherche :
+   sans `min-width: 0` elle refuse de se comprimer et pousse le menu du compte
+   hors de l'écran (débordement horizontal de toute la page). */
+@media (min-width: 769px) {
+    .nav-container > .nav-user-section.desktop-nav { min-width: 0; }
+    .nav-user-section .nav-search { flex: 0 1 auto; }
+    /* Largeur souple : le champ rend la place quand la barre est à l'étroit. */
+    .nav-search-input { width: clamp(120px, 16vw, 230px); }
+}
+
+/* Lien « + N autres » affiché sous une catégorie tronquée du panneau d'aperçu */
+.ns-plus {
+    display: block;
+    padding: 4px 10px 8px 52px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #2563eb;
+    text-decoration: none;
+}
+
+.ns-plus:hover { text-decoration: underline; }

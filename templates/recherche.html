@@ -1,0 +1,75 @@
+{% extends layout|default("base.html") %}
+{% from "base.html" import icon with context %}
+
+{% block content %}
+<div class="recherche-wrap">
+
+    <div class="card-header" style="margin-bottom:18px;">
+        <h1>🔎 Recherche</h1>
+    </div>
+
+    {# Le champ est repris ici : on peut affiner sa recherche sans remonter à la barre #}
+    <form action="{{ url_for('recherche_page') }}" method="get" class="recherche-page-form card">
+        <input type="search" name="q" value="{{ terme }}" autofocus
+               class="recherche-page-input" placeholder="Employé, département, matériel, congé, document…"
+               aria-label="Termes de recherche">
+        <button type="submit" class="btn btn-primary">Rechercher</button>
+    </form>
+
+    {% if terme|length < 2 %}
+        <div class="card recherche-vide">
+            <p>Saisissez au moins <strong>2 caractères</strong> pour lancer une recherche.</p>
+            <p class="recherche-hint">
+                La recherche porte sur les employés, les départements, les matériels,
+                les congés, les absences, les documents et les comptes — selon vos droits.
+            </p>
+        </div>
+    {% elif total == 0 %}
+        <div class="card recherche-vide">
+            <p>Aucun résultat pour <strong>« {{ terme }} »</strong>.</p>
+            <p class="recherche-hint">Vérifiez l'orthographe ou essayez un terme plus court.</p>
+        </div>
+    {% else %}
+        <p class="recherche-compteur">
+            <strong>{{ total }}</strong> résultat{{ 's' if total > 1 }} pour « {{ terme }} »
+        </p>
+
+        {% for groupe in groupes %}
+        <div class="card recherche-groupe">
+            <div class="recherche-groupe-tete">
+                <h2>{{ icon(groupe.icone, 18) }} {{ groupe.libelle }}</h2>
+                <span class="recherche-groupe-nb">{{ groupe.total }}</span>
+            </div>
+
+            <ul class="recherche-liste">
+                {% for r in groupe.resultats %}
+                <li>
+                    <a href="{{ r.url }}" class="recherche-item">
+                        {% if r.photo %}
+                        <img src="{{ url_for('static', filename='avatars/' ~ r.photo) }}"
+                             alt="" class="recherche-item-avatar recherche-item-avatar-img">
+                        {% else %}
+                        <span class="recherche-item-icone">{{ icon(groupe.icone, 16) }}</span>
+                        {% endif %}
+                        <span class="recherche-item-texte">
+                            <span class="recherche-item-titre">{{ r.titre }}</span>
+                            {% if r.sous_titre %}
+                            <span class="recherche-item-sous">{{ r.sous_titre }}</span>
+                            {% endif %}
+                        </span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+
+            {% if groupe.url_liste and groupe.total > groupe.resultats|length %}
+            <a href="{{ groupe.url_liste }}" class="recherche-voir-plus">
+                Voir tous les résultats dans « {{ groupe.libelle }} » →
+            </a>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% endif %}
+
+</div>
+{% endblock %}
