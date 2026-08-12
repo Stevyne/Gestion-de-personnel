@@ -11,17 +11,26 @@
         aucun jour de votre solde de congés.
     </p>
 
+    <p class="wf-circuit">Votre demande suivra le circuit : <strong>avis de votre manager</strong>, puis <strong>décision des RH</strong>. Vous serez notifié à chaque étape.</p>
+
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
+        {% if gestionnaire %}
         <div class="form-group">
             <label for="employe_id">Employé *</label>
             <select name="employe_id" id="employe_id" class="form-control" required>
                 {% for emp in employees %}
-                    <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
+                    <option value="{{ emp.id }}"{% if moi and moi.id == emp.id %} selected{% endif %}>{{ emp.prenom }} {{ emp.nom }}</option>
                 {% endfor %}
             </select>
         </div>
+        {% else %}
+        <div class="form-group">
+            <label>Demandeur</label>
+            <input type="text" class="form-control" value="{{ moi.prenom }} {{ moi.nom }}" disabled>
+        </div>
+        {% endif %}
 
         <div class="form-row">
             <div class="form-group">
@@ -42,7 +51,7 @@
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Soumettre la demande</button>
-            <a href="{{ url_for('permissions') }}" class="btn btn-secondary">Annuler</a>
+            <a href="{{ url_for('permissions') if gestionnaire else url_for('self_service_conges') }}" class="btn btn-secondary">Annuler</a>
         </div>
     </form>
 </div>

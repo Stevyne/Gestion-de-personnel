@@ -406,6 +406,9 @@
                         <a href="{{ url_for('mon_profil') }}" class="nav-dropdown-link {% if request.endpoint == 'mon_profil' %}active{% endif %}">
                             {{ icon('user', 17) }}<span>Mon espace</span>
                         </a>
+                        <a href="{{ url_for('self_service') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('self_service') %}active{% endif %}">
+                            {{ icon('calendar', 17) }}<span>Mes demandes</span>
+                        </a>
                         <a href="{{ url_for('notifications') }}" class="nav-dropdown-link">
                             {{ icon('bell', 17) }}<span>Notifications</span>
                             {% if unread_notifications and unread_notifications > 0 %}
@@ -496,6 +499,9 @@
                 <div class="drawer-user-section">
                     <a href="{{ url_for('mon_profil') }}" class="nav-link {% if request.endpoint == 'mon_profil' %}active{% endif %}">
                         {{ icon('user') }}<span>Mon espace</span>
+                    </a>
+                    <a href="{{ url_for('self_service') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('self_service') %}active{% endif %}">
+                        {{ icon('calendar') }}<span>Mes demandes</span>
                     </a>
                     <a href="{{ url_for('notifications') }}" class="nav-link {% if request.endpoint == 'notifications' %}active{% endif %}">
                         {{ icon('bell') }}<span>Notifications</span>

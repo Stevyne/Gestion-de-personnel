@@ -6,17 +6,26 @@
         <h1>🏖️ Nouvelle demande de congé</h1>
     </div>
 
+    <p class="wf-circuit">Votre demande suivra le circuit : <strong>avis de votre manager</strong>, puis <strong>décision des RH</strong>. Vous serez notifié à chaque étape.</p>
+
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         
+        {% if gestionnaire %}
         <div class="form-group">
             <label for="employe_id">Employé *</label>
             <select name="employe_id" id="employe_id" class="form-control" required>
                 {% for emp in employees %}
-                    <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
+                    <option value="{{ emp.id }}"{% if moi and moi.id == emp.id %} selected{% endif %}>{{ emp.prenom }} {{ emp.nom }}</option>
                 {% endfor %}
             </select>
         </div>
+        {% else %}
+        <div class="form-group">
+            <label>Demandeur</label>
+            <input type="text" class="form-control" value="{{ moi.prenom }} {{ moi.nom }}" disabled>
+        </div>
+        {% endif %}
 
         <div class="form-group">
             <label for="type_conge">Type de congé *</label>
@@ -28,7 +37,7 @@
                 <option value="récupération">Récupération</option>
                 <option value="autre">Autre</option>
             </select>
-            <small style="color:#64748b;">Les permissions sont gérées dans un module séparé : <a href="{{ url_for('permissions') }}">🧾 Permissions</a>.</small>
+            <small style="color:#64748b;">Seuls les <strong>congés payés</strong> sont décomptés de votre solde. Les permissions relèvent d'un <a href="{{ url_for('add_permission') }}">formulaire distinct</a>.</small>
         </div>
 
         <div class="form-row">
@@ -50,7 +59,7 @@
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Soumettre la demande</button>
-            <a href="{{ url_for('conges') }}" class="btn btn-secondary">Annuler</a>
+            <a href="{{ url_for('conges') if gestionnaire else url_for('self_service_conges') }}" class="btn btn-secondary">Annuler</a>
         </div>
     </form>
 </div>

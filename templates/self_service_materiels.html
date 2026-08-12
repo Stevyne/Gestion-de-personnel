@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h1>💻 Mon matériel</h1>
+    <div>
+      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">← Retour</a>
+    </div>
+  </div>
+
+  {% set en_attente = attributions | rejectattr('accuse_reception') | list %}
+  {% if en_attente %}
+  <div class="wf-attente">
+    <strong>{{ en_attente | length }} ligne(s) à confirmer.</strong>
+    Confirmez la réception (ou la restitution) de chaque équipement, ou contestez
+    si ce qui est enregistré ne correspond pas à la réalité.
+  </div>
+  {% endif %}
+
+  <div class="table-container">
+  <table>
+    <thead>
+      <tr><th>Matériel</th><th>Qté</th><th>Attribué le</th><th>État</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+    {% for a in attributions %}
+    <tr>
+      <td data-label="Matériel">{{ a.materiel_nom }}<div class="wf-meta">{{ a.categorie or '—' }}</div></td>
+      <td data-label="Qté">{{ a.quantite }} {{ a.unite or '' }}</td>
+      <td data-label="Attribué le">{{ a.date_attribution }}
+        {% if a.attribue_par %}<div class="wf-meta">par {{ a.attribue_par }}</div>{% endif %}
+        {% if a.date_retour %}<div class="wf-meta">Retour enregistré le {{ a.date_retour }}</div>{% endif %}
+      </td>
+      <td data-label="État">
+        {% if a.accuse_reception %}
+          <span class="badge badge-success">Confirmé</span>
+          <div class="wf-meta">le {{ a.accuse_le }}</div>
+        {% elif a.conteste_motif %}
+          <span class="badge badge-danger">Contesté</span>
+          <div class="wf-meta wf-meta-danger">{{ a.conteste_motif }}</div>
+        {% else %}
+          <span class="badge badge-warning">À confirmer</span>
+        {% endif %}
+      </td>
+      <td data-label="Action">
+        {% if not a.accuse_reception %}
+        <div class="wf-actions">
+          <form method="POST" action="{{ url_for('accuser_attribution', attribution_id=a.id) }}" class="confirm-form"
+                data-confirm-title="Confirmer"
+                data-confirm-message="Confirmez-vous {{ 'avoir restitué' if a.date_retour else 'avoir reçu' }} « {{ a.materiel_nom }} » ?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="accuser">
+            <input type="hidden" name="retour" value="{{ url_for('self_service_materiels') }}">
+            <button type="submit" class="btn btn-sm btn-success">✔ Je confirme</button>
+          </form>
+          <form method="POST" action="{{ url_for('accuser_attribution', attribution_id=a.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="contester">
+            <input type="hidden" name="retour" value="{{ url_for('self_service_materiels') }}">
+            <input type="text" name="conteste_motif" placeholder="Motif de contestation" required>
+            <button type="submit" class="btn btn-sm btn-danger">Contester</button>
+          </form>
+        </div>
+        {% else %}<span class="wf-meta">—</span>{% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">Aucun matériel ne vous est attribué.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

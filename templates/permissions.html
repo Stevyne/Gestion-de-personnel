@@ -17,11 +17,15 @@
         est identique à celui des congés, mais dans un module séparé.
     </p>
 
+    <p class="wf-circuit">Circuit de validation : <strong>dépôt par l'employé</strong> → <strong>avis du manager du département</strong> → <strong>décision RH</strong>. Un refus exige un motif, transmis à l'employé par notification.</p>
+
 <form method="get" action="{{ url_for('permissions') }}" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:#f8fafc; padding:14px 16px; border-radius:12px; margin-bottom:18px; border:1px solid #e2e8f0;"><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">🔎 Rechercher un employé</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Nom ou prénom..." class="form-control" style="min-width:200px;"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Statut</label><select name="statut" class="form-control">
                 <option value="">Tous</option>
                 <option value="en attente" {{ 'selected' if filters.statut == 'en attente' }}>En attente</option>
                 <option value="approuvé" {{ 'selected' if filters.statut == 'approuvé' }}>Approuvé</option>
+                <option value="avis rendu" {{ 'selected' if filters.statut == 'avis rendu' }}>Avis rendu (décision RH attendue)</option>
                 <option value="refusé" {{ 'selected' if filters.statut == 'refusé' }}>Refusé</option>
+                <option value="annulé" {{ 'selected' if filters.statut == 'annulé' }}>Annulé</option>
             </select></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Début ≥</label><input type="date" name="date_debut" value="{{ filters.date_debut }}" class="form-control"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Fin ≤</label><input type="date" name="date_fin" value="{{ filters.date_fin }}" class="form-control"></div><button type="submit" class="btn btn-primary">Filtrer</button><a href="{{ url_for('permissions') }}" class="btn btn-secondary">Réinitialiser</a></form>
 
     <div class="table-container">
@@ -43,27 +47,52 @@
                     <td data-label="Dates">{{ p.date_debut }} → {{ p.date_fin }}</td>
                     <td data-label="Jours"><strong>{{ p.nombre_jours }} j</strong></td>
                     <td data-label="Statut">
-                        {% if p.statut == 'approuvé' %}
-                            <span class="badge" style="background:#dcfce7;color:#166534;">Approuvé</span>
-                        {% elif p.statut == 'refusé' %}
-                            <span class="badge" style="background:#fee2e2;color:#991b1b;">Refusé</span>
-                        {% else %}
-                            <span class="badge" style="background:#fef9c3;color:#854d0e;">En attente</span>
+                        {% set cls = {'en attente':'badge-warning','avis rendu':'badge-info','approuvé':'badge-success','refusé':'badge-danger','annulé':'badge-secondary'} %}
+                        <span class="badge {{ cls.get(p.statut, 'badge-secondary') }}">{{ libelles.get(p.statut, p.statut) }}</span>
+                        {% if p.avis_manager %}
+                          <div class="wf-meta">Avis manager : <strong>{{ 'favorable' if p.avis_manager == 'favorable' else 'défavorable' }}</strong>
+                            {% if p.avis_manager_par %}<br>{{ p.avis_manager_par }} le {{ p.avis_manager_le }}{% endif %}
+                            {% if p.avis_commentaire %}<br><em>« {{ p.avis_commentaire }} »</em>{% endif %}
+                          </div>
                         {% endif %}
+                        {% if p.decide_par %}<div class="wf-meta">Décision RH : {{ p.decide_par }} le {{ p.decide_le }}</div>{% endif %}
+                        {% if p.motif_refus %}<div class="wf-meta wf-meta-danger">Motif : {{ p.motif_refus }}</div>{% endif %}
+                        {% if p.annule_par %}<div class="wf-meta">Annulé par {{ p.annule_par }}</div>{% endif %}
                     </td>
                     <td data-label="Motif"><small>{{ p.motif or '—' }}</small></td>
                     <td data-label="Actions">
-                        {% if p.statut == 'en attente' %}
-                            <form action="{{ url_for('update_permission', id=p.id) }}" method="post" style="display:inline;">
+                        {% if p.statut in ouvertes %}
+                        <div class="wf-actions">
+                          {% if p.statut == 'en attente' and peut_avis %}
+                            <form action="{{ url_for('avis_permission', id=p.id) }}" method="post">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="avis" value="favorable">
+                                <button type="submit" class="btn btn-sm btn-success">👍 Avis favorable</button>
+                            </form>
+                            <form action="{{ url_for('avis_permission', id=p.id) }}" method="post">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="avis" value="defavorable">
+                                <input type="text" name="commentaire" placeholder="Motif de l'avis défavorable" required>
+                                <button type="submit" class="btn btn-sm btn-danger">👎 Défavorable</button>
+                            </form>
+                          {% endif %}
+                          {% if peut_decider %}
+                            {% if p.statut == 'en attente' %}
+                              <div class="wf-meta" style="flex-basis:100%;">Avis du manager non rendu : vous pouvez trancher directement si nécessaire.</div>
+                            {% endif %}
+                            <form action="{{ url_for('update_permission', id=p.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="action" value="approuver">
-                                <button type="submit" class="btn btn-secondary" style="padding:4px 8px;font-size:0.7rem;background:#16a34a;color:white;">✓ Approuver</button>
+                                <button type="submit" class="btn btn-sm btn-success">✓ Approuver</button>
                             </form>
-                            <form action="{{ url_for('update_permission', id=p.id) }}" method="post" style="display:inline;">
+                            <form action="{{ url_for('update_permission', id=p.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="action" value="refuser">
-                                <button type="submit" class="btn btn-danger" style="padding:4px 8px;font-size:0.7rem;">✗ Refuser</button>
+                                <input type="text" name="motif_refus" placeholder="Motif du refus (obligatoire)" required>
+                                <button type="submit" class="btn btn-sm btn-danger">✗ Refuser</button>
                             </form>
+                          {% endif %}
+                        </div>
                         {% endif %}
 
                         <form action="{{ url_for('delete_permission', id=p.id) }}" method="post" style="display:inline;"

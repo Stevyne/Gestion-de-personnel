@@ -1,27 +1,92 @@
 {% extends "base.html" %}
+{% macro etat(demande) %}
+  {% set st = demande.statut %}
+  {% set cls = {'en attente':'badge-warning','avis rendu':'badge-info','approuvé':'badge-success','refusé':'badge-danger','annulé':'badge-secondary'} %}
+  <span class="badge {{ cls.get(st, 'badge-secondary') }}">{{ libelles.get(st, st) }}</span>
+  {% if demande.avis_manager %}
+    <div class="wf-meta">Avis manager : <strong>{{ 'favorable' if demande.avis_manager == 'favorable' else 'défavorable' }}</strong>
+      {% if demande.avis_manager_par %}({{ demande.avis_manager_par }}){% endif %}
+      {% if demande.avis_commentaire %}<br><em>« {{ demande.avis_commentaire }} »</em>{% endif %}
+    </div>
+  {% endif %}
+  {% if demande.motif_refus %}
+    <div class="wf-meta wf-meta-danger">Motif du refus : {{ demande.motif_refus }}</div>
+  {% endif %}
+{% endmacro %}
+
 {% block content %}
 <div class="card">
   <div class="card-header">
-    <h1>🏖️ Mes Congés</h1>
+    <h1>🏖️ Mes congés et permissions</h1>
     <div>
       <a href="{{ url_for('self_service') }}" class="btn btn-secondary">← Retour</a>
-      <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('add_conge') }}" class="js-modal-form btn btn-primary">+ Nouvelle demande</a>
+      <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('add_conge') }}" class="js-modal-form btn btn-primary">+ Demander un congé</a>
+      <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">+ Demander une permission</a>
       <a href="{{ url_for('export_conges_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;">📄 PDF</a>
       <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn" style="background:#15803d;color:white;">📊 Excel</a>
     </div>
   </div>
+
+  {% if mon_solde %}
+  <div class="wf-solde">
+    <div><span>Jours acquis</span><strong>{{ mon_solde.jours_acquis }}</strong></div>
+    <div><span>Jours utilisés</span><strong>{{ mon_solde.jours_utilises }}</strong></div>
+    <div><span>Solde restant</span><strong class="wf-solde-restant">{{ (mon_solde.jours_acquis or 0) - (mon_solde.jours_utilises or 0) }} j</strong></div>
+  </div>
+  {% endif %}
+
+  <p class="wf-circuit">Circuit : <strong>vous déposez</strong> → <strong>avis de votre manager</strong> → <strong>décision des RH</strong>. Vous êtes notifié à chaque étape et pouvez annuler tant que la décision n'est pas rendue.</p>
+
+  <h2 class="wf-section">Congés</h2>
   <div class="table-container">
   <table>
-    <thead><tr><th>Type</th><th>Dates</th><th>Jours</th><th>Statut</th></tr></thead>
+    <thead><tr><th>Type</th><th>Dates</th><th>Jours</th><th>Suivi</th><th>Action</th></tr></thead>
     <tbody>
     {% for c in conges %}
     <tr>
       <td data-label="Type">{{ c.type_conge }}</td>
       <td data-label="Dates">{{ c.date_debut }} → {{ c.date_fin }}</td>
       <td data-label="Jours">{{ c.nombre_jours }} j</td>
-      <td data-label="Statut">{{ c.statut }}</td>
+      <td data-label="Suivi">{{ etat(c) }}</td>
+      <td data-label="Action">
+        {% if c.statut in ouvertes %}
+        <form method="POST" action="{{ url_for('annuler_conge', id=c.id) }}" class="confirm-form"
+              data-confirm-title="Annuler la demande"
+              data-confirm-message="Retirer cette demande de congé ? Elle ne sera plus soumise aux RH.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-danger">Annuler</button>
+        </form>
+        {% else %}<span class="wf-meta">—</span>{% endif %}
+      </td>
     </tr>
-    {% else %}<tr><td colspan="4">Aucune demande.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="5">Aucune demande de congé.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <h2 class="wf-section">Permissions</h2>
+  <div class="table-container">
+  <table>
+    <thead><tr><th>Motif</th><th>Dates</th><th>Jours</th><th>Suivi</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for p in permissions %}
+    <tr>
+      <td data-label="Motif">{{ p.motif or '—' }}</td>
+      <td data-label="Dates">{{ p.date_debut }} → {{ p.date_fin }}</td>
+      <td data-label="Jours">{{ p.nombre_jours }} j</td>
+      <td data-label="Suivi">{{ etat(p) }}</td>
+      <td data-label="Action">
+        {% if p.statut in ouvertes %}
+        <form method="POST" action="{{ url_for('annuler_permission', id=p.id) }}" class="confirm-form"
+              data-confirm-title="Annuler la demande"
+              data-confirm-message="Retirer cette demande de permission ?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-danger">Annuler</button>
+        </form>
+        {% else %}<span class="wf-meta">—</span>{% endif %}
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="5">Aucune demande de permission.</td></tr>{% endfor %}
     </tbody>
   </table>
   </div>

@@ -69,11 +69,21 @@ def test_refuse_permission(admin_client):
         cur.execute("SELECT id FROM permissions WHERE employe_id = 1")
         perm_id = cur.fetchone()['id']
 
+    # Un refus sans motif est rejeté : la demande reste ouverte.
     admin_client.post(f'/permissions/update/{perm_id}', data={'action': 'refuser'}, follow_redirects=True)
-
     with application.db_cursor() as (conn, cur):
         cur.execute("SELECT statut FROM permissions WHERE id = %s", (perm_id,))
-        assert cur.fetchone()['statut'] == 'refusé'
+        assert cur.fetchone()['statut'] in ('en attente', 'avis rendu')
+
+    admin_client.post(f'/permissions/update/{perm_id}',
+                      data={'action': 'refuser', 'motif_refus': 'Service non couvert'},
+                      follow_redirects=True)
+
+    with application.db_cursor() as (conn, cur):
+        cur.execute("SELECT statut, motif_refus FROM permissions WHERE id = %s", (perm_id,))
+        row = cur.fetchone()
+        assert row['statut'] == 'refusé'
+        assert row['motif_refus'] == 'Service non couvert'
 
 
 def test_delete_permission_removes_request(admin_client):

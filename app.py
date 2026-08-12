@@ -686,6 +686,82 @@ def get_current_employee():
     except:
         return None
 
+Q_SOLDE = ("SELECT jours_acquis, jours_utilises FROM soldes_conges "
+           "WHERE employe_id = %s AND annee = %s")
+
+# ==================== WORKFLOWS RH (congés / permissions) ====================
+# Circuit : l'employé dépose → le manager de son département donne un avis →
+# le RH tranche. Les statuts historiques ('en attente', 'approuvé', 'refusé')
+# sont conservés tels quels pour ne pas invalider les demandes déjà en base.
+DEMANDE_EN_ATTENTE = 'en attente'      # déposée, avis manager non rendu
+DEMANDE_AVIS_RENDU = 'avis rendu'      # le manager s'est prononcé, RH à décider
+DEMANDE_APPROUVEE  = 'approuvé'
+DEMANDE_REFUSEE    = 'refusé'
+DEMANDE_ANNULEE    = 'annulé'
+DEMANDE_OUVERTES   = (DEMANDE_EN_ATTENTE, DEMANDE_AVIS_RENDU)
+
+DEMANDE_LIBELLES = {
+    DEMANDE_EN_ATTENTE: "En attente d'avis du manager",
+    DEMANDE_AVIS_RENDU: "Avis rendu — décision RH attendue",
+    DEMANDE_APPROUVEE:  "Approuvé",
+    DEMANDE_REFUSEE:    "Refusé",
+    DEMANDE_ANNULEE:    "Annulé",
+}
+
+
+def _peut_decider_rh():
+    """Décision finale sur une demande de congé / permission."""
+    return session.get('role') in ('admin', 'rh')
+
+
+def _peut_donner_avis():
+    """Étape intermédiaire : réservée aux managers (l'admin dépanne)."""
+    return session.get('role') in ('admin', 'manager')
+
+
+def _managers_du_departement(cur, departement):
+    """Comptes managers rattachés à un département (lien par nom).
+
+    Le champ `departements.responsable` est un texte libre, inexploitable pour
+    router une demande : on passe donc par les comptes de rôle `manager` dont
+    l'employé lié appartient au même département.
+    """
+    if not departement:
+        return []
+    cur.execute("""
+        SELECT u.id, u.username FROM users u
+          JOIN employes e ON e.id = u.employe_id
+         WHERE u.role = 'manager' AND e.departement = %s
+    """, (departement,))
+    return cur.fetchall()
+
+
+def _notifier_roles(cur, roles, titre, message, type_='info', sauf=None):
+    """Notifie tous les comptes portant l'un des rôles donnés."""
+    cur.execute("SELECT id FROM users WHERE role IN %s", (tuple(roles),))
+    for row in cur.fetchall():
+        if sauf and row['id'] == sauf:
+            continue
+        create_notification(row['id'], titre, message, type_)
+
+
+def _user_id_de_employe(cur, employe_id):
+    """Compte utilisateur lié à un employé, s'il en a un."""
+    if not employe_id:
+        return None
+    cur.execute("SELECT id FROM users WHERE employe_id = %s LIMIT 1", (employe_id,))
+    row = cur.fetchone()
+    return row['id'] if row else None
+
+
+def _libelle_employe(cur, employe_id):
+    cur.execute("SELECT nom, prenom, departement FROM employes WHERE id = %s", (employe_id,))
+    e = cur.fetchone()
+    if not e:
+        return "?", None
+    return f"{e['prenom']} {e['nom']}".strip(), e['departement']
+
+
 # ==================== SOLDES DE CONGÉS (Phase 2) ====================
 
 TAUX_ACQUISITION_CONGES_PAR_MOIS = 25 / 12  # ≈ 2.0833 j/mois (25 j/an, convention jours ouvrés)
@@ -906,6 +982,28 @@ def init_db():
         date_demande DATE DEFAULT CURRENT_DATE
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_permissions_employe ON permissions(employe_id)")
+
+    # ==================== WORKFLOWS RH (validation à deux niveaux) ==========
+    # Congés et permissions suivent le même circuit : l'employé dépose sa
+    # demande, le manager de son département donne un avis, le RH tranche.
+    # Colonnes nullables : les demandes déjà en base restent valides.
+    for table in ('conges', 'permissions'):
+        for col, typ in [
+            ('demande_par_id',   'INTEGER'),      # qui a déposé (self-service)
+            ('avis_manager',     'VARCHAR(15)'),  # favorable / defavorable
+            ('avis_manager_par', 'VARCHAR(80)'),
+            ('avis_manager_le',  'DATE'),
+            ('avis_commentaire', 'TEXT'),
+            ('decide_par',       'VARCHAR(80)'),  # décision finale RH
+            ('decide_le',        'DATE'),
+            ('motif_refus',      'TEXT'),         # refus expliqué
+            ('annule_par',       'VARCHAR(80)'),
+        ]:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typ}")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_conges_statut ON conges(statut)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_conges_demandeur ON conges(demande_par_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_perms_statut ON permissions(statut)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_perms_demandeur ON permissions(demande_par_id)")
     cur.execute('''CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id INTEGER, username VARCHAR(80), action VARCHAR(100), entity_type VARCHAR(50), entity_id INTEGER, details TEXT, ip_address VARCHAR(45), timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs(timestamp DESC)")
 
@@ -1027,6 +1125,17 @@ def init_db():
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_attrib_materiel ON materiels_attributions(materiel_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_attrib_employe ON materiels_attributions(employe_id)")
+    # Accusé de réception : l'employé confirme avoir reçu le matériel, ce qui
+    # évite les « je n'ai jamais eu ce PC » lors des inventaires ou des soldes
+    # de tout compte.
+    for col, typ in [
+        ('accuse_reception', 'BOOLEAN DEFAULT FALSE'),
+        ('accuse_le',        'DATE'),
+        ('accuse_par',       'VARCHAR(80)'),
+        ('conteste_motif',   'TEXT'),
+        ('attribue_par',     'VARCHAR(80)'),
+    ]:
+        cur.execute(f"ALTER TABLE materiels_attributions ADD COLUMN IF NOT EXISTS {col} {typ}")
     # Évite de renvoyer l'alerte de stock bas en boucle : une seule notif tant
     # que le stock n'est pas repassé au-dessus du seuil (remis à FALSE alors).
     cur.execute("ALTER TABLE materiels ADD COLUMN IF NOT EXISTS alerte_envoyee BOOLEAN DEFAULT FALSE")
@@ -1683,6 +1792,7 @@ def self_service():
     my_presences = []
     my_conges = []
     mon_solde = None
+    materiels_a_confirmer = 0
     if emp:
         conn = get_db()
         cur = get_cursor(conn)
@@ -1692,8 +1802,16 @@ def self_service():
         cur.execute("SELECT * FROM conges WHERE employe_id = %s ORDER BY date_demande DESC LIMIT 15", (emp['id'],))
         my_conges = cur.fetchall()
         mon_solde = get_solde_conges(emp['id'])
+        # Nombre d'équipements dont l'employé n'a pas encore accusé réception :
+        # sert à afficher un rappel visible dès l'accueil de l'espace.
+        cur.execute("""SELECT COUNT(*) AS nb FROM materiels_attributions
+                        WHERE employe_id = %s AND accuse_reception = FALSE""", (emp['id'],))
+        materiels_a_confirmer = cur.fetchone()['nb']
         cur.close(); conn.close()
-    return render_template('self_service.html', employee=emp, my_presences=my_presences, my_conges=my_conges, mon_solde=mon_solde)
+    return render_template('self_service.html', employee=emp, my_presences=my_presences,
+                           my_conges=my_conges, mon_solde=mon_solde,
+                           libelles=DEMANDE_LIBELLES,
+                           materiels_a_confirmer=materiels_a_confirmer)
 
 @app.route('/self-service/presences')
 @login_required
@@ -1713,16 +1831,45 @@ def self_service_presences():
 @app.route('/self-service/conges')
 @login_required
 def self_service_conges():
+    """Mes demandes de congés et de permissions, avec dépôt et annulation."""
     emp = get_current_employee()
     if not emp:
         flash("Aucun employé lié à votre compte.", "warning")
         return redirect(url_for('self_service'))
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute("SELECT * FROM conges WHERE employe_id = %s ORDER BY date_demande DESC", (emp['id'],))
-    conges = cur.fetchall()
-    cur.close(); conn.close()
-    return render_template('self_service_conges.html', conges=conges, employee=emp)
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT * FROM conges WHERE employe_id = %s "
+                    "ORDER BY date_demande DESC", (emp['id'],))
+        conges = cur.fetchall()
+        cur.execute("SELECT * FROM permissions WHERE employe_id = %s "
+                    "ORDER BY date_debut DESC", (emp['id'],))
+        permissions_list = cur.fetchall()
+    return render_template('self_service_conges.html', conges=conges,
+                           permissions=permissions_list, employee=emp,
+                           mon_solde=get_solde_conges(emp['id']),
+                           libelles=DEMANDE_LIBELLES,
+                           ouvertes=DEMANDE_OUVERTES)
+
+
+@app.route('/self-service/materiels')
+@login_required
+def self_service_materiels():
+    """Matériel qui m'est attribué, et accusés de réception en attente."""
+    emp = get_current_employee()
+    if not emp:
+        flash("Aucun employé lié à votre compte.", "warning")
+        return redirect(url_for('self_service'))
+    with db_cursor() as (conn, cur):
+        cur.execute("""
+            SELECT a.*, m.nom AS materiel_nom, m.categorie, m.unite
+              FROM materiels_attributions a
+              JOIN materiels m ON m.id = a.materiel_id
+             WHERE a.employe_id = %s
+             ORDER BY a.accuse_reception ASC, a.date_attribution DESC
+        """, (emp['id'],))
+        attributions = cur.fetchall()
+    return render_template('self_service_materiels.html',
+                           attributions=attributions, employee=emp)
+
 
 # ==================== EXPORTS ====================
 def create_presences_pdf(data, title="Rapport des Présences"):
@@ -2303,74 +2450,240 @@ def conges():
     filters = {'search': search, 'statut': statut, 'type_conge': type_conge, 'date_debut': date_debut, 'date_fin': date_fin}
     return render_template('conges.html', conges=conges_list, employees=employees, soldes=soldes,
                            annee_courante=annee_courante, types=types, filters=filters,
+                           libelles=DEMANDE_LIBELLES, ouvertes=DEMANDE_OUVERTES,
+                           peut_decider=_peut_decider_rh(), peut_avis=_peut_donner_avis(),
                            pg=pg, page_items=page_list(pg['page'], pg['pages']),
                            base_qs=urlencode({k: v for k, v in filters.items() if v}))
 
 @app.route('/conges/add', methods=['GET', 'POST'])
 @login_required
 def add_conge():
+    """Dépôt d'une demande de congé.
+
+    Un employé ne peut déposer que pour lui-même ; un gestionnaire peut saisir
+    pour n'importe qui (cas des demandes transmises sur papier).
+    """
+    moi = get_current_employee()
+    gestionnaire = session.get('role') in ('admin', 'rh', 'manager')
+
     with db_cursor(commit=True) as (conn, cur):
         if request.method == 'POST':
-            employe_id = request.form.get('employe_id')
+            employe_id = request.form.get('employe_id', type=int)
             type_conge = request.form.get('type_conge')
             date_debut = request.form.get('date_debut')
             date_fin = request.form.get('date_fin')
             motif = request.form.get('motif', '')
-            
+
+            # Un non-gestionnaire ne dépose que pour lui-même : on ignore
+            # l'employe_id transmis, qui pourrait être falsifié.
+            if not gestionnaire:
+                if not moi:
+                    flash("Aucun employé n'est lié à votre compte : "
+                          "contactez les RH.", "warning")
+                    return redirect(url_for('self_service'))
+                employe_id = moi['id']
+
             if employe_id and type_conge and date_debut and date_fin:
-                # Calculate days
-                from datetime import datetime
                 d1 = datetime.strptime(date_debut, '%Y-%m-%d')
                 d2 = datetime.strptime(date_fin, '%Y-%m-%d')
                 if d2 < d1:
                     flash("La date de fin ne peut pas être avant la date de début", "danger")
                     cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
-                    employees = cur.fetchall()
-                    return render_template('conge_form.html', employees=employees)
+                    return render_template('conge_form.html', employees=cur.fetchall(),
+                                           moi=moi, gestionnaire=gestionnaire)
                 nombre_jours = (d2 - d1).days + 1
-                
+
+                # Contrôle du solde : on prévient avant d'engager le circuit,
+                # plutôt que de faire refuser la demande trois jours plus tard.
+                annee = d1.year
+                cur.execute(Q_SOLDE, (employe_id, annee))
+                solde = cur.fetchone()
+                # Seuls les congés payés sont décomptés du solde (cf. recalculer_solde).
+                if solde and type_conge == 'congé payé':
+                    restant = float(solde['jours_acquis'] or 0) - float(solde['jours_utilises'] or 0)
+                    if nombre_jours > restant:
+                        flash("Solde insuffisant : %s jour(s) demandé(s) pour %.1f restant(s) en %s."
+                              % (nombre_jours, restant, annee), "danger")
+                        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+                        return render_template('conge_form.html', employees=cur.fetchall(),
+                                               moi=moi, gestionnaire=gestionnaire)
+
                 cur.execute("""
-                    INSERT INTO conges (employe_id, type_conge, date_debut, date_fin, nombre_jours, motif, statut)
-                    VALUES (%s, %s, %s, %s, %s, %s, 'en attente')
-                """, (employe_id, type_conge, date_debut, date_fin, nombre_jours, motif))
-                flash("Demande de congé soumise avec succès", "success")
-                return redirect(url_for('conges'))
+                    INSERT INTO conges (employe_id, type_conge, date_debut, date_fin,
+                                        nombre_jours, motif, statut, demande_par_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                """, (employe_id, type_conge, date_debut, date_fin, nombre_jours,
+                      motif, DEMANDE_EN_ATTENTE, session.get('user_id')))
+                cid = cur.fetchone()['id']
+
+                # Étape 1 : router vers le manager du département.
+                nom, dept = _libelle_employe(cur, employe_id)
+                titre = "Demande de congé : %s" % nom
+                corps = ("%s jour(s) du %s au %s. Votre avis est attendu."
+                         % (nombre_jours, d1.strftime('%d/%m/%Y'), d2.strftime('%d/%m/%Y')))
+                managers = _managers_du_departement(cur, dept)
+                for m in managers:
+                    create_notification(m['id'], titre, corps, 'info')
+                if not managers:
+                    # Aucun manager sur ce département : le RH traite directement.
+                    _notifier_roles(cur, ('admin', 'rh'), titre,
+                                    corps + " (aucun manager sur ce département)",
+                                    'info', sauf=session.get('user_id'))
+
+                log_action(session.get('user_id'), session.get('username'),
+                           "Demande de congé", "conge", cid, f"{nombre_jours} j")
+                flash("Demande de congé soumise. Vous serez notifié à chaque étape.", "success")
+                return redirect(url_for('self_service_conges') if not gestionnaire
+                                else url_for('conges'))
             else:
                 flash("Veuillez remplir tous les champs obligatoires", "danger")
-        
-        # GET: load employees
+
         cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
         employees = cur.fetchall()
-    return render_template('conge_form.html', employees=employees)
+    return render_template('conge_form.html', employees=employees,
+                           moi=moi, gestionnaire=gestionnaire)
+
+
+@app.route('/conges/avis/<int:id>', methods=['POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def avis_conge(id):
+    """Étape 2 : le manager du département rend son avis (non décisionnel)."""
+    avis = (request.form.get('avis') or '').strip()
+    commentaire = (request.form.get('commentaire') or '').strip()
+    if avis not in ('favorable', 'defavorable'):
+        flash("Avis invalide.", "danger")
+        return redirect(url_for('conges'))
+    if avis == 'defavorable' and not commentaire:
+        flash("Merci de motiver un avis défavorable.", "danger")
+        return redirect(url_for('conges'))
+
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT * FROM conges WHERE id = %s", (id,))
+        c = cur.fetchone()
+        if not c:
+            flash("Demande introuvable.", "danger")
+            return redirect(url_for('conges'))
+        if c['statut'] not in DEMANDE_OUVERTES:
+            flash("Cette demande est déjà tranchée.", "warning")
+            return redirect(url_for('conges'))
+
+        cur.execute("""UPDATE conges SET statut = %s, avis_manager = %s,
+                          avis_manager_par = %s, avis_manager_le = CURRENT_DATE,
+                          avis_commentaire = %s
+                       WHERE id = %s""",
+                    (DEMANDE_AVIS_RENDU, avis, session.get('username'),
+                     commentaire or None, id))
+
+        nom, _ = _libelle_employe(cur, c['employe_id'])
+        _notifier_roles(cur, ('admin', 'rh'),
+                        "Congé à décider : %s" % nom,
+                        "Avis %s du manager %s. %s"
+                        % (avis, session.get('username'), commentaire[:120]),
+                        'info', sauf=session.get('user_id'))
+        uid = _user_id_de_employe(cur, c['employe_id'])
+        if uid:
+            create_notification(uid, "Votre demande de congé avance",
+                                "Votre manager a rendu un avis %s. "
+                                "La décision RH suit." % avis, 'info')
+
+    log_action(session.get('user_id'), session.get('username'),
+               "Avis manager congé", "conge", id, avis)
+    flash("Avis enregistré : les RH vont trancher.", "success")
+    return redirect(url_for('conges'))
+
 
 @app.route('/conges/update/<int:id>', methods=['POST'])
 @login_required
-@role_required('admin', 'rh', 'manager')
+@role_required('admin', 'rh')
 def update_conge(id):
+    """Étape 3 : décision finale des RH (approbation ou refus motivé)."""
     action = request.form.get('action')
+    motif_refus = (request.form.get('motif_refus') or '').strip()
+    if action == 'refuser' and not motif_refus:
+        flash("Merci d'indiquer le motif du refus : l'employé en sera informé.", "danger")
+        return redirect(url_for('conges'))
+
     with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT * FROM conges WHERE id = %s", (id,))
+        c = cur.fetchone()
+        if not c:
+            flash("Demande introuvable.", "danger")
+            return redirect(url_for('conges'))
+        if c['statut'] not in DEMANDE_OUVERTES:
+            flash("Cette demande est déjà tranchée.", "warning")
+            return redirect(url_for('conges'))
+
+        uid = _user_id_de_employe(cur, c['employe_id'])
+        annee = datetime.strptime(str(c['date_debut']), '%Y-%m-%d').year
+
         if action == 'approuver':
-            cur.execute("UPDATE conges SET statut = 'approuvé' WHERE id = %s", (id,))
-            # Update solde
-            cur.execute("SELECT employe_id, nombre_jours, date_debut FROM conges WHERE id = %s", (id,))
-            conge = cur.fetchone()
-            if conge:
-                from datetime import datetime
-                annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
-                # recalculer_solde() fait la somme exacte des congés approuvés
-                # (plus fiable qu'un delta manuel qui pouvait désynchroniser le solde)
-                recalculer_solde(conge['employe_id'], annee, cur=cur)
-                flash("Congé approuvé et solde mis à jour", "success")
+            cur.execute("""UPDATE conges SET statut = %s, decide_par = %s,
+                              decide_le = CURRENT_DATE, motif_refus = NULL
+                           WHERE id = %s""",
+                        (DEMANDE_APPROUVEE, session.get('username'), id))
+            recalculer_solde(c['employe_id'], annee, cur=cur)
+            if uid:
+                create_notification(uid, "Congé approuvé",
+                                    "Votre congé du %s au %s est approuvé."
+                                    % (c['date_debut'], c['date_fin']), 'success')
+            flash("Congé approuvé et solde mis à jour", "success")
         elif action == 'refuser':
-            cur.execute("UPDATE conges SET statut = 'refusé' WHERE id = %s", (id,))
-            cur.execute("SELECT employe_id, date_debut FROM conges WHERE id = %s", (id,))
-            conge = cur.fetchone()
-            if conge:
-                from datetime import datetime
-                annee = datetime.strptime(str(conge['date_debut']), '%Y-%m-%d').year
-                recalculer_solde(conge['employe_id'], annee, cur=cur)
-            flash("Congé refusé", "info")
+            cur.execute("""UPDATE conges SET statut = %s, decide_par = %s,
+                              decide_le = CURRENT_DATE, motif_refus = %s
+                           WHERE id = %s""",
+                        (DEMANDE_REFUSEE, session.get('username'), motif_refus, id))
+            recalculer_solde(c['employe_id'], annee, cur=cur)
+            if uid:
+                create_notification(uid, "Congé refusé",
+                                    "Votre demande du %s au %s a été refusée : %s"
+                                    % (c['date_debut'], c['date_fin'], motif_refus),
+                                    'danger')
+            flash("Congé refusé : l'employé est informé du motif.", "info")
+        else:
+            flash("Action inconnue.", "danger")
+            return redirect(url_for('conges'))
+
+    log_action(session.get('user_id'), session.get('username'),
+               "Décision congé", "conge", id, action)
     return redirect(url_for('conges'))
+
+
+@app.route('/conges/<int:id>/annuler', methods=['POST'])
+@login_required
+def annuler_conge(id):
+    """L'employé retire sa demande tant qu'elle n'est pas tranchée."""
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT * FROM conges WHERE id = %s", (id,))
+        c = cur.fetchone()
+        if not c:
+            flash("Demande introuvable.", "danger")
+            return redirect(url_for('self_service_conges'))
+        moi = get_current_employee()
+        est_le_mien = moi and moi['id'] == c['employe_id']
+        if not (est_le_mien or _peut_decider_rh()):
+            flash("Vous ne pouvez annuler que vos propres demandes.", "danger")
+            return redirect(url_for('self_service_conges'))
+        if c['statut'] not in DEMANDE_OUVERTES:
+            flash("Cette demande est déjà tranchée : elle ne peut plus être annulée.",
+                  "warning")
+            return redirect(url_for('self_service_conges') if est_le_mien
+                            else url_for('conges'))
+
+        cur.execute("""UPDATE conges SET statut = %s, annule_par = %s
+                       WHERE id = %s""",
+                    (DEMANDE_ANNULEE, session.get('username'), id))
+        nom, dept = _libelle_employe(cur, c['employe_id'])
+        for m in _managers_du_departement(cur, dept):
+            create_notification(m['id'], "Demande de congé annulée",
+                                "%s a retiré sa demande du %s au %s."
+                                % (nom, c['date_debut'], c['date_fin']), 'info')
+
+    log_action(session.get('user_id'), session.get('username'),
+               "Annulation congé", "conge", id, None)
+    flash("Demande annulée.", "success")
+    return redirect(url_for('self_service_conges') if est_le_mien else url_for('conges'))
+
 
 @app.route('/conges/delete/<int:id>', methods=['POST'])
 @login_required
@@ -2963,6 +3276,8 @@ def permissions():
         employees = cur.fetchall()
     filters = {'search': search, 'statut': statut, 'date_debut': date_debut, 'date_fin': date_fin}
     return render_template('permissions.html', permissions=permissions_list, employees=employees, filters=filters,
+                           libelles=DEMANDE_LIBELLES, ouvertes=DEMANDE_OUVERTES,
+                           peut_decider=_peut_decider_rh(), peut_avis=_peut_donner_avis(),
                            pg=pg, page_items=page_list(pg['page'], pg['pages']),
                            base_qs=urlencode({k: v for k, v in filters.items() if v}))
 
@@ -2970,46 +3285,202 @@ def permissions():
 @app.route('/permissions/add', methods=['GET', 'POST'])
 @login_required
 def add_permission():
+    """Dépôt d'une demande de permission (même circuit que les congés)."""
+    moi = get_current_employee()
+    gestionnaire = session.get('role') in ('admin', 'rh', 'manager')
+
     with db_cursor(commit=True) as (conn, cur):
         if request.method == 'POST':
-            employe_id = request.form.get('employe_id')
+            employe_id = request.form.get('employe_id', type=int)
             date_debut = request.form.get('date_debut')
             date_fin = request.form.get('date_fin')
             motif = request.form.get('motif', '').strip()
+
+            if not gestionnaire:
+                if not moi:
+                    flash("Aucun employé n'est lié à votre compte : "
+                          "contactez les RH.", "warning")
+                    return redirect(url_for('self_service'))
+                employe_id = moi['id']
+
             if employe_id and date_debut and date_fin:
                 d1 = datetime.strptime(date_debut, '%Y-%m-%d')
                 d2 = datetime.strptime(date_fin, '%Y-%m-%d')
                 if d2 < d1:
                     flash("La date de fin ne peut pas être avant la date de début", "danger")
                     cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
-                    employees = cur.fetchall()
-                    return render_template('permission_form.html', employees=employees)
+                    return render_template('permission_form.html', employees=cur.fetchall(),
+                                           moi=moi, gestionnaire=gestionnaire)
                 nombre_jours = (d2 - d1).days + 1
                 cur.execute("""
-                    INSERT INTO permissions (employe_id, motif, date_debut, date_fin, nombre_jours, statut)
-                    VALUES (%s, %s, %s, %s, %s, 'en attente')
-                """, (employe_id, motif, date_debut, date_fin, nombre_jours))
-                flash("Demande de permission soumise avec succès", "success")
-                return redirect(url_for('permissions'))
+                    INSERT INTO permissions (employe_id, motif, date_debut, date_fin,
+                                             nombre_jours, statut, demande_par_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                """, (employe_id, motif, date_debut, date_fin, nombre_jours,
+                      DEMANDE_EN_ATTENTE, session.get('user_id')))
+                pid = cur.fetchone()['id']
+
+                nom, dept = _libelle_employe(cur, employe_id)
+                titre = "Demande de permission : %s" % nom
+                corps = ("%s jour(s) du %s au %s. Votre avis est attendu."
+                         % (nombre_jours, d1.strftime('%d/%m/%Y'), d2.strftime('%d/%m/%Y')))
+                managers = _managers_du_departement(cur, dept)
+                for m in managers:
+                    create_notification(m['id'], titre, corps, 'info')
+                if not managers:
+                    _notifier_roles(cur, ('admin', 'rh'), titre,
+                                    corps + " (aucun manager sur ce département)",
+                                    'info', sauf=session.get('user_id'))
+
+                log_action(session.get('user_id'), session.get('username'),
+                           "Demande de permission", "permission", pid, f"{nombre_jours} j")
+                flash("Demande de permission soumise. Vous serez notifié à chaque étape.",
+                      "success")
+                return redirect(url_for('self_service_conges') if not gestionnaire
+                                else url_for('permissions'))
             flash("Veuillez remplir tous les champs obligatoires", "danger")
         cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
         employees = cur.fetchall()
-    return render_template('permission_form.html', employees=employees)
+    return render_template('permission_form.html', employees=employees,
+                           moi=moi, gestionnaire=gestionnaire)
+
+
+@app.route('/permissions/avis/<int:id>', methods=['POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def avis_permission(id):
+    """Étape 2 : avis du manager du département."""
+    avis = (request.form.get('avis') or '').strip()
+    commentaire = (request.form.get('commentaire') or '').strip()
+    if avis not in ('favorable', 'defavorable'):
+        flash("Avis invalide.", "danger")
+        return redirect(url_for('permissions'))
+    if avis == 'defavorable' and not commentaire:
+        flash("Merci de motiver un avis défavorable.", "danger")
+        return redirect(url_for('permissions'))
+
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT * FROM permissions WHERE id = %s", (id,))
+        pm = cur.fetchone()
+        if not pm:
+            flash("Demande introuvable.", "danger")
+            return redirect(url_for('permissions'))
+        if pm['statut'] not in DEMANDE_OUVERTES:
+            flash("Cette demande est déjà tranchée.", "warning")
+            return redirect(url_for('permissions'))
+
+        cur.execute("""UPDATE permissions SET statut = %s, avis_manager = %s,
+                          avis_manager_par = %s, avis_manager_le = CURRENT_DATE,
+                          avis_commentaire = %s
+                       WHERE id = %s""",
+                    (DEMANDE_AVIS_RENDU, avis, session.get('username'),
+                     commentaire or None, id))
+
+        nom, _ = _libelle_employe(cur, pm['employe_id'])
+        _notifier_roles(cur, ('admin', 'rh'),
+                        "Permission à décider : %s" % nom,
+                        "Avis %s du manager %s. %s"
+                        % (avis, session.get('username'), commentaire[:120]),
+                        'info', sauf=session.get('user_id'))
+        uid = _user_id_de_employe(cur, pm['employe_id'])
+        if uid:
+            create_notification(uid, "Votre demande de permission avance",
+                                "Votre manager a rendu un avis %s. "
+                                "La décision RH suit." % avis, 'info')
+
+    log_action(session.get('user_id'), session.get('username'),
+               "Avis manager permission", "permission", id, avis)
+    flash("Avis enregistré : les RH vont trancher.", "success")
+    return redirect(url_for('permissions'))
 
 
 @app.route('/permissions/update/<int:id>', methods=['POST'])
 @login_required
-@role_required('admin', 'rh', 'manager')
+@role_required('admin', 'rh')
 def update_permission(id):
+    """Étape 3 : décision finale des RH."""
     action = request.form.get('action')
+    motif_refus = (request.form.get('motif_refus') or '').strip()
+    if action == 'refuser' and not motif_refus:
+        flash("Merci d'indiquer le motif du refus : l'employé en sera informé.", "danger")
+        return redirect(url_for('permissions'))
+
     with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT * FROM permissions WHERE id = %s", (id,))
+        pm = cur.fetchone()
+        if not pm:
+            flash("Demande introuvable.", "danger")
+            return redirect(url_for('permissions'))
+        if pm['statut'] not in DEMANDE_OUVERTES:
+            flash("Cette demande est déjà tranchée.", "warning")
+            return redirect(url_for('permissions'))
+
+        uid = _user_id_de_employe(cur, pm['employe_id'])
         if action == 'approuver':
-            cur.execute("UPDATE permissions SET statut = 'approuvé' WHERE id = %s", (id,))
+            cur.execute("""UPDATE permissions SET statut = %s, decide_par = %s,
+                              decide_le = CURRENT_DATE, motif_refus = NULL
+                           WHERE id = %s""",
+                        (DEMANDE_APPROUVEE, session.get('username'), id))
+            if uid:
+                create_notification(uid, "Permission approuvée",
+                                    "Votre permission du %s au %s est approuvée."
+                                    % (pm['date_debut'], pm['date_fin']), 'success')
             flash("Permission approuvée", "success")
         elif action == 'refuser':
-            cur.execute("UPDATE permissions SET statut = 'refusé' WHERE id = %s", (id,))
-            flash("Permission refusée", "info")
+            cur.execute("""UPDATE permissions SET statut = %s, decide_par = %s,
+                              decide_le = CURRENT_DATE, motif_refus = %s
+                           WHERE id = %s""",
+                        (DEMANDE_REFUSEE, session.get('username'), motif_refus, id))
+            if uid:
+                create_notification(uid, "Permission refusée",
+                                    "Votre demande du %s au %s a été refusée : %s"
+                                    % (pm['date_debut'], pm['date_fin'], motif_refus),
+                                    'danger')
+            flash("Permission refusée : l'employé est informé du motif.", "info")
+        else:
+            flash("Action inconnue.", "danger")
+            return redirect(url_for('permissions'))
+
+    log_action(session.get('user_id'), session.get('username'),
+               "Décision permission", "permission", id, action)
     return redirect(url_for('permissions'))
+
+
+@app.route('/permissions/<int:id>/annuler', methods=['POST'])
+@login_required
+def annuler_permission(id):
+    """Retrait d'une demande de permission par son auteur."""
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT * FROM permissions WHERE id = %s", (id,))
+        pm = cur.fetchone()
+        if not pm:
+            flash("Demande introuvable.", "danger")
+            return redirect(url_for('self_service_conges'))
+        moi = get_current_employee()
+        est_le_mien = moi and moi['id'] == pm['employe_id']
+        if not (est_le_mien or _peut_decider_rh()):
+            flash("Vous ne pouvez annuler que vos propres demandes.", "danger")
+            return redirect(url_for('self_service_conges'))
+        if pm['statut'] not in DEMANDE_OUVERTES:
+            flash("Cette demande est déjà tranchée : elle ne peut plus être annulée.",
+                  "warning")
+            return redirect(url_for('self_service_conges') if est_le_mien
+                            else url_for('permissions'))
+
+        cur.execute("""UPDATE permissions SET statut = %s, annule_par = %s
+                       WHERE id = %s""",
+                    (DEMANDE_ANNULEE, session.get('username'), id))
+        nom, dept = _libelle_employe(cur, pm['employe_id'])
+        for m in _managers_du_departement(cur, dept):
+            create_notification(m['id'], "Demande de permission annulée",
+                                "%s a retiré sa demande du %s au %s."
+                                % (nom, pm['date_debut'], pm['date_fin']), 'info')
+
+    log_action(session.get('user_id'), session.get('username'),
+               "Annulation permission", "permission", id, None)
+    flash("Demande annulée.", "success")
+    return redirect(url_for('self_service_conges') if est_le_mien
+                    else url_for('permissions'))
 
 
 @app.route('/permissions/delete/<int:id>', methods=['POST'])
@@ -4738,12 +5209,28 @@ def attribuer_materiel(id):
                                        f"Attribution à {nom_complet}")
                 cur.execute("""
                     INSERT INTO materiels_attributions
-                        (materiel_id, employe_id, quantite, commentaire)
-                    VALUES (%s, %s, %s, %s)
-                """, (id, employe_id, quantite, commentaire or None))
+                        (materiel_id, employe_id, quantite, commentaire, attribue_par)
+                    VALUES (%s, %s, %s, %s, %s) RETURNING id
+                """, (id, employe_id, quantite, commentaire or None,
+                      session.get('username')))
+                attribution_id = cur.fetchone()['id']
+
+                # L'attribution n'est acquise qu'une fois l'employé l'ayant
+                # confirmée : on l'invite à accuser réception.
+                cur.execute("SELECT nom FROM materiels WHERE id = %s", (id,))
+                mrow = cur.fetchone()
+                libelle = mrow['nom'] if mrow else "matériel"
+                uid = _user_id_de_employe(cur, employe_id)
+                if uid:
+                    create_notification(
+                        uid, "Matériel à réceptionner",
+                        "%s (x%s) vous a été attribué. Merci d'accuser réception "
+                        "depuis votre espace, ou de contester si l'équipement "
+                        "ne vous a pas été remis." % (libelle, quantite), 'info')
             log_action(session.get('user_id'), session.get('username'),
                        "Attribution matériel", "materiel", id, nom_complet)
-            flash(f"Matériel attribué à {nom_complet}", "success")
+            flash(f"Matériel attribué à {nom_complet} — en attente de son accusé de réception",
+                  "success")
         except ValueError as e:
             flash(str(e), "danger")
         except Exception as e:
@@ -4773,8 +5260,18 @@ def retour_materiel(attribution_id):
                 raise ValueError("Ce matériel a déjà été retourné")
 
             materiel_id = attr['materiel_id']
-            cur.execute("UPDATE materiels_attributions SET date_retour = CURRENT_DATE WHERE id = %s",
-                        (attribution_id,))
+            # Le retour rouvre l'accusé de réception : l'employé confirme
+            # cette fois avoir bien restitué l'équipement.
+            cur.execute("""UPDATE materiels_attributions
+                              SET date_retour = CURRENT_DATE, accuse_reception = FALSE,
+                                  accuse_le = NULL, accuse_par = NULL, conteste_motif = NULL
+                            WHERE id = %s""", (attribution_id,))
+            uid = _user_id_de_employe(cur, attr['employe_id'])
+            if uid:
+                create_notification(
+                    uid, "Restitution à confirmer",
+                    "Le retour du matériel a été enregistré. Merci de le confirmer "
+                    "depuis votre espace, ou de le contester.", 'info')
             # Le retour réintègre l'article dans le stock.
             _enregistrer_mouvement(
                 cur, materiel_id, 'entree', attr['quantite'], attr['employe_id'],
@@ -4788,6 +5285,97 @@ def retour_materiel(attribution_id):
 
     return redirect(url_for('view_materiel', id=materiel_id) if materiel_id
                     else url_for('materiels'))
+
+
+@app.route('/materiels/attribution/<int:attribution_id>/accuser', methods=['POST'])
+@login_required
+def accuser_attribution(attribution_id):
+    """L'employé confirme la remise (ou la restitution) de l'équipement."""
+    conteste = request.form.get('action') == 'contester'
+    motif = (request.form.get('conteste_motif') or '').strip()
+    retour = request.form.get('retour') or url_for('self_service_materiels')
+
+    if conteste and not motif:
+        flash("Merci de préciser ce qui ne correspond pas.", "danger")
+        return redirect(retour)
+
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("""
+            SELECT a.*, m.nom AS materiel_nom
+              FROM materiels_attributions a
+              JOIN materiels m ON m.id = a.materiel_id
+             WHERE a.id = %s
+        """, (attribution_id,))
+        attr = cur.fetchone()
+        if not attr:
+            flash("Attribution introuvable.", "danger")
+            return redirect(retour)
+
+        moi = get_current_employee()
+        if not (moi and moi['id'] == attr['employe_id']):
+            flash("Seul le détenteur du matériel peut accuser réception.", "danger")
+            return redirect(retour)
+        if attr['accuse_reception']:
+            flash("Cette ligne a déjà été confirmée.", "warning")
+            return redirect(retour)
+
+        etape = "la restitution" if attr['date_retour'] else "la réception"
+        if conteste:
+            cur.execute("""UPDATE materiels_attributions
+                              SET conteste_motif = %s WHERE id = %s""",
+                        (motif, attribution_id))
+            _notifier_roles(cur, ('admin', 'rh', 'manager'),
+                            "Attribution contestée : %s" % attr['materiel_nom'],
+                            "%s %s conteste %s : %s"
+                            % (moi['prenom'], moi['nom'], etape, motif), 'warning')
+            log_action(session.get('user_id'), session.get('username'),
+                       "Contestation attribution", "materiel",
+                       attr['materiel_id'], motif[:120])
+            flash("Contestation transmise au gestionnaire du parc.", "info")
+        else:
+            cur.execute("""UPDATE materiels_attributions
+                              SET accuse_reception = TRUE, accuse_le = CURRENT_DATE,
+                                  accuse_par = %s, conteste_motif = NULL
+                            WHERE id = %s""",
+                        (session.get('username'), attribution_id))
+            _notifier_roles(cur, ('admin', 'rh', 'manager'),
+                            "Accusé de réception : %s" % attr['materiel_nom'],
+                            "%s %s a confirmé %s."
+                            % (moi['prenom'], moi['nom'], etape), 'success')
+            log_action(session.get('user_id'), session.get('username'),
+                       "Accusé de réception", "materiel", attr['materiel_id'], etape)
+            flash("Merci, votre confirmation est enregistrée.", "success")
+
+    return redirect(retour)
+
+
+@app.route('/materiels/attribution/<int:attribution_id>/relancer', methods=['POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def relancer_accuse(attribution_id):
+    """Relance l'employé qui n'a pas encore accusé réception."""
+    with db_cursor(commit=True) as (conn, cur):
+        cur.execute("""
+            SELECT a.*, m.nom AS materiel_nom
+              FROM materiels_attributions a
+              JOIN materiels m ON m.id = a.materiel_id
+             WHERE a.id = %s
+        """, (attribution_id,))
+        attr = cur.fetchone()
+        if not attr:
+            flash("Attribution introuvable.", "danger")
+            return redirect(url_for('materiels'))
+        uid = _user_id_de_employe(cur, attr['employe_id'])
+        if uid:
+            create_notification(uid, "Rappel : matériel à confirmer",
+                                "Merci de confirmer la %s de « %s » depuis votre espace."
+                                % ("restitution" if attr['date_retour'] else "réception",
+                                   attr['materiel_nom']), 'warning')
+            flash("Relance envoyée.", "success")
+        else:
+            flash("Cet employé n'a pas de compte utilisateur : relance impossible.",
+                  "warning")
+    return redirect(url_for('view_materiel', id=attr['materiel_id']))
 
 
 @app.route('/materiels/delete/<int:id>', methods=['POST'])

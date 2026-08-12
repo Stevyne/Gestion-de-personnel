@@ -11,6 +11,13 @@
         <p style="margin:0; color:#475569;">{{ employee.departement }} • {{ employee.email or '' }}</p>
     </div>
 
+    {% if materiels_a_confirmer %}
+    <div class="wf-attente">
+        <strong>{{ materiels_a_confirmer }} équipement(s) en attente de votre confirmation.</strong>
+        <a href="{{ url_for('self_service_materiels') }}" class="btn btn-sm btn-primary" style="margin-left:10px;">Accuser réception</a>
+    </div>
+    {% endif %}
+
     <div style="margin-bottom:30px;">
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
             <h3 style="margin:0;">🕒 Mes Présences</h3>
@@ -60,15 +67,27 @@
                 <td data-label="Type">{{ c.type_conge }}</td>
                 <td data-label="Dates">{{ c.date_debut }} → {{ c.date_fin }}</td>
                 <td data-label="Jours">{{ c.nombre_jours }} j</td>
-                <td data-label="Statut">{{ c.statut }}</td>
+                <td data-label="Statut">{{ libelles.get(c.statut, c.statut) }}</td>
             </tr>
             {% endfor %}
             </tbody>
         </table>
         </div>
         <div style="margin-top:12px;">
-            <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('add_conge') }}" class="js-modal-form btn btn-primary">+ Nouvelle demande</a>
+            <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('add_conge') }}" class="js-modal-form btn btn-primary">+ Demander un congé</a>
+            <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">+ Demander une permission</a>
         </div>
+    </div>
+
+    <div style="margin-top:30px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <h3 style="margin:0;">💻 Mon matériel</h3>
+            <a href="{{ url_for('self_service_materiels') }}" class="btn btn-secondary" style="font-size:0.8rem;padding:4px 10px;">Voir et confirmer</a>
+        </div>
+        <p style="margin:0; color:#64748b; font-size:0.86rem;">
+            Confirmez la réception des équipements qui vous sont remis, ou contestez
+            si l'enregistrement ne correspond pas.
+        </p>
     </div>
     {% else %}
     <p>Aucun employé lié à votre compte.</p>

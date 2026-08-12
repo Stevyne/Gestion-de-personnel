@@ -56,12 +56,23 @@ def test_refuse_conge_does_not_consume_solde(admin_client):
         cur.execute("SELECT id FROM conges WHERE employe_id = 1")
         conge_id = cur.fetchone()['id']
 
+    # Depuis la mise en place du circuit à deux niveaux, un refus doit être motivé :
+    # sans motif, la demande reste ouverte.
     admin_client.post(f'/conges/update/{conge_id}', data={'action': 'refuser'}, follow_redirects=True)
-
     with application.db_cursor() as (conn, cur):
         cur.execute("SELECT statut FROM conges WHERE id = %s", (conge_id,))
-        statut = cur.fetchone()['statut']
+        assert cur.fetchone()['statut'] in ('en attente', 'avis rendu')
+
+    admin_client.post(f'/conges/update/{conge_id}',
+                      data={'action': 'refuser', 'motif_refus': 'Effectif insuffisant'},
+                      follow_redirects=True)
+
+    with application.db_cursor() as (conn, cur):
+        cur.execute("SELECT statut, motif_refus FROM conges WHERE id = %s", (conge_id,))
+        row = cur.fetchone()
+        statut = row['statut']
     assert statut == 'refusé'
+    assert row['motif_refus'] == 'Effectif insuffisant'
 
     solde = application.get_solde_conges(1)
     assert solde['jours_utilises'] == 0

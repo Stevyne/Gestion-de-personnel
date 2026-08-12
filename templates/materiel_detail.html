@@ -275,8 +275,17 @@
                         {% else %}
                             <span class="badge" style="background:#dbeafe;color:#1e40af;">En cours</span>
                         {% endif %}
+                        {% if a.accuse_reception %}
+                            <div class="wf-meta">✔ Confirmé par {{ a.accuse_par }} le {{ a.accuse_le }}</div>
+                        {% elif a.conteste_motif %}
+                            <div class="wf-meta wf-meta-danger">⚠ Contesté : {{ a.conteste_motif }}</div>
+                        {% else %}
+                            <div class="wf-meta">⏳ En attente d'accusé de réception</div>
+                        {% endif %}
+                        {% if a.attribue_par %}<div class="wf-meta">Attribué par {{ a.attribue_par }}</div>{% endif %}
                     </td>
                     <td data-label="Actions">
+                        <div class="wf-actions">
                         {% if not a.date_retour and peut_gerer_materiels %}
                         <form action="{{ url_for('retour_materiel', attribution_id=a.id) }}" method="post"
                               style="display:inline;">
@@ -284,7 +293,15 @@
                             <input type="hidden" name="materiel_id" value="{{ materiel.id }}">
                             <button type="submit" class="btn btn-secondary btn-xs">↩️ Marquer rendu</button>
                         </form>
-                        {% else %}—{% endif %}
+                        {% endif %}
+                        {% if not a.accuse_reception and peut_gerer_materiels %}
+                        <form action="{{ url_for('relancer_accuse', attribution_id=a.id) }}" method="post"
+                              style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-secondary btn-xs">🔔 Relancer</button>
+                        </form>
+                        {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
