@@ -2769,3 +2769,136 @@ footer {
 }
 
 .ns-plus:hover { text-decoration: underline; }
+
+/* ===== INVENTAIRE PHYSIQUE ===== */
+.inv-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    font-size: .93rem;
+    color: #1e293b;
+}
+.inv-meta-label {
+    display: block;
+    font-size: .74rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #64748b;
+    margin-bottom: 2px;
+}
+.inv-alerte {
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    font-size: .92rem;
+    border-left: 4px solid;
+}
+.inv-alerte-warn { background: #fffbeb; border-color: #f59e0b; color: #78350f; }
+.inv-alerte-info { background: #eff6ff; border-color: #3b82f6; color: #1e3a8a; }
+.inv-alerte-ok   { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
+
+/* Saisie du comptage : quantité + observation + validation sur une ligne */
+.inv-saisie {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.inv-saisie .form-control { padding: 6px 9px; font-size: .88rem; }
+
+.inv-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid #e2e8f0;
+}
+
+@media (max-width: 768px) {
+    .inv-meta { flex-direction: column; gap: 10px; }
+    /* En mode carte, la saisie prend toute la largeur disponible */
+    .inv-saisie { width: 100%; }
+    .inv-saisie .form-control { flex: 1 1 auto; width: auto !important; min-width: 0; }
+    .inv-actions .confirm-form, .inv-actions .btn { width: 100%; }
+    .inv-actions .btn { display: block; text-align: center; }
+}
+
+/* -------------------------------------------------------------------------
+   Correctif : chevauchement navigation / champ de recherche
+   La colonne centrale (onglets) et la colonne de droite (recherche + compte)
+   se recouvraient dès 1280px : le champ de recherche passait AU-DESSUS des
+   onglets et interceptait les clics (« Matériels » devenait incliquable).
+   Cause : `.nav-links` ne se comprime pas (nowrap, largeurs fixes) et déborde
+   de sa piste de grille, que `justify-self: center` laisse s'étendre.
+   Correctif : la piste centrale ne peut plus dépasser sa largeur allouée, les
+   onglets se compriment, et les libellés cèdent la place plus tôt.
+   ------------------------------------------------------------------------- */
+@media (min-width: 769px) {
+    /* La piste centrale reste dans ses limites : plus de recouvrement. */
+    .navbar .nav-links.desktop-nav {
+        min-width: 0;
+        max-width: 100%;
+        justify-self: center;
+        /* Sans cela, un onglet trop long (« Utilisateurs ») sort du conteneur
+           et glisse sous le champ de recherche, qui intercepte alors le clic. */
+        overflow: hidden;
+    }
+    /* Les onglets acceptent de rétrécir plutôt que de déborder. */
+    .navbar .nav-links.desktop-nav > * { flex: 0 1 auto; min-width: 0; }
+    .navbar .nav-links.desktop-nav .nav-link,
+    .navbar .nav-links.desktop-nav .nav-dropdown-toggle {
+        padding: 8px 9px;
+        font-size: 0.875rem;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+    /* Écart icône/libellé resserré : les derniers pixels nécessaires pour que
+       « Tableau de bord » et « Utilisateurs » s'affichent en entier. */
+    .navbar .nav-links.desktop-nav .nav-link,
+    .navbar .nav-links.desktop-nav .nav-dropdown-toggle { gap: 6px; }
+    /* L'icône ne doit jamais être rognée : seul le libellé se réduit. */
+    .navbar .nav-links.desktop-nav .nav-link > svg,
+    .navbar .nav-links.desktop-nav .nav-dropdown-toggle > svg { flex: 0 0 auto; }
+    .navbar .nav-links.desktop-nav .nav-link > span,
+    .navbar .nav-links.desktop-nav .nav-dropdown-toggle > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+    }
+    /* Le champ rend de la place avant de pousser les onglets. */
+    .navbar .nav-search-input { width: clamp(110px, 12vw, 175px); }
+    .navbar .nav-links.desktop-nav { gap: 2px; }
+    .navbar .nav-container { column-gap: 12px; padding: 0 16px; }
+    .navbar .nav-user-section { gap: 8px; padding-left: 10px; }
+}
+
+/* Depuis l'ajout du champ de recherche, la barre plafonnée à 1360px n'a plus
+   la place d'afficher les six libellés en entier : ils étaient tronqués
+   (« Tableau de b… », « Utilisate… »).
+   Sur grand écran, on élargit légèrement la barre — la place existe. */
+@media (min-width: 1400px) {
+    .navbar .nav-container { max-width: 1440px; }
+}
+
+/* Entre 1151px et 1400px, la place manque vraiment : le nom et le rôle en
+   toutes lettres s'effacent (l'avatar identifie le compte, et le menu du
+   compte les rappelle), comme le fait déjà la barre en dessous de 1150px. */
+@media (min-width: 1151px) and (max-width: 1399px) {
+    .navbar .user-info { display: none; }
+    .navbar .user-trigger { padding: 5px; }
+}
+
+/* Les libellés des onglets cèdent la place plus tôt (au lieu de 1070px) :
+   en dessous, la barre ne peut plus afficher texte + recherche sans collision. */
+@media (min-width: 769px) and (max-width: 1290px) {
+    .navbar .nav-links.desktop-nav .nav-link > span,
+    .navbar .nav-links.desktop-nav .nav-dropdown-toggle > span { display: none; }
+    .navbar .nav-links.desktop-nav .nav-link { padding: 9px; }
+    .navbar .nav-dropdown-menu span { display: inline; }
+}

@@ -49,6 +49,16 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Rôles : `admin`, `rh` et `manager` gèrent le stock ; la suppression est réservée à `admin`/`rh` ; les autres rôles consultent
 - Routes : `/materiels`, `/materiels/add`, `/materiels/edit/<id>`, `/materiels/<id>`, `/materiels/<id>/mouvement`, `/materiels/<id>/attribuer`, `/materiels/attribution/<id>/retour`, `/materiels/delete/<id>`
 
+### 📋 Inventaire physique
+- Le stock du module Matériels est un **stock théorique** : il découle des mouvements saisis. L'inventaire le confronte au terrain (« 10 en base, 9 trouvés → anomalie »)
+- **Campagne par département** : l'ouverture fige la liste des articles et leur stock théorique à l'instant T ; on saisit ensuite les quantités réellement comptées
+- Écart calculé par ligne : **conforme**, *n* **manquant(s)** ou **+n en trop**. Compteurs d'avancement (comptés / restants / écarts) et écart net de la campagne
+- Une ligne **non comptée** est distincte d'un comptage à zéro : elle est **ignorée** à la clôture (son stock reste inchangé)
+- **À la clôture, le stock est aligné** sur les quantités comptées via un mouvement d'ajustement tracé (`origine = 'inventaire'`), visible dans l'historique du matériel. L'ajustement part du **stock réel du moment**, ce qui reste correct si des mouvements ont eu lieu pendant la campagne
+- Une seule campagne ouverte à la fois par département (évite deux ajustements concurrents). Une campagne peut aussi être **annulée** sans toucher au stock
+- Rôles : `admin`, `rh` et `manager` saisissent les comptages ; la **clôture** (qui modifie le stock) est réservée à `admin`/`rh` ; les autres consultent
+- Routes : `/inventaires`, `/inventaires/nouveau`, `/inventaires/<id>`, `/inventaires/<id>/compter`, `/inventaires/<id>/cloturer`, `/inventaires/<id>/annuler`
+
 ### 🔎 Recherche globale
 - Barre de recherche dans l'en-tête, avec **aperçu instantané** groupé par type et page complète `/recherche`
 - Couvre les **employés, départements, matériels, congés, absences, documents, comptes** — et les pages de l'application (façon palette de navigation)
@@ -221,6 +231,7 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 | `/employes`, `/employes/add`, ...  | Gestion des employés             | Tous / selon rôle      |
 | `/departements`                    | Gestion des départements         | Selon rôle             |
 | `/materiels`, `/materiels/add`     | Matériels par département        | Tous / selon rôle      |
+| `/inventaires`, `/inventaires/nouveau` | Inventaire physique          | Saisie : admin/rh/manager · clôture : admin/rh |
 | `/presences`, `/presences/add`     | Pointages                        | Tous / selon rôle      |
 | `/conges`, `/conges/add`           | Congés                           | Tous / selon rôle      |
 | `/permissions`, `/permissions/add` | Permissions (module séparé)      | Tous / selon rôle      |
@@ -297,6 +308,7 @@ Gestion-de-personnel/
 │   ├── utilisateurs.html   # Comptes + badges de connexion
 │   ├── presences.html / conges.html / absences.html / permissions.html
 │   ├── materiels.html / materiel_detail.html / materiel_form.html
+│   ├── inventaires.html / inventaire_detail.html / inventaire_form.html
 │   ├── calendrier_conges.html / soldes_conges.html
 │   ├── departements.html / documents.html / historique.html
 │   ├── rapports.html / notifications.html / audit.html
@@ -317,6 +329,7 @@ Gestion-de-personnel/
 - Les retards sont calculés en minutes par rapport à `HEURE_ARRIVEE_ATTENDUE` (09:00 par défaut)
 - Les exports incluent le calcul des retards
 - Les uploads (documents et photos) sont validés sur leur **contenu réel** (magic-bytes), pas seulement sur l'extension
+- Le stock des matériels n'est jamais édité à la main : il découle des mouvements, y compris des ajustements d'inventaire (traçabilité complète)
 - Sécurité applicative activée (CSRF, rate limiting, headers HTTP via Talisman) ; `SECRET_KEY` et `FLASK_DEBUG` sont lus depuis l'environnement
 - En production : prévoir un stockage de rate limiting partagé (Redis) et activer HTTPS (`force_https` + `SESSION_COOKIE_SECURE`)
 

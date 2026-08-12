@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>📋 {{ inv.reference or ('INV-' ~ inv.id) }}</h1>
+        <div>
+            <a href="{{ url_for('inventaires') }}" class="btn btn-secondary">← Toutes les campagnes</a>
+        </div>
+    </div>
+
+    <div class="inv-meta">
+        <div><span class="inv-meta-label">Département</span> <strong>{{ inv.departement_nom or '—' }}</strong></div>
+        <div>
+            <span class="inv-meta-label">Statut</span>
+            {% if inv.statut == 'en_cours' %}
+                <span class="badge" style="background:#fef9c3;color:#854d0e;">En cours</span>
+            {% elif inv.statut == 'cloture' %}
+                <span class="badge" style="background:#dcfce7;color:#166534;">Clôturée</span>
+            {% else %}
+                <span class="badge" style="background:#e2e8f0;color:#475569;">Annulée</span>
+            {% endif %}
+        </div>
+        <div>
+            <span class="inv-meta-label">Ouverte le</span>
+            {{ inv.date_creation.strftime('%d/%m/%Y à %H:%M') if inv.date_creation.strftime is defined else inv.date_creation }}
+            {% if inv.cree_par_nom %}par {{ inv.cree_par_nom }}{% endif %}
+        </div>
+        {% if inv.date_cloture %}
+        <div>
+            <span class="inv-meta-label">{{ 'Annulée le' if inv.statut == 'annule' else 'Clôturée le' }}</span>
+            {{ inv.date_cloture.strftime('%d/%m/%Y à %H:%M') if inv.date_cloture.strftime is defined else inv.date_cloture }}
+            {% if inv.cloture_par_nom %}par {{ inv.cloture_par_nom }}{% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if inv.commentaire %}
+    <p style="color:#475569; margin: 0 0 16px;"><em>{{ inv.commentaire }}</em></p>
+    {% endif %}
+
+    <div class="materiels-stats">
+        <div class="materiel-stat">
+            <div class="materiel-stat-value">{{ stats.nb_lignes }}</div>
+            <div class="materiel-stat-label">Articles à compter</div>
+        </div>
+        <div class="materiel-stat" style="background:#eff6ff;">
+            <div class="materiel-stat-value" style="color:#1d4ed8;">{{ stats.nb_comptes }}</div>
+            <div class="materiel-stat-label">Comptés</div>
+        </div>
+        <div class="materiel-stat" style="background:#f1f5f9;">
+            <div class="materiel-stat-value" style="color:#475569;">{{ stats.nb_restants }}</div>
+            <div class="materiel-stat-label">Restants</div>
+        </div>
+        <div class="materiel-stat" style="background:{{ '#fee2e2' if stats.nb_ecarts else '#dcfce7' }};">
+            <div class="materiel-stat-value" style="color:{{ '#991b1b' if stats.nb_ecarts else '#166534' }};">{{ stats.nb_ecarts }}</div>
+            <div class="materiel-stat-label">Écarts constatés</div>
+        </div>
+    </div>
+
+    {% if inv.statut == 'en_cours' %}
+        {% if stats.nb_ecarts %}
+        <div class="inv-alerte inv-alerte-warn">
+            <strong>⚠ {{ stats.nb_ecarts }} anomalie(s) détectée(s).</strong>
+            Écart net : {{ '%+d' % stats.ecart_net }} unité(s).
+            À la clôture, le stock sera aligné sur les quantités comptées.
+        </div>
+        {% endif %}
+        {% if stats.nb_restants %}
+        <div class="inv-alerte inv-alerte-info">
+            {{ stats.nb_restants }} article(s) pas encore compté(s).
+            Une ligne laissée vide sera <strong>ignorée</strong> à la clôture : son stock restera inchangé.
+        </div>
+        {% endif %}
+    {% elif inv.statut == 'cloture' %}
+        <div class="inv-alerte inv-alerte-ok">
+            Campagne clôturée. Les écarts ont été appliqués au stock sous forme de
+            mouvements d'ajustement, visibles dans l'historique de chaque matériel.
+        </div>
+    {% endif %}
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Matériel</th>
+                    <th>Stock théorique</th>
+                    <th>Compté</th>
+                    <th>Écart</th>
+                    <th>Observation</th>
+                    {% if inv.statut == 'en_cours' and peut_saisir %}<th>Saisie</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in lignes %}
+                <tr>
+                    <td data-label="Matériel">
+                        <a href="{{ url_for('view_materiel', id=l.materiel_id) }}">{{ l.materiel_nom }}</a>
+                        <small style="color:#94a3b8;">({{ l.unite or 'unité' }})</small>
+                    </td>
+                    <td data-label="Stock théorique"><strong>{{ l.quantite_theorique }}</strong></td>
+                    <td data-label="Compté">
+                        {% if l.quantite_comptee is none %}
+                            <span style="color:#94a3b8;">non compté</span>
+                        {% else %}
+                            <strong>{{ l.quantite_comptee }}</strong>
+                        {% endif %}
+                    </td>
+                    <td data-label="Écart">
+                        {% if l.quantite_comptee is none %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% elif l.ecart == 0 %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">Conforme</span>
+                        {% elif l.ecart < 0 %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">{{ l.ecart }} manquant(s)</span>
+                        {% else %}
+                            <span class="badge" style="background:#dbeafe;color:#1e40af;">+{{ l.ecart }} en trop</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Observation">
+                        <small>{{ l.commentaire or '—' }}</small>
+                        {% if l.compte_par_nom %}
+                        <br><small style="color:#94a3b8;">par {{ l.compte_par_nom }}</small>
+                        {% endif %}
+                    </td>
+                    {% if inv.statut == 'en_cours' and peut_saisir %}
+                    <td data-label="Saisie">
+                        <form method="POST" action="{{ url_for('compter_inventaire', id=inv.id) }}" class="inv-saisie">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="ligne_id" value="{{ l.id }}">
+                            <input type="number" name="quantite_comptee" min="0" step="1"
+                                   class="form-control" style="width:90px;"
+                                   value="{{ l.quantite_comptee if l.quantite_comptee is not none else '' }}"
+                                   placeholder="qté"
+                                   aria-label="Quantité comptée pour {{ l.materiel_nom }}">
+                            <input type="text" name="commentaire" class="form-control"
+                                   style="width:150px;" value="{{ l.commentaire or '' }}"
+                                   placeholder="observation"
+                                   aria-label="Observation pour {{ l.materiel_nom }}">
+                            <button type="submit" class="btn btn-sm btn-primary">OK</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" style="text-align:center; color:#94a3b8; padding:24px;">
+                        Ce département ne contient aucun article à inventorier.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if inv.statut == 'en_cours' and peut_cloturer %}
+    <div class="inv-actions">
+        <form method="POST" action="{{ url_for('cloturer_inventaire', id=inv.id) }}" class="confirm-form"
+              data-confirm-icon="📋"
+              data-confirm-title="Clôturer cette campagne d'inventaire ?"
+              data-confirm-subtitle="Le stock théorique sera aligné sur les quantités comptées."
+              data-confirm-warning="{{ stats.nb_ecarts }} article(s) en écart seront corrigés par un mouvement d'ajustement tracé. Les lignes non comptées resteront inchangées. Action définitive."
+              data-confirm-confirm="Clôturer et ajuster">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary">✓ Clôturer et ajuster le stock</button>
+        </form>
+        <form method="POST" action="{{ url_for('annuler_inventaire', id=inv.id) }}" class="confirm-form"
+              data-confirm-icon="🚫"
+              data-confirm-title="Annuler cette campagne ?"
+              data-confirm-subtitle="Le comptage est conservé pour l'historique."
+              data-confirm-warning="Le stock ne sera pas modifié : les écarts constatés resteront non corrigés."
+              data-confirm-confirm="Annuler la campagne">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary">Annuler la campagne</button>
+        </form>
+    </div>
+    {% elif inv.statut == 'en_cours' and peut_saisir %}
+    <p style="color:#64748b; margin-top:16px;">
+        <small>La clôture (qui corrige le stock) est réservée aux administrateurs et aux RH.</small>
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

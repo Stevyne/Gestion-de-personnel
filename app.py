@@ -1027,6 +1027,46 @@ def init_db():
     # que le stock n'est pas repassé au-dessus du seuil (remis à FALSE alors).
     cur.execute("ALTER TABLE materiels ADD COLUMN IF NOT EXISTS alerte_envoyee BOOLEAN DEFAULT FALSE")
 
+    # --- Inventaire physique -------------------------------------------------
+    # Une campagne fige, à un instant T, la liste des articles d'un département
+    # et leur stock théorique ; on y saisit ensuite le comptage réel. Le stock
+    # n'est corrigé qu'à la clôture, via un mouvement d'ajustement tracé.
+    # statut : 'en_cours' | 'cloture' | 'annule'
+    cur.execute('''CREATE TABLE IF NOT EXISTS inventaires (
+        id SERIAL PRIMARY KEY,
+        reference VARCHAR(40),
+        departement_id INTEGER REFERENCES departements(id) ON DELETE CASCADE,
+        statut VARCHAR(15) NOT NULL DEFAULT 'en_cours',
+        commentaire TEXT,
+        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        date_cloture TIMESTAMP,
+        cree_par INTEGER,
+        cree_par_nom VARCHAR(80),
+        cloture_par INTEGER,
+        cloture_par_nom VARCHAR(80)
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_inventaires_dept ON inventaires(departement_id, date_creation DESC)")
+
+    # Une ligne par article inventorié. quantite_theorique est figée à
+    # l'ouverture (photo du stock) ; quantite_comptee est NULL tant que
+    # l'article n'a pas été compté — un écart de 0 n'est PAS la même chose
+    # qu'un article non compté.
+    cur.execute('''CREATE TABLE IF NOT EXISTS inventaire_lignes (
+        id SERIAL PRIMARY KEY,
+        inventaire_id INTEGER REFERENCES inventaires(id) ON DELETE CASCADE,
+        materiel_id INTEGER REFERENCES materiels(id) ON DELETE CASCADE,
+        quantite_theorique INTEGER NOT NULL DEFAULT 0,
+        quantite_comptee INTEGER,
+        commentaire TEXT,
+        date_comptage TIMESTAMP,
+        compte_par_nom VARCHAR(80),
+        UNIQUE (inventaire_id, materiel_id)
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_inv_lignes_inv ON inventaire_lignes(inventaire_id)")
+    # Permet de distinguer, dans l'historique d'un matériel, une entrée/sortie
+    # saisie à la main d'un ajustement issu d'un inventaire physique.
+    cur.execute("ALTER TABLE materiels_mouvements ADD COLUMN IF NOT EXISTS origine VARCHAR(20) DEFAULT 'manuel'")
+
     # Seed employés
     cur.execute("SELECT COUNT(*) FROM employes")
     if cur.fetchone()['count'] == 0:
@@ -1119,6 +1159,7 @@ RECHERCHE_PAGES = [
     ('Employés',               'index',                None,                        'users'),
     ('Départements',           'departements',         None,                        'building'),
     ('Matériels',              'materiels',            None,                        'box'),
+    ('Inventaire physique',    'inventaires',          None,                        'box'),
     ('Présences',              'presences',            None,                        'clock'),
     ('Historique',             'historique',           None,                        'history'),
     ('Absences',               'absences',             ('admin', 'rh', 'manager'),  'user-x'),
@@ -3995,7 +4036,7 @@ def _notifier_stock_bas(cur, materiel_id):
 
 
 def _enregistrer_mouvement(cur, materiel_id, type_mouvement, quantite,
-                           employe_id=None, motif=None):
+                           employe_id=None, motif=None, origine='manuel'):
     """Écrit un mouvement et met à jour le stock. Retourne le nouveau stock.
 
     Lève ValueError si une sortie dépasse le stock disponible.
@@ -4016,10 +4057,11 @@ def _enregistrer_mouvement(cur, materiel_id, type_mouvement, quantite,
     cur.execute("UPDATE materiels SET quantite = %s WHERE id = %s", (nouveau, materiel_id))
     cur.execute("""
         INSERT INTO materiels_mouvements
-            (materiel_id, type_mouvement, quantite, employe_id, motif, user_id, username)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+            (materiel_id, type_mouvement, quantite, employe_id, motif, user_id,
+             username, origine)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """, (materiel_id, type_mouvement, quantite, employe_id, motif or None,
-          session.get('user_id'), session.get('username')))
+          session.get('user_id'), session.get('username'), origine))
 
     _notifier_stock_bas(cur, materiel_id)
     return nouveau
@@ -4378,6 +4420,356 @@ def delete_materiel(id):
         logger.error("Erreur suppression matériel: %s", e, exc_info=True)
         flash(f"Erreur : {e}", "danger")
     return redirect(url_for('materiels'))
+
+
+# =============================================================================
+# INVENTAIRE PHYSIQUE
+# =============================================================================
+# Le stock (table `materiels.quantite`) est une valeur *théorique* : elle
+# découle des mouvements saisis. L'inventaire physique confronte cette théorie
+# au terrain (« 10 PC en base, 9 trouvés »), constate les écarts, puis corrige
+# le stock à la clôture par un mouvement d'ajustement traçable.
+
+def _peut_saisir_inventaire():
+    return session.get('role') in ('admin', 'rh', 'manager')
+
+
+def _peut_cloturer_inventaire():
+    # La clôture modifie le stock : réservée aux profils les plus habilités.
+    return session.get('role') in ('admin', 'rh')
+
+
+def _inventaire_stats(cur, inventaire_id):
+    """Compteurs d'une campagne : comptés, restants, écarts, valeur des écarts."""
+    cur.execute("""
+        SELECT
+            COUNT(*)                                              AS nb_lignes,
+            COUNT(quantite_comptee)                               AS nb_comptes,
+            COUNT(*) FILTER (WHERE quantite_comptee IS NOT NULL
+                             AND quantite_comptee <> quantite_theorique) AS nb_ecarts,
+            COALESCE(SUM(quantite_theorique), 0)                  AS total_theorique,
+            COALESCE(SUM(quantite_comptee), 0)                    AS total_compte,
+            COALESCE(SUM(quantite_comptee - quantite_theorique)
+                     FILTER (WHERE quantite_comptee IS NOT NULL), 0) AS ecart_net
+        FROM inventaire_lignes WHERE inventaire_id = %s
+    """, (inventaire_id,))
+    st = dict(cur.fetchone() or {})
+    st['nb_restants'] = (st.get('nb_lignes', 0) or 0) - (st.get('nb_comptes', 0) or 0)
+    return st
+
+
+@app.route('/inventaires')
+@login_required
+def inventaires():
+    """Liste des campagnes d'inventaire, avec l'avancement de chacune."""
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 10
+    statut = (request.args.get('statut') or '').strip()
+    dept_id = request.args.get('departement', type=int)
+
+    where, params = [], []
+    if statut in ('en_cours', 'cloture', 'annule'):
+        where.append("i.statut = %s")
+        params.append(statut)
+    if dept_id:
+        where.append("i.departement_id = %s")
+        params.append(dept_id)
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+
+    with db_cursor() as (conn, cur):
+        cur.execute(f"SELECT COUNT(*) AS n FROM inventaires i {clause}", params)
+        total = cur.fetchone()['n']
+        cur.execute(f"""
+            SELECT i.*, d.nom AS departement_nom,
+                   COUNT(l.id)                    AS nb_lignes,
+                   COUNT(l.quantite_comptee)      AS nb_comptes,
+                   COUNT(*) FILTER (WHERE l.quantite_comptee IS NOT NULL
+                        AND l.quantite_comptee <> l.quantite_theorique) AS nb_ecarts
+            FROM inventaires i
+            LEFT JOIN departements d ON d.id = i.departement_id
+            LEFT JOIN inventaire_lignes l ON l.inventaire_id = i.id
+            {clause}
+            GROUP BY i.id, d.nom
+            ORDER BY i.date_creation DESC
+            LIMIT %s OFFSET %s
+        """, params + [per_page, (page - 1) * per_page])
+        campagnes = cur.fetchall()
+
+        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        departements = cur.fetchall()
+        cur.execute("""
+            SELECT COUNT(*) FILTER (WHERE statut = 'en_cours') AS en_cours,
+                   COUNT(*) FILTER (WHERE statut = 'cloture')  AS clotures,
+                   COUNT(*)                                    AS total
+            FROM inventaires
+        """)
+        stats = cur.fetchone()
+
+    pg = pagination_info(total, page, per_page)
+    filters = {'statut': statut, 'departement': dept_id}
+    return render_template('inventaires.html',
+                           campagnes=campagnes, departements=departements,
+                           stats=stats, filters=filters,
+                           pg=pg, page_items=page_list(pg['page'], pg['pages']),
+                           base_qs=urlencode({k: v for k, v in filters.items() if v}),
+                           peut_saisir=_peut_saisir_inventaire(),
+                           peut_cloturer=_peut_cloturer_inventaire())
+
+
+@app.route('/inventaires/nouveau', methods=['GET', 'POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def add_inventaire():
+    """Ouvre une campagne : fige la liste des articles du département et leur
+    stock théorique à cet instant."""
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        departements = cur.fetchall()
+
+    if request.method == 'POST':
+        dept_id = request.form.get('departement_id', type=int)
+        commentaire = (request.form.get('commentaire') or '').strip()
+
+        if not dept_id:
+            flash("Veuillez choisir un département", "danger")
+            return render_template(
+                'inventaire_form.html', departements=departements,
+                layout='_modal_layout.html' if request.args.get('modal') == '1' else 'base.html')
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                # Une seule campagne ouverte par département : sinon deux
+                # comptages concurrents ajusteraient le stock deux fois.
+                cur.execute("""SELECT id FROM inventaires
+                               WHERE departement_id = %s AND statut = 'en_cours'""", (dept_id,))
+                existante = cur.fetchone()
+                if existante:
+                    flash("Une campagne est déjà en cours pour ce département.", "warning")
+                    return redirect(url_for('view_inventaire', id=existante['id']))
+
+                cur.execute("SELECT nom FROM departements WHERE id = %s", (dept_id,))
+                drow = cur.fetchone()
+                if not drow:
+                    flash("Département introuvable", "danger")
+                    return redirect(url_for('inventaires'))
+
+                cur.execute("""
+                    INSERT INTO inventaires (departement_id, statut, commentaire,
+                                             cree_par, cree_par_nom)
+                    VALUES (%s, 'en_cours', %s, %s, %s) RETURNING id
+                """, (dept_id, commentaire or None,
+                      session.get('user_id'), session.get('username')))
+                inv_id = cur.fetchone()['id']
+                cur.execute("UPDATE inventaires SET reference = %s WHERE id = %s",
+                            (f"INV-{datetime.now().strftime('%Y%m%d')}-{inv_id}", inv_id))
+
+                # Photo du stock : les quantités sont copiées, pas référencées.
+                cur.execute("""
+                    INSERT INTO inventaire_lignes (inventaire_id, materiel_id, quantite_theorique)
+                    SELECT %s, id, quantite FROM materiels WHERE departement_id = %s
+                """, (inv_id, dept_id))
+                nb = cur.rowcount
+
+            log_action(session.get('user_id'), session.get('username'),
+                       "Ouverture inventaire", "inventaire", inv_id, drow['nom'])
+            if nb == 0:
+                flash("Campagne ouverte, mais ce département ne contient aucun article.", "warning")
+            else:
+                flash(f"Campagne d'inventaire ouverte — {nb} article(s) à compter.", "success")
+            return redirect(url_for('view_inventaire', id=inv_id))
+        except Exception as e:
+            logger.error("Erreur ouverture inventaire: %s", e, exc_info=True)
+            flash(f"Erreur : {e}", "danger")
+
+    layout = '_modal_layout.html' if request.args.get('modal') == '1' else 'base.html'
+    return render_template('inventaire_form.html', departements=departements, layout=layout)
+
+
+@app.route('/inventaires/<int:id>')
+@login_required
+def view_inventaire(id):
+    """Feuille de comptage : théorique vs compté, écart calculé par ligne."""
+    with db_cursor() as (conn, cur):
+        cur.execute("""
+            SELECT i.*, d.nom AS departement_nom
+            FROM inventaires i
+            LEFT JOIN departements d ON d.id = i.departement_id
+            WHERE i.id = %s
+        """, (id,))
+        inv = cur.fetchone()
+        if not inv:
+            flash("Inventaire introuvable", "danger")
+            return redirect(url_for('inventaires'))
+
+        cur.execute("""
+            SELECT l.*, m.nom AS materiel_nom, m.unite, m.categorie,
+                   m.quantite AS stock_actuel,
+                   (l.quantite_comptee - l.quantite_theorique) AS ecart
+            FROM inventaire_lignes l
+            JOIN materiels m ON m.id = l.materiel_id
+            WHERE l.inventaire_id = %s
+            ORDER BY m.nom
+        """, (id,))
+        lignes = cur.fetchall()
+        stats = _inventaire_stats(cur, id)
+
+    return render_template('inventaire_detail.html', inv=inv, lignes=lignes,
+                           stats=stats,
+                           peut_saisir=_peut_saisir_inventaire(),
+                           peut_cloturer=_peut_cloturer_inventaire())
+
+
+@app.route('/inventaires/<int:id>/compter', methods=['POST'])
+@login_required
+@role_required('admin', 'rh', 'manager')
+def compter_inventaire(id):
+    """Enregistre le comptage d'une ligne. Ne touche jamais au stock."""
+    ligne_id = request.form.get('ligne_id', type=int)
+    brut = (request.form.get('quantite_comptee') or '').strip()
+    commentaire = (request.form.get('commentaire') or '').strip()
+
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT statut FROM inventaires WHERE id = %s", (id,))
+            inv = cur.fetchone()
+            if not inv:
+                flash("Inventaire introuvable", "danger")
+                return redirect(url_for('inventaires'))
+            if inv['statut'] != 'en_cours':
+                flash("Cette campagne est clôturée : le comptage n'est plus modifiable.", "warning")
+                return redirect(url_for('view_inventaire', id=id))
+
+            if brut == '':
+                # Champ vidé : on repasse la ligne à « non comptée ».
+                cur.execute("""UPDATE inventaire_lignes
+                               SET quantite_comptee = NULL, date_comptage = NULL,
+                                   compte_par_nom = NULL, commentaire = %s
+                               WHERE id = %s AND inventaire_id = %s""",
+                            (commentaire or None, ligne_id, id))
+                flash("Comptage effacé pour cette ligne.", "info")
+            else:
+                try:
+                    qte = int(brut)
+                except ValueError:
+                    flash("La quantité comptée doit être un nombre entier.", "danger")
+                    return redirect(url_for('view_inventaire', id=id))
+                if qte < 0:
+                    flash("La quantité comptée ne peut pas être négative.", "danger")
+                    return redirect(url_for('view_inventaire', id=id))
+
+                cur.execute("""UPDATE inventaire_lignes
+                               SET quantite_comptee = %s, commentaire = %s,
+                                   date_comptage = CURRENT_TIMESTAMP, compte_par_nom = %s
+                               WHERE id = %s AND inventaire_id = %s""",
+                            (qte, commentaire or None, session.get('username'), ligne_id, id))
+                if cur.rowcount == 0:
+                    flash("Ligne introuvable dans cette campagne.", "danger")
+                else:
+                    flash("Comptage enregistré.", "success")
+    except Exception as e:
+        logger.error("Erreur comptage inventaire: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+
+    return redirect(url_for('view_inventaire', id=id))
+
+
+@app.route('/inventaires/<int:id>/cloturer', methods=['POST'])
+@login_required
+@role_required('admin', 'rh')
+def cloturer_inventaire(id):
+    """Clôture : aligne le stock théorique sur le comptage réel.
+
+    Chaque écart produit un mouvement d'ajustement (entrée ou sortie) portant
+    l'origine 'inventaire', pour que la correction reste auditable. Les lignes
+    non comptées sont ignorées : absence de comptage ≠ stock nul.
+    """
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT * FROM inventaires WHERE id = %s FOR UPDATE", (id,))
+            inv = cur.fetchone()
+            if not inv:
+                flash("Inventaire introuvable", "danger")
+                return redirect(url_for('inventaires'))
+            if inv['statut'] != 'en_cours':
+                flash("Cette campagne est déjà clôturée.", "warning")
+                return redirect(url_for('view_inventaire', id=id))
+
+            cur.execute("""
+                SELECT l.*, m.nom AS materiel_nom
+                FROM inventaire_lignes l
+                JOIN materiels m ON m.id = l.materiel_id
+                WHERE l.inventaire_id = %s AND l.quantite_comptee IS NOT NULL
+                  AND l.quantite_comptee <> l.quantite_theorique
+            """, (id,))
+            ecarts = cur.fetchall()
+
+            nb_ajustes = 0
+            for lg in ecarts:
+                # On se cale sur le stock RÉEL du moment : entre l'ouverture de
+                # la campagne et sa clôture, des mouvements ont pu avoir lieu.
+                cur.execute("SELECT quantite FROM materiels WHERE id = %s FOR UPDATE",
+                            (lg['materiel_id'],))
+                row = cur.fetchone()
+                if not row:
+                    continue
+                delta = lg['quantite_comptee'] - row['quantite']
+                if delta == 0:
+                    continue
+                type_mvt = 'entree' if delta > 0 else 'sortie'
+                motif = (f"Ajustement inventaire {inv['reference'] or id} : "
+                         f"théorique {lg['quantite_theorique']}, compté {lg['quantite_comptee']}")
+                if lg['commentaire']:
+                    motif += f" — {lg['commentaire']}"
+                _enregistrer_mouvement(cur, lg['materiel_id'], type_mvt, abs(delta),
+                                       None, motif, origine='inventaire')
+                nb_ajustes += 1
+
+            cur.execute("""UPDATE inventaires
+                           SET statut = 'cloture', date_cloture = CURRENT_TIMESTAMP,
+                               cloture_par = %s, cloture_par_nom = %s
+                           WHERE id = %s""",
+                        (session.get('user_id'), session.get('username'), id))
+
+        log_action(session.get('user_id'), session.get('username'),
+                   "Clôture inventaire", "inventaire", id,
+                   f"{nb_ajustes} ajustement(s)")
+        if nb_ajustes:
+            flash(f"Inventaire clôturé — {nb_ajustes} article(s) ajusté(s) dans le stock.", "success")
+        else:
+            flash("Inventaire clôturé — aucun écart à corriger.", "success")
+    except Exception as e:
+        logger.error("Erreur clôture inventaire: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+
+    return redirect(url_for('view_inventaire', id=id))
+
+
+@app.route('/inventaires/<int:id>/annuler', methods=['POST'])
+@login_required
+@role_required('admin', 'rh')
+def annuler_inventaire(id):
+    """Abandonne une campagne sans toucher au stock."""
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT statut FROM inventaires WHERE id = %s", (id,))
+            inv = cur.fetchone()
+            if not inv:
+                flash("Inventaire introuvable", "danger")
+                return redirect(url_for('inventaires'))
+            if inv['statut'] != 'en_cours':
+                flash("Seule une campagne en cours peut être annulée.", "warning")
+                return redirect(url_for('view_inventaire', id=id))
+            cur.execute("""UPDATE inventaires
+                           SET statut = 'annule', date_cloture = CURRENT_TIMESTAMP,
+                               cloture_par = %s, cloture_par_nom = %s
+                           WHERE id = %s""",
+                        (session.get('user_id'), session.get('username'), id))
+        log_action(session.get('user_id'), session.get('username'),
+                   "Annulation inventaire", "inventaire", id, None)
+        flash("Campagne annulée — le stock n'a pas été modifié.", "info")
+    except Exception as e:
+        logger.error("Erreur annulation inventaire: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+    return redirect(url_for('view_inventaire', id=id))
 
 
 @app.route('/departements/<int:id>/materiels')

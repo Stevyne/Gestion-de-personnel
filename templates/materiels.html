@@ -9,6 +9,7 @@
             {% if peut_gerer_materiels %}
             <a data-modal-title="Nouveau matériel" href="{{ url_for('add_materiel') }}" class="js-modal-form btn btn-primary">+ Nouveau matériel</a>
             {% endif %}
+            <a href="{{ url_for('inventaires') }}" class="btn btn-secondary">📋 Inventaire</a>
             <a href="{{ url_for('departements') }}" class="btn btn-secondary">🏢 Départements</a>
         </div>
     </div>
