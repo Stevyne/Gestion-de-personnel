@@ -20,7 +20,8 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 ### 🕒 Gestion des présences
 - Pointage entrée / sortie (`/presences/clock_in/<employe_id>`, `/presences/clock_out/<employe_id>`, en POST)
 - Calcul automatique des retards (seuil configurable, `HEURE_ARRIVEE_ATTENDUE = "09:00"` dans `app.py`)
-- Envoi automatique d'emails HTML en cas de retard (mode démo si pas de credentials mail)
+- Notification de l'employé lorsqu'une présence est saisie ou modifiée par un gestionnaire
+- E-mail HTML en cas de retard via l'outbox persistante (aucun SMTP dans la requête web)
 
 ### 🏖️ Gestion des congés
 - Demandes de congés en self-service (`/self-service/conges`)
@@ -34,11 +35,15 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Une permission approuvée couvre le jour : il n'est alors pas compté comme une absence
 - Routes : `/permissions`, `/permissions/add`, `/permissions/update/<id>`, `/permissions/delete/<id>`
 
-### 🚫 Gestion des absences (génération automatique)
+### 🚫 Absences et circuit de justification
 - **Tout jour ouvré (lun. → ven.) sans présence enregistrée est automatiquement enregistré comme une absence** dans la table `absences`
-- Sont exclus des absences : les jours couverts par un **congé approuvé** ou une **permission approuvée**, ainsi que les jours avant la date d'embauche et le jour en cours
-- Calcul déclenché automatiquement à l'ouverture de `/absences` et via le bouton **🔄 Synchroniser** ; idempotent (contrainte `UNIQUE(employe_id, date)`)
-- Enregistrement manuel possible (`/absences/add`) ; suppression réservée à `admin`/`rh`
+- Sont exclus : congés et permissions approuvés, jours avant l'embauche et jour en cours. Le calcul tourne à 01h00 et reste déclenchable via **🔄 Synchroniser** ; il est idempotent (`UNIQUE(employe_id, date)`)
+- L'employé est informé et consulte ses dossiers sur `/self-service/absences`
+- Dépôt self-service d'un justificatif PDF/PNG/JPEG (8 Mo), validé par magic-bytes et stocké en PostgreSQL (`BYTEA`)
+- Statuts : `non_justifiee` → `justificatif_depose` → `acceptee` ou `refusee`; un refus RH exige un motif
+- Un justificatif accepté crée automatiquement un **congé maladie approuvé** d'un jour, sans consommer le solde de congés payés
+- Confidentialité : justificatif téléchargeable uniquement par son propriétaire et les rôles `admin`/`rh` (pas par le manager)
+- Enregistrement manuel possible (`/absences/add`) ; suppression réservée à `admin`/`rh` et interdite après requalification
 
 ### 📦 Gestion des matériels (par département)
 - Stock de fournitures et d'équipements rattaché à un **département** (papiers, stylos, classeurs, cartouches, mobilier, informatique...)
@@ -77,12 +82,17 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 
 ### 📁 Documents & Rapports
 - Upload de documents (PDF, Excel, images...) avec **validation du contenu réel** (magic-bytes), pas seulement de l'extension
+- Contenu stocké en PostgreSQL (`BYTEA`) et notification immédiate de l'employé concerné
+- Alertes internes et e-mails avant expiration puis après expiration
 - Rapports avancés avec filtres (`/rapports`)
 - Exports PDF (ReportLab) et Excel (Openpyxl) pour présences et congés
 
-### 🔔 Notifications
-- Notifications persistantes en base, filtrées par `user_id`
-- Badge de notifications non lues, page dédiée `/notifications`
+### 🔔 Notifications et e-mails
+- Notifications persistantes en base, filtrées par `user_id`; badge et page `/notifications`
+- Événements couverts : absences, présences, documents, arrivée d'un employé, congés, permissions, matériel et maintenance
+- E-mails sur les actions à traiter, décisions, absences et expirations de documents
+- **Outbox PostgreSQL** (`email_outbox`) : envoi asynchrone par lots, verrou `SKIP LOCKED`, reprise après arrêt, jusqu'à cinq tentatives avec délai exponentiel et clés anti-doublon
+- Mode développement propre : `EMAIL_ENABLED=false` par défaut, donc aucun contact SMTP
 
 ### 🔐 Sécurité & Rôles
 - Authentification par session (Werkzeug pour le hash des mots de passe)
@@ -112,10 +122,10 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 | Backend         | Flask 3.0.3                                        |
 | Base de données | PostgreSQL (psycopg2-binary, RealDictCursor)       |
 | Sécurité        | Flask-WTF (CSRF), Flask-Limiter, Flask-Talisman, python-dotenv |
-| Emails          | Flask-Mail                                         |
+| Emails          | Flask-Mail + outbox PostgreSQL asynchrone          |
 | Exports         | ReportLab (PDF), Openpyxl (Excel)                  |
 | Images          | Pillow (redimensionnement des photos de profil)    |
-| Planification   | APScheduler (absences, alertes documents, soldes, purge sessions) |
+| Planification   | APScheduler (absences, alertes, soldes, sessions, outbox) |
 | Frontend        | HTML + CSS responsive mobile-first (pas de framework JS) |
 | Auth            | Werkzeug (hash des mots de passe)                  |
 
@@ -169,8 +179,10 @@ cp .env.example .env
 |---------------------------|-------------|
 | `SECRET_KEY`              | Clé secrète Flask — à générer avec `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `DATABASE_URL`            | Chaîne de connexion PostgreSQL |
+| `EMAIL_ENABLED`           | Active explicitement l'outbox et SMTP (`false` par défaut) |
 | `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS` | Config SMTP |
-| `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_DEFAULT_SENDER` | Identifiants email (optionnel, mode démo sinon) |
+| `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_DEFAULT_SENDER` | Identifiants et expéditeur SMTP |
+| `EMAIL_POLL_SECONDS`, `EMAIL_BATCH_SIZE`, `EMAIL_MAX_ATTEMPTS` | Fréquence et limites de l'outbox |
 | `ADMIN_EMAIL`             | Destinataire des alertes admin |
 | `FLASK_ENV`, `FLASK_DEBUG` | Mode d'exécution |
 | `SESSION_COOKIE_SECURE`   | `true` en HTTPS (défaut `false`) |
@@ -186,7 +198,8 @@ cp .env.example .env
 > - Le rate limiter utilise `storage_uri="memory://"` (compteur **par processus**). Avec `gunicorn -w 4`, les quotas ne sont **pas partagés** entre workers → passez sur Redis/Memcached dès que vous dépassez 1 worker.
 > - `Talisman(force_https=False)` et `SESSION_COOKIE_SECURE` (défaut `false`) : passez-les à `True` en HTTPS.
 > - `.env.example` livre `FLASK_DEBUG=true` / `FLASK_ENV=development` : mettez-les à `false` / `production` pour la prod.
-> - `static/avatars/` et `static/uploads/` contiennent des données utilisateur : prévoyez-les dans vos sauvegardes (et hors du dépôt — un `.gitignore` local les exclut déjà).
+> - Configurez SMTP puis passez `EMAIL_ENABLED=true`; sans cette activation explicite, aucun e-mail ne quitte l'application.
+> - Les avatars, documents RH et justificatifs récents sont persistés en base (`BYTEA`). `static/avatars/` et `static/uploads/` ne servent plus que de cache/repli pour les anciens fichiers.
 
 ---
 
@@ -235,7 +248,10 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 | `/presences`, `/presences/add`     | Pointages                        | Tous / selon rôle      |
 | `/conges`, `/conges/add`           | Congés                           | Tous / selon rôle      |
 | `/permissions`, `/permissions/add` | Permissions (module séparé)      | Tous / selon rôle      |
-| `/absences`, `/absences/add`       | Absences (génération automatique)| admin, rh, manager     |
+| `/absences`, `/absences/add`       | Absences et décisions sur justificatifs | admin, rh, manager |
+| `/self-service/absences`           | Mes absences et dépôt d'un justificatif | Employé connecté |
+| `/absences/<id>/justificatif`      | Téléchargement confidentiel      | Propriétaire, admin, rh |
+| `/absences/<id>/decision`          | Acceptation/refus du justificatif | admin, rh              |
 | `/calendrier-conges`               | Calendrier des congés            | Tous                   |
 | `/rapports`                        | Rapports avancés + filtres       | Tous                   |
 | `/documents`                       | Documents                        | Tous                   |
@@ -275,7 +291,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-> Surchargez la base avec la variable `TEST_DATABASE_URL` si besoin (CI, autre machine). Le CSRF et le rate limiting sont désactivés pendant les tests (`conftest.py`).
+> Surchargez la base avec la variable `TEST_DATABASE_URL` si besoin (CI, autre machine). Le CSRF, le rate limiting et SMTP sont désactivés pendant les tests (`conftest.py`). La suite couvre notamment le parc matériel, le workflow de maintenance, les justificatifs d'absence, les notifications événementielles et l'outbox.
 
 > 💡 Si vous testez manuellement en enchaînant beaucoup de requêtes, le rate limiter (50/heure par route) finit par renvoyer `429 Too Many Requests` — ce n'est pas un bug de l'application. Redémarrez le serveur (le compteur est en mémoire) ou désactivez le limiteur dans votre script de test.
 
@@ -285,7 +301,11 @@ pytest
 
 ```
 Gestion-de-personnel/
-├── app.py                  # Application principale (routes, modèles, exports)
+├── app.py                  # Application historique et composition des services
+├── blueprints/
+│   └── absence_justifications.py  # Premier domaine extrait du monolithe
+├── services/
+│   └── email_outbox.py     # File SMTP persistante, indépendante de Flask
 ├── requirements.txt        # Dépendances production
 ├── requirements-dev.txt    # Dépendances dev (pytest)
 ├── pytest.ini
@@ -325,7 +345,7 @@ Gestion-de-personnel/
 
 - Base de données exclusivement PostgreSQL
 - Les migrations de schéma sont idempotentes et appliquées au démarrage
-- Les soldes de congés sont recalculés automatiquement (25 jours acquis par défaut)
+- Les soldes de congés sont recalculés automatiquement (~2,08 jours acquis par mois, plafond annuel de 25 jours)
 - Les retards sont calculés en minutes par rapport à `HEURE_ARRIVEE_ATTENDUE` (09:00 par défaut)
 - Les exports incluent le calcul des retards
 - Les uploads (documents et photos) sont validés sur leur **contenu réel** (magic-bytes), pas seulement sur l'extension
@@ -335,12 +355,14 @@ Gestion-de-personnel/
 
 ### Tâches planifiées (APScheduler)
 
-| Heure  | Tâche                                              |
-|--------|----------------------------------------------------|
-| 01h00  | Génération automatique des absences                |
-| 01h30  | Alertes d'expiration des documents                 |
-| 02h00  | Recalcul des soldes de congés                      |
-| 03h00  | Purge des sessions expirées (> 30 jours)           |
+| Fréquence | Tâche                                           |
+|-----------|-------------------------------------------------|
+| 01h00     | Génération automatique des absences             |
+| 01h30     | Alertes d'expiration des documents              |
+| 02h00     | Recalcul des soldes de congés                   |
+| 03h00     | Purge des sessions expirées (> 30 jours)        |
+| 03h30     | Validation automatique des retours maintenance  |
+| 60 s      | Traitement de l'outbox (si `EMAIL_ENABLED=true`) |
 
 ---
 

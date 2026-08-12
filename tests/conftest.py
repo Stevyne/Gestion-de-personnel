@@ -33,8 +33,13 @@ import app as application  # noqa: E402  (import après config des env vars, vol
 # employes / users / departements restent seedés une seule fois par session
 # (les identifiants de test admin/rh/manager/employe doivent rester stables).
 MUTABLE_TABLES = [
-    'presences', 'conges', 'permissions', 'absences', 'absences_exclues', 'soldes_conges',
-    'audit_logs', 'documents', 'notifications',
+    'presences', 'conges', 'permissions', 'absences', 'absences_exclues',
+    'soldes_conges', 'audit_logs', 'documents', 'documents_alertes',
+    'notifications', 'email_outbox', 'scheduler_runs',
+    # Les modules parc/maintenance sont désormais couverts eux aussi.
+    'inventaires', 'materiel_maintenances', 'materiel_exemplaires',
+    'materiels_attributions', 'materiels_mouvements', 'materiel_compteurs',
+    'materiels', 'prestataires',
 ]
 
 
@@ -51,6 +56,18 @@ def _clean_tables():
     with application.db_cursor(commit=True) as (conn, cur):
         for table in MUTABLE_TABLES:
             cur.execute(f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE")
+        # Conserver uniquement les quatre employés seedés : les scénarios de
+        # création d'un salarié ne doivent pas polluer les tests suivants.
+        cur.execute("DELETE FROM employes WHERE id > 4")
+        # Certains tests d'absences déplacent les dates d'embauche. Sans remise
+        # à zéro, leur ordre modifiait le résultat des tests de soldes.
+        dates_seed = {
+            1: '2023-01-15', 2: '2022-06-01',
+            3: '2021-09-10', 4: '2022-01-01',
+        }
+        for employe_id, date_embauche in dates_seed.items():
+            cur.execute("UPDATE employes SET date_embauche = %s WHERE id = %s",
+                        (date_embauche, employe_id))
     yield
 
 
@@ -59,6 +76,7 @@ def app():
     application.app.config['TESTING'] = True
     application.app.config['WTF_CSRF_ENABLED'] = False   # simplifie les POST dans les tests
     application.app.config['RATELIMIT_ENABLED'] = False   # évite le rate-limit entre tests
+    application.app.config['EMAIL_ENABLED'] = False        # aucun SMTP pendant les tests
     return application.app
 
 

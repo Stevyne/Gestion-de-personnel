@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h1>🚫 Mes absences et justificatifs</h1>
+      <p style="margin:5px 0 0;color:#64748b;">Déposez un justificatif en PDF ou image (8 Mo maximum). Seules les RH peuvent le consulter et rendre une décision.</p>
+    </div>
+    <a href="{{ url_for('self_service') }}" class="btn btn-secondary">← Mon espace</a>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Motif enregistré</th><th>Statut</th><th>Justificatif / action</th></tr>
+      </thead>
+      <tbody>
+      {% for a in absences %}
+        <tr>
+          <td data-label="Date"><strong>{{ a.date.strftime('%d/%m/%Y') if a.date else '—' }}</strong></td>
+          <td data-label="Motif"><small>{{ a.motif or 'Aucun commentaire' }}</small></td>
+          <td data-label="Statut">
+            {% if a.statut == 'acceptee' %}
+              <span class="badge" style="background:#dcfce7;color:#166534;">✓ {{ statut_labels[a.statut] }}</span>
+            {% elif a.statut == 'refusee' %}
+              <span class="badge" style="background:#fee2e2;color:#991b1b;">✕ {{ statut_labels[a.statut] }}</span>
+              {% if a.motif_refus %}<br><small style="color:#991b1b;">{{ a.motif_refus }}</small>{% endif %}
+            {% elif a.statut == 'justificatif_depose' %}
+              <span class="badge" style="background:#fef9c3;color:#854d0e;">⏳ {{ statut_labels[a.statut] }}</span>
+            {% else %}
+              <span class="badge" style="background:#f1f5f9;color:#475569;">{{ statut_labels.get(a.statut, a.statut) }}</span>
+            {% endif %}
+          </td>
+          <td data-label="Justificatif">
+            {% if a.justificatif_nom %}
+              <a class="btn btn-secondary" style="padding:5px 9px;font-size:.78rem;" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">📎 {{ a.justificatif_nom }}</a>
+            {% endif %}
+            {% if a.statut in peut_deposer %}
+              <form method="post" enctype="multipart/form-data" action="{{ url_for('absence_justifications.deposer_justificatif', absence_id=a.id) }}" style="margin-top:8px;display:grid;gap:7px;min-width:250px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="file" name="justificatif" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" class="form-control" required>
+                <input type="text" name="commentaire" class="form-control" placeholder="Commentaire facultatif">
+                <button class="btn btn-primary" type="submit">{{ 'Déposer un nouveau justificatif' if a.statut == 'refusee' else 'Déposer le justificatif' }}</button>
+              </form>
+            {% elif not a.justificatif_nom %}
+              <span style="color:#94a3b8;">—</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" style="text-align:center;padding:40px;color:#64748b;">Aucune absence enregistrée dans votre dossier.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

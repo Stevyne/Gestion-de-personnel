@@ -4,7 +4,10 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>🚫 Absences non justifiées</h1>
+        <div>
+          <h1>🚫 Absences et justificatifs</h1>
+          <p style="color:#64748b;margin:5px 0 0;">Suivi de la détection à la décision RH. Les justificatifs médicaux sont visibles uniquement par l'employé concerné et les RH.</p>
+        </div>
         <div>
             <form action="{{ url_for('synchroniser_absences') }}" method="post" style="display:inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -16,56 +19,63 @@
     </div>
 
     <p style="color:#64748b; margin: 0 0 16px;">
-        <strong>{{ absences|length }}</strong> absence(s) affichée(s) sur <strong>{{ nb_total }}</strong> au total. Chaque jour ouvré (lun. → ven.) passé sans présence
-        enregistrée est automatiquement compté comme une absence — sauf s'il est couvert par un
-        congé ou une <a href="{{ url_for('permissions') }}">permission</a> approuvé(e).
+        <strong>{{ absences|length }}</strong> dossier(s) affiché(s) sur <strong>{{ nb_total }}</strong>. Chaque jour ouvré passé sans présence est détecté, sauf congé ou <a href="{{ url_for('permissions') }}">permission</a> approuvé(e).
     </p>
 
-<form method="get" action="{{ url_for('absences') }}" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:#f8fafc; padding:14px 16px; border-radius:12px; margin-bottom:18px; border:1px solid #e2e8f0;"><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">🔎 Rechercher un employé</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Nom ou prénom..." class="form-control" style="min-width:200px;"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Employé</label><select name="employe_id" class="form-control">
-                <option value="">Tous</option>
-                {% for emp in employees %}<option value="{{ emp.id }}" {{ 'selected' if filters.employe_id == emp.id|string }}>{{ emp.prenom }} {{ emp.nom }}</option>{% endfor %}
-            </select></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Du</label><input type="date" name="date_debut" value="{{ filters.date_debut }}" class="form-control"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Au</label><input type="date" name="date_fin" value="{{ filters.date_fin }}" class="form-control"></div><button type="submit" class="btn btn-primary">Filtrer</button><a href="{{ url_for('absences') }}" class="btn btn-secondary">Réinitialiser</a></form>
+    <form method="get" action="{{ url_for('absences') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;background:#f8fafc;padding:14px 16px;border-radius:12px;margin-bottom:18px;border:1px solid #e2e8f0;">
+      <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">🔎 Rechercher</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Nom ou prénom..." class="form-control" style="min-width:190px;"></div>
+      <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">Employé</label><select name="employe_id" class="form-control"><option value="">Tous</option>{% for emp in employees %}<option value="{{ emp.id }}" {{ 'selected' if filters.employe_id == emp.id|string }}>{{ emp.prenom }} {{ emp.nom }}</option>{% endfor %}</select></div>
+      <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">Statut</label><select name="statut" class="form-control"><option value="">Tous</option>{% for code, label in statut_labels.items() %}<option value="{{ code }}" {{ 'selected' if filters.statut == code }}>{{ label }}</option>{% endfor %}</select></div>
+      <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">Du</label><input type="date" name="date_debut" value="{{ filters.date_debut }}" class="form-control"></div>
+      <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">Au</label><input type="date" name="date_fin" value="{{ filters.date_fin }}" class="form-control"></div>
+      <button type="submit" class="btn btn-primary">Filtrer</button><a href="{{ url_for('absences') }}" class="btn btn-secondary">Réinitialiser</a>
+    </form>
 
     <div class="table-container">
         <table>
-            <thead>
-                <tr>
-                    <th>Employé</th>
-                    <th>Date</th>
-                    <th>Motif</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
+            <thead><tr><th>Employé</th><th>Date</th><th>Motif</th><th>Statut</th><th>Justificatif</th><th>Actions</th></tr></thead>
             <tbody>
                 {% for a in absences %}
                 <tr>
                     <td data-label="Employé"><strong>{{ a.prenom }} {{ a.nom }}</strong></td>
-                    <td data-label="Date">{{ a.date }}</td>
+                    <td data-label="Date">{{ a.date.strftime('%d/%m/%Y') if a.date else '—' }}</td>
                     <td data-label="Motif"><small>{{ a.motif or '—' }}</small></td>
+                    <td data-label="Statut">
+                      {% if a.statut == 'acceptee' %}<span class="badge" style="background:#dcfce7;color:#166534;">✓ {{ statut_labels[a.statut] }}</span>
+                      {% elif a.statut == 'refusee' %}<span class="badge" style="background:#fee2e2;color:#991b1b;">✕ {{ statut_labels[a.statut] }}</span>{% if a.motif_refus %}<br><small style="color:#991b1b;">{{ a.motif_refus }}</small>{% endif %}
+                      {% elif a.statut == 'justificatif_depose' %}<span class="badge" style="background:#fef9c3;color:#854d0e;">⏳ {{ statut_labels[a.statut] }}</span>
+                      {% else %}<span class="badge" style="background:#f1f5f9;color:#475569;">{{ statut_labels.get(a.statut, a.statut) }}</span>{% endif %}
+                    </td>
+                    <td data-label="Justificatif">
+                      {% if a.justificatif_nom %}
+                        {% if session.get('role') in ['admin','rh'] %}<a class="btn btn-secondary" style="padding:4px 8px;font-size:.75rem;" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">📎 Télécharger</a>{% else %}<span>Déposé 🔒</span>{% endif %}
+                        {% if a.date_depot_justificatif %}<br><small>{{ a.date_depot_justificatif.strftime('%d/%m/%Y %H:%M') }}</small>{% endif %}
+                      {% else %}<span style="color:#94a3b8;">—</span>{% endif %}
+                    </td>
                     <td data-label="Actions">
-                        {% if session.get('role') in ['admin', 'rh'] %}
-                        <form action="{{ url_for('delete_absence', id=a.id) }}" method="post" style="display:inline;"
-                              class="confirm-form"
-                              data-confirm-title="Supprimer cette absence ?"
-                              data-confirm-subtitle="Action irréversible"
-                              data-confirm-icon="🚫">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-danger" style="padding:4px 7px;font-size:0.7rem;">🗑️</button>
+                      {% if a.statut == 'justificatif_depose' and session.get('role') in ['admin','rh'] %}
+                        <form action="{{ url_for('absence_justifications.decider_justificatif', absence_id=a.id) }}" method="post" style="display:grid;gap:5px;min-width:230px;margin-bottom:7px;">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <button name="decision" value="accepter" class="btn btn-primary" type="submit">✓ Accepter et créer le congé maladie</button>
                         </form>
-                        {% endif %}
+                        <form action="{{ url_for('absence_justifications.decider_justificatif', absence_id=a.id) }}" method="post" style="display:grid;gap:5px;min-width:230px;">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="text" name="motif_refus" class="form-control" placeholder="Motif obligatoire en cas de refus" required>
+                          <button name="decision" value="refuser" class="btn btn-danger" type="submit">Refuser</button>
+                        </form>
+                      {% elif session.get('role') in ['admin','rh'] and a.statut != 'acceptee' %}
+                        <form action="{{ url_for('delete_absence', id=a.id) }}" method="post" style="display:inline;" class="confirm-form" data-confirm-title="Supprimer cette absence ?" data-confirm-subtitle="Action irréversible" data-confirm-icon="🚫">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-danger" style="padding:4px 7px;font-size:.7rem;">🗑️</button>
+                        </form>
+                      {% else %}<span style="color:#94a3b8;">—</span>{% endif %}
                     </td>
                 </tr>
                 {% else %}
-                <tr>
-                    <td colspan="4" style="text-align:center; padding:40px; color:#64748b;">
-                        Aucune absence non justifiée enregistrée.
-                    </td>
-                </tr>
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:#64748b;">Aucune absence correspondant aux filtres.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-
     {{ pagination('absences', base_qs, pg, page_items) }}
 </div>
 {% endblock %}

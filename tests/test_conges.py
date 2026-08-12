@@ -8,7 +8,7 @@ def _demande_conge(client, employe_id=1, jours=3):
     fin = debut + timedelta(days=jours - 1)
     return client.post('/conges/add', data={
         'employe_id': str(employe_id),
-        'type_conge': 'payé',
+        'type_conge': 'congé payé',
         'date_debut': debut.isoformat(),
         'date_fin': fin.isoformat(),
         'motif': 'Test',
@@ -91,7 +91,14 @@ def test_delete_conge_removes_request(admin_client):
         assert cur.fetchone() is None
 
 
-def test_solde_conges_defaut_25_jours(admin_client):
+def test_solde_conges_suit_acquisition_mensuelle(admin_client):
+    """Le code publié acquiert ~2,08 j/mois : l'ancien attendu fixe de 25 j
+    contredisait cette règle métier et le job quotidien de recalcul."""
+    with application.db_cursor() as (conn, cur):
+        cur.execute("SELECT date_embauche FROM employes WHERE id = 1")
+        date_embauche = cur.fetchone()['date_embauche']
+    attendu = application.calculer_jours_acquis_prorata(
+        date_embauche, date.today().year)
     solde = application.get_solde_conges(1)
-    assert solde['jours_acquis'] == 25
-    assert solde['jours_restants'] == 25
+    assert solde['jours_acquis'] == attendu
+    assert solde['jours_restants'] == attendu

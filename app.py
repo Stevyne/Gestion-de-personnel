@@ -22,6 +22,11 @@ from flask_mail import Mail, Message
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 
+from services.email_outbox import ajouter_email, traiter_outbox
+from blueprints.absence_justifications import (
+    ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
+)
+
 # ==================== LOGGING ====================
 logging.basicConfig(
     level=getattr(logging, os.environ.get('LOG_LEVEL', 'INFO').upper(), logging.INFO),
@@ -154,6 +159,13 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'gestion.personnel@entreprise.fr')
 app.config['ADMIN_EMAIL'] = os.environ.get('ADMIN_EMAIL', 'admin@entreprise.fr')
+# Aucun SMTP n'est contacté sans activation explicite. En développement et
+# pendant les tests, les événements restent couverts par les notifications
+# internes, sans erreur ni tentative réseau.
+app.config['EMAIL_ENABLED'] = os.environ.get('EMAIL_ENABLED', 'false').lower() == 'true'
+app.config['EMAIL_BATCH_SIZE'] = int(os.environ.get('EMAIL_BATCH_SIZE', 20))
+app.config['EMAIL_MAX_ATTEMPTS'] = int(os.environ.get('EMAIL_MAX_ATTEMPTS', 5))
+app.config['EMAIL_POLL_SECONDS'] = int(os.environ.get('EMAIL_POLL_SECONDS', 60))
 
 def get_admin_email():
     try:
@@ -168,6 +180,56 @@ def get_admin_email():
     return app.config.get('ADMIN_EMAIL') or 'admin@entreprise.fr'
 
 mail = Mail(app)
+
+
+def queue_email(destinataire, sujet, corps_texte, corps_html=None,
+                cur=None, event_key=None):
+    """Place un e-mail dans l'outbox persistante.
+
+    L'appel est un no-op assumé tant que ``EMAIL_ENABLED`` n'est pas activé.
+    Si un curseur est fourni, le message appartient à la même transaction que
+    l'événement métier ; sinon une courte transaction dédiée est ouverte.
+    """
+    if not app.config.get('EMAIL_ENABLED'):
+        logger.info("[EMAIL DÉSACTIVÉ] → %s | %s", destinataire, sujet)
+        return None
+    if not destinataire:
+        return None
+    try:
+        if cur is not None:
+            # Une panne de l'outbox ne doit jamais annuler l'action métier.
+            # Le SAVEPOINT restaure la transaction si l'INSERT e-mail échoue.
+            cur.execute("SAVEPOINT ajout_email_outbox")
+            try:
+                resultat = ajouter_email(cur, destinataire, sujet, corps_texte,
+                                          corps_html, event_key)
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT ajout_email_outbox")
+                cur.execute("RELEASE SAVEPOINT ajout_email_outbox")
+                raise
+            cur.execute("RELEASE SAVEPOINT ajout_email_outbox")
+            return resultat
+        with db_cursor(commit=True) as (conn, outbox_cur):
+            return ajouter_email(outbox_cur, destinataire, sujet, corps_texte,
+                                 corps_html, event_key)
+    except Exception as exc:
+        logger.error("Impossible d'ajouter l'e-mail à l'outbox: %s", exc,
+                     exc_info=True)
+        return None
+
+
+def _send_outbox_message(message):
+    """Adaptateur Flask-Mail appelé uniquement par le worker d'outbox."""
+    msg = Message(
+        subject=message['sujet'],
+        recipients=[message['destinataire']],
+        sender=app.config.get('MAIL_DEFAULT_SENDER'),
+    )
+    msg.body = message.get('corps_texte') or ''
+    if message.get('corps_html'):
+        msg.html = message['corps_html']
+    mail.send(msg)
+
 
 # === INITIALISATION SÉCURITÉ ===
 csrf = CSRFProtect(app)
@@ -200,20 +262,25 @@ logger.info("Sécurité activée : CSRF + RateLimit + Talisman")
 
 
 # ==================== HTML EMAIL ====================
-def send_html_email(recipients, subject, html_template, **context):
+def send_html_email(recipients, subject, html_template, event_key=None, **context):
+    """Rend un template puis met l'e-mail en file, sans SMTP dans la requête."""
     try:
-        if not app.config.get('MAIL_USERNAME'):
-            logger.info(f"[HTML EMAIL DEMO] → {recipients} | {subject}")
-            return True
         html_body = render_template(html_template, **context)
+        liste = [recipients] if isinstance(recipients, str) else list(recipients or [])
         admin = get_admin_email()
-        msg = Message(subject=subject, recipients=[recipients] if isinstance(recipients, str) else recipients, cc=[admin], sender=admin)
-        msg.html = html_body
-        mail.send(msg)
-        logger.info("HTML email envoyé")
+        if admin and admin not in liste:
+            liste.append(admin)  # équivalent de l'ancien CC administrateur
+        for index, destinataire in enumerate(liste):
+            queue_email(
+                destinataire, subject,
+                "Une notification de Gestion du Personnel vous attend. "
+                "Consultez l'application pour les détails.",
+                corps_html=html_body,
+                event_key=f"{event_key}:{index}" if event_key else None,
+            )
         return True
     except Exception as e:
-        logger.error("Erreur HTML email: %s", e, exc_info=True)
+        logger.error("Erreur préparation e-mail HTML: %s", e, exc_info=True)
         return False
 
 HEURE_ARRIVEE_ATTENDUE = "09:00"
@@ -322,18 +389,33 @@ def role_required(*allowed_roles):
     return decorator
 
 # ==================== NOTIFICATIONS (Base de données - support multi-utilisateur réel) ====================
-def create_notification(user_id, title, message, type_="info"):
-    """Crée une notification persistante en base (multi-utilisateur safe)"""
+def create_notification(user_id, title, message, type_="info", cur=None):
+    """Crée une notification persistante.
+
+    ``cur`` permet de rattacher la notification à la transaction métier : pas
+    de notification fantôme si l'enregistrement principal est annulé.
+    """
     try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        cur.execute("""
-            INSERT INTO notifications (user_id, title, message, type, is_read)
-            VALUES (%s, %s, %s, %s, FALSE)
-        """, (user_id, title, message, type_))
-        conn.commit()
-        cur.close()
-        conn.close()
+        if cur is not None:
+            # Même garantie que pour l'outbox : une notification invalide ou
+            # une indisponibilité ponctuelle ne fait pas échouer le workflow.
+            cur.execute("SAVEPOINT ajout_notification")
+            try:
+                cur.execute("""
+                    INSERT INTO notifications (user_id, title, message, type, is_read)
+                    VALUES (%s, %s, %s, %s, FALSE)
+                """, (user_id, title, message, type_))
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT ajout_notification")
+                cur.execute("RELEASE SAVEPOINT ajout_notification")
+                raise
+            cur.execute("RELEASE SAVEPOINT ajout_notification")
+            return True
+        with db_cursor(commit=True) as (conn, notification_cur):
+            notification_cur.execute("""
+                INSERT INTO notifications (user_id, title, message, type, is_read)
+                VALUES (%s, %s, %s, %s, FALSE)
+            """, (user_id, title, message, type_))
         return True
     except Exception as e:
         logger.error("Erreur create_notification DB: %s", e, exc_info=True)
@@ -464,15 +546,16 @@ def inject_context():
 # ==================== RETARD EMAIL (HTML) ====================
 def send_retard_email(employee_name, employee_email, retard_minutes, date_str, heure_arrivee):
     admin_email = get_admin_email()
-    if not app.config.get('MAIL_USERNAME'):
-        logger.info(f"[EMAIL DEMO] De: {admin_email} → {employee_name} +{retard_minutes} min")
+    if not app.config.get('EMAIL_ENABLED'):
+        logger.info(f"[EMAIL DÉSACTIVÉ] → {employee_name} +{retard_minutes} min")
         return True
     try:
         subject = f"⚠️ Retard détecté - {employee_name}"
-        sent = send_html_email(
+        return send_html_email(
             recipients=[employee_email] if employee_email else [admin_email],
             subject=subject,
             html_template="emails/retard.html",
+            event_key=f"retard:{employee_email or employee_name}:{date_str}:{heure_arrivee}",
             prenom=employee_name.split()[0] if employee_name else "Employé",
             nom_complet=employee_name,
             date_str=date_str,
@@ -481,15 +564,8 @@ def send_retard_email(employee_name, employee_email, retard_minutes, date_str, h
             heure_attendue=HEURE_ARRIVEE_ATTENDUE,
             admin_name="Administrateur Système"
         )
-        if sent: return True
-        # fallback
-        body = f"Bonjour,\n\nRetard détecté : {employee_name} le {date_str} à {heure_arrivee} (+{retard_minutes} min)"
-        msg = Message(subject=subject, recipients=[employee_email or admin_email], cc=[admin_email], sender=admin_email)
-        msg.body = body
-        mail.send(msg)
-        return True
     except Exception as e:
-        logger.error("Erreur retard email: %s", e, exc_info=True)
+        logger.error("Erreur mise en file e-mail retard: %s", e, exc_info=True)
         return False
 
 # ==================== DB ====================
@@ -729,7 +805,7 @@ def _managers_du_departement(cur, departement):
     if not departement:
         return []
     cur.execute("""
-        SELECT u.id, u.username FROM users u
+        SELECT u.id, u.username, e.email FROM users u
           JOIN employes e ON e.id = u.employe_id
          WHERE u.role = 'manager' AND e.departement = %s
     """, (departement,))
@@ -742,7 +818,36 @@ def _notifier_roles(cur, roles, titre, message, type_='info', sauf=None):
     for row in cur.fetchall():
         if sauf and row['id'] == sauf:
             continue
-        create_notification(row['id'], titre, message, type_)
+        create_notification(row['id'], titre, message, type_, cur=cur)
+
+
+def _envoyer_roles(cur, roles, sujet, message, cle_prefixe):
+    """Met en file un e-mail pour chaque compte de rôle disposant d'une adresse."""
+    cur.execute("""
+        SELECT u.id, e.email FROM users u
+        LEFT JOIN employes e ON e.id = u.employe_id
+        WHERE u.role IN %s AND e.email IS NOT NULL
+    """, (tuple(roles),))
+    for row in cur.fetchall():
+        queue_email(row['email'], sujet, message, cur=cur,
+                    event_key=f"{cle_prefixe}:{row['id']}")
+
+
+def _notifier_employe_evenement(cur, employe_id, titre, message,
+                                 type_='info', cle_evenement=None):
+    """Notification interne + e-mail éventuel à l'employé concerné."""
+    cur.execute("""
+        SELECT e.email, u.id AS user_id
+          FROM employes e LEFT JOIN users u ON u.employe_id = e.id
+         WHERE e.id = %s ORDER BY u.id NULLS LAST LIMIT 1
+    """, (employe_id,))
+    cible = cur.fetchone()
+    if not cible:
+        return
+    if cible.get('user_id'):
+        create_notification(cible['user_id'], titre, message, type_, cur=cur)
+    queue_email(cible.get('email'), titre, message, cur=cur,
+                event_key=cle_evenement)
 
 
 def _user_id_de_employe(cur, employe_id):
@@ -949,6 +1054,26 @@ def init_db():
         date_enregistrement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(employe_id, date)
     )''')
+    # Circuit de justification : les anciennes lignes deviennent explicitement
+    # « non justifiées ». Le binaire reste en BYTEA, comme les documents RH et
+    # avatars, afin de survivre aux redémarrages du disque éphémère Render.
+    for col, typ in (
+        ('statut', 'VARCHAR(30) DEFAULT \'non_justifiee\''),
+        ('justificatif_nom', 'VARCHAR(255)'),
+        ('justificatif_type', 'VARCHAR(20)'),
+        ('justificatif_taille', 'INTEGER'),
+        ('justificatif_contenu', 'BYTEA'),
+        ('date_depot_justificatif', 'TIMESTAMP'),
+        ('justification_commentaire', 'TEXT'),
+        ('decide_par', 'INTEGER REFERENCES users(id) ON DELETE SET NULL'),
+        ('decide_le', 'TIMESTAMP'),
+        ('motif_refus', 'TEXT'),
+        ('conge_id', 'INTEGER REFERENCES conges(id) ON DELETE SET NULL'),
+    ):
+        cur.execute(f"ALTER TABLE absences ADD COLUMN IF NOT EXISTS {col} {typ}")
+    cur.execute("UPDATE absences SET statut = 'non_justifiee' WHERE statut IS NULL")
+    cur.execute("ALTER TABLE absences ALTER COLUMN statut SET DEFAULT 'non_justifiee'")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_absences_statut ON absences(statut)")
     # Absences supprimées manuellement : on mémorise les couples (employe_id, date)
     # à NE PAS régénérer automatiquement. Sans cela, la génération auto recréerait
     # immédiatement toute absence supprimée (le jour reste sans présence) et la
@@ -1079,6 +1204,25 @@ def init_db():
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_notif_unread ON notifications(user_id, is_read)")
+
+    # Outbox SMTP persistante : la requête web ne dépend jamais de la latence
+    # du fournisseur e-mail. Une clé d'événement optionnelle évite les doublons.
+    cur.execute('''CREATE TABLE IF NOT EXISTS email_outbox (
+        id SERIAL PRIMARY KEY,
+        destinataire VARCHAR(320) NOT NULL,
+        sujet VARCHAR(255) NOT NULL,
+        corps_texte TEXT,
+        corps_html TEXT,
+        cle_evenement VARCHAR(200) UNIQUE,
+        statut VARCHAR(20) NOT NULL DEFAULT 'en_attente',
+        tentatives INTEGER NOT NULL DEFAULT 0,
+        disponible_le TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        verrouille_le TIMESTAMP,
+        date_creation TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        envoye_le TIMESTAMP,
+        derniere_erreur TEXT
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_outbox_a_envoyer ON email_outbox(statut, disponible_le)")
 
     # ==================== MATÉRIELS (stock par département) ====================
     # Un matériel appartient à un département (papiers, stylos, classeurs...).
@@ -1791,6 +1935,7 @@ def self_service():
     emp = get_current_employee()
     my_presences = []
     my_conges = []
+    my_absences = []
     mon_solde = None
     materiels_a_confirmer = 0
     if emp:
@@ -1801,6 +1946,10 @@ def self_service():
         for p in my_presences: p['retard_minutes'] = calculer_retard(p['heure_arrivee'])
         cur.execute("SELECT * FROM conges WHERE employe_id = %s ORDER BY date_demande DESC LIMIT 15", (emp['id'],))
         my_conges = cur.fetchall()
+        cur.execute("""SELECT id, date, statut, motif_refus FROM absences
+                       WHERE employe_id = %s ORDER BY date DESC LIMIT 8""",
+                    (emp['id'],))
+        my_absences = cur.fetchall()
         mon_solde = get_solde_conges(emp['id'])
         # Nombre d'équipements dont l'employé n'a pas encore accusé réception :
         # sert à afficher un rappel visible dès l'accueil de l'espace.
@@ -1809,8 +1958,9 @@ def self_service():
         materiels_a_confirmer = cur.fetchone()['nb']
         cur.close(); conn.close()
     return render_template('self_service.html', employee=emp, my_presences=my_presences,
-                           my_conges=my_conges, mon_solde=mon_solde,
-                           libelles=DEMANDE_LIBELLES,
+                           my_conges=my_conges, my_absences=my_absences,
+                           absence_statut_labels=ABSENCE_STATUT_LABELS,
+                           mon_solde=mon_solde, libelles=DEMANDE_LIBELLES,
                            materiels_a_confirmer=materiels_a_confirmer)
 
 @app.route('/self-service/presences')
@@ -2371,6 +2521,13 @@ def add_presence():
                     statut = EXCLUDED.statut,
                     commentaire = EXCLUDED.commentaire
             """, (employe_id, date_val, heure_arrivee or None, heure_depart or None, statut, commentaire))
+            _notifier_employe_evenement(
+                cur, int(employe_id), "Présence enregistrée",
+                f"Votre présence du {date_val} a été enregistrée avec le statut « {statut} ». ",
+                'info',
+                cle_evenement=(f"presence:{employe_id}:{date_val}:{statut}:"
+                               f"{heure_arrivee}:{heure_depart}"),
+            )
             conn.commit()
             flash("Présence enregistrée / modifiée avec succès", "success")
             cur.close(); conn.close()
@@ -2523,12 +2680,16 @@ def add_conge():
                          % (nombre_jours, d1.strftime('%d/%m/%Y'), d2.strftime('%d/%m/%Y')))
                 managers = _managers_du_departement(cur, dept)
                 for m in managers:
-                    create_notification(m['id'], titre, corps, 'info')
+                    create_notification(m['id'], titre, corps, 'info', cur=cur)
+                    queue_email(m.get('email'), titre, corps, cur=cur,
+                                event_key=f"conge-a-traiter:{cid}:{m['id']}")
                 if not managers:
                     # Aucun manager sur ce département : le RH traite directement.
-                    _notifier_roles(cur, ('admin', 'rh'), titre,
-                                    corps + " (aucun manager sur ce département)",
+                    message_rh = corps + " (aucun manager sur ce département)"
+                    _notifier_roles(cur, ('admin', 'rh'), titre, message_rh,
                                     'info', sauf=session.get('user_id'))
+                    _envoyer_roles(cur, ('admin', 'rh'), titre, message_rh,
+                                   f"conge-a-traiter:{cid}")
 
                 log_action(session.get('user_id'), session.get('username'),
                            "Demande de congé", "conge", cid, f"{nombre_jours} j")
@@ -2576,11 +2737,13 @@ def avis_conge(id):
                      commentaire or None, id))
 
         nom, _ = _libelle_employe(cur, c['employe_id'])
-        _notifier_roles(cur, ('admin', 'rh'),
-                        "Congé à décider : %s" % nom,
-                        "Avis %s du manager %s. %s"
-                        % (avis, session.get('username'), commentaire[:120]),
+        sujet_rh = "Congé à décider : %s" % nom
+        message_rh = ("Avis %s du manager %s. %s"
+                      % (avis, session.get('username'), commentaire[:120]))
+        _notifier_roles(cur, ('admin', 'rh'), sujet_rh, message_rh,
                         'info', sauf=session.get('user_id'))
+        _envoyer_roles(cur, ('admin', 'rh'), sujet_rh, message_rh,
+                       f"conge-a-decider:{id}")
         uid = _user_id_de_employe(cur, c['employe_id'])
         if uid:
             create_notification(uid, "Votre demande de congé avance",
@@ -2614,7 +2777,6 @@ def update_conge(id):
             flash("Cette demande est déjà tranchée.", "warning")
             return redirect(url_for('conges'))
 
-        uid = _user_id_de_employe(cur, c['employe_id'])
         annee = datetime.strptime(str(c['date_debut']), '%Y-%m-%d').year
 
         if action == 'approuver':
@@ -2623,10 +2785,12 @@ def update_conge(id):
                            WHERE id = %s""",
                         (DEMANDE_APPROUVEE, session.get('username'), id))
             recalculer_solde(c['employe_id'], annee, cur=cur)
-            if uid:
-                create_notification(uid, "Congé approuvé",
-                                    "Votre congé du %s au %s est approuvé."
-                                    % (c['date_debut'], c['date_fin']), 'success')
+            _notifier_employe_evenement(
+                cur, c['employe_id'], "Congé approuvé",
+                "Votre congé du %s au %s est approuvé."
+                % (c['date_debut'], c['date_fin']), 'success',
+                cle_evenement=f"conge-decision:{id}:approuve",
+            )
             flash("Congé approuvé et solde mis à jour", "success")
         elif action == 'refuser':
             cur.execute("""UPDATE conges SET statut = %s, decide_par = %s,
@@ -2634,11 +2798,12 @@ def update_conge(id):
                            WHERE id = %s""",
                         (DEMANDE_REFUSEE, session.get('username'), motif_refus, id))
             recalculer_solde(c['employe_id'], annee, cur=cur)
-            if uid:
-                create_notification(uid, "Congé refusé",
-                                    "Votre demande du %s au %s a été refusée : %s"
-                                    % (c['date_debut'], c['date_fin'], motif_refus),
-                                    'danger')
+            _notifier_employe_evenement(
+                cur, c['employe_id'], "Congé refusé",
+                "Votre demande du %s au %s a été refusée : %s"
+                % (c['date_debut'], c['date_fin'], motif_refus), 'danger',
+                cle_evenement=f"conge-decision:{id}:refuse",
+            )
             flash("Congé refusé : l'employé est informé du motif.", "info")
         else:
             flash("Action inconnue.", "danger")
@@ -2690,6 +2855,11 @@ def annuler_conge(id):
 @role_required('admin', 'rh', 'manager')
 def delete_conge(id):
     with db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT id FROM absences WHERE conge_id = %s", (id,))
+        if cur.fetchone():
+            flash("Ce congé maladie provient d'un justificatif accepté et ne peut pas être supprimé.",
+                  "warning")
+            return redirect(url_for('conges'))
         cur.execute("DELETE FROM conges WHERE id = %s", (id,))
     flash("Demande de congé supprimée", "success")
     return redirect(url_for('conges'))
@@ -2844,7 +3014,8 @@ def job_alertes_expiration_documents():
                     return
 
                 cur.execute("""
-                    SELECT d.id, d.titre, d.date_expiration, d.employe_id, e.nom, e.prenom
+                    SELECT d.id, d.titre, d.date_expiration, d.employe_id,
+                           e.nom, e.prenom, e.email
                     FROM documents d
                     LEFT JOIN employes e ON d.employe_id = e.id
                     WHERE d.date_expiration IS NOT NULL
@@ -2889,7 +3060,16 @@ def job_alertes_expiration_documents():
                         uid = user_id_par_employe.get(d['employe_id'])
                         if uid:
                             create_notification(uid, "Votre document arrive à expiration" if type_alerte == 'bientot'
-                                                 else "Votre document a expiré", message, "warning")
+                                                 else "Votre document a expiré", message, "warning",
+                                                 cur=cur)
+                        queue_email(
+                            d.get('email'),
+                            "Votre document arrive à expiration" if type_alerte == 'bientot'
+                            else "Votre document a expiré",
+                            message + " Contactez les RH pour son renouvellement.",
+                            cur=cur,
+                            event_key=f"document-expiration:{d['id']}:{type_alerte}",
+                        )
 
                 details = "\n".join(
                     f"- [{'EXPIRÉ' if t == 'expire' else 'bientôt'}] {d['titre']} "
@@ -2901,26 +3081,23 @@ def job_alertes_expiration_documents():
                     [get_admin_email()],
                     f"📄 {len(a_notifier)} document(s) à vérifier (expiration)",
                     "Bonjour,\n\nLes documents suivants nécessitent votre attention :\n\n"
-                    f"{details}\n\nConsultez la page Documents pour les renouveler si besoin."
+                    f"{details}\n\nConsultez la page Documents pour les renouveler si besoin.",
+                    event_key=f"documents-expiration:{date.today().isoformat()}"
                 )
         except Exception:
             logger.exception("Erreur lors du job planifié d'alertes d'expiration de documents")
 
 
 
-def _envoyer_email_texte(destinataires, sujet, corps):
-    """Envoi d'un email texte simple (pas de template HTML dédié nécessaire ici)."""
-    if not app.config.get('MAIL_USERNAME'):
-        logger.info(f"[EMAIL DEMO] → {destinataires} | {sujet}")
-        return True
+def _envoyer_email_texte(destinataires, sujet, corps, event_key=None):
+    """Met en file un e-mail texte ; aucun appel SMTP n'a lieu ici."""
     try:
-        admin = get_admin_email()
-        msg = Message(subject=sujet, recipients=destinataires, sender=admin)
-        msg.body = corps
-        mail.send(msg)
+        for index, destinataire in enumerate(destinataires or []):
+            queue_email(destinataire, sujet, corps,
+                        event_key=f"{event_key}:{index}" if event_key else None)
         return True
     except Exception as e:
-        logger.error("Erreur envoi email texte: %s", e, exc_info=True)
+        logger.error("Erreur mise en file e-mail texte: %s", e, exc_info=True)
         return False
 
 
@@ -2954,7 +3131,7 @@ def job_generation_quotidienne_absences():
 
                 motif_auto = "Aucune présence enregistrée (généré automatiquement)"
                 cur.execute("""
-                    SELECT a.employe_id, a.date, e.nom, e.prenom
+                    SELECT a.employe_id, a.date, e.nom, e.prenom, e.email
                     FROM absences a JOIN employes e ON a.employe_id = e.id
                     WHERE a.date_enregistrement::date = CURRENT_DATE AND a.motif = %s
                     ORDER BY a.date
@@ -2966,13 +3143,19 @@ def job_generation_quotidienne_absences():
                 user_id_par_employe = {u['employe_id']: u['id'] for u in cur.fetchall()}
                 for a in nouvelles:
                     uid = user_id_par_employe.get(a['employe_id'])
+                    message_absence = (
+                        f"Aucune présence relevée le {a['date']} — une absence a été "
+                        "enregistrée automatiquement. Vous pouvez déposer un justificatif "
+                        "depuis votre espace employé."
+                    )
                     if uid:
-                        create_notification(
-                            uid, "Absence enregistrée",
-                            f"Aucune présence relevée le {a['date']} — une absence a été "
-                            f"enregistrée automatiquement.",
-                            "warning"
-                        )
+                        create_notification(uid, "Absence enregistrée", message_absence,
+                                            "warning", cur=cur)
+                    queue_email(
+                        a.get('email'), "Absence enregistrée", message_absence,
+                        cur=cur,
+                        event_key=f"absence-auto:{a['employe_id']}:{a['date']}",
+                    )
 
                 # Notifier RH/admin (résumé global)
                 cur.execute("SELECT id FROM users WHERE role IN ('admin', 'rh')")
@@ -3091,6 +3274,21 @@ def job_recalcul_soldes_conges():
             logger.exception("Erreur lors du job planifié de recalcul des soldes de congés")
 
 
+def job_traiter_file_emails():
+    """Vide périodiquement l'outbox SMTP avec reprise et tentatives bornées."""
+    if not app.config.get('EMAIL_ENABLED'):
+        return {'traites': 0, 'envoyes': 0, 'replanifies': 0, 'echecs': 0}
+    with app.app_context():
+        resultat = traiter_outbox(
+            db_cursor, _send_outbox_message, logger,
+            taille_lot=app.config.get('EMAIL_BATCH_SIZE', 20),
+            tentatives_max=app.config.get('EMAIL_MAX_ATTEMPTS', 5),
+        )
+        if resultat['traites']:
+            logger.info("Outbox e-mail : %s", resultat)
+        return resultat
+
+
 def demarrer_scheduler():
     """Démarre le scheduler en tâche de fond (1 seul process gunicorn en
     production, cf. render.yaml). Avec le rechargeur Flask (FLASK_DEBUG=true en
@@ -3127,6 +3325,13 @@ def demarrer_scheduler():
         job_validation_auto_maintenances, 'cron',
         hour=3, minute=30, id='validation_auto_maintenances', replace_existing=True
     )
+    if app.config.get('EMAIL_ENABLED'):
+        scheduler.add_job(
+            job_traiter_file_emails, 'interval',
+            seconds=max(15, app.config.get('EMAIL_POLL_SECONDS', 60)),
+            id='traiter_file_emails', replace_existing=True,
+            max_instances=1, coalesce=True,
+        )
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
     logger.info("Scheduler démarré : génération auto des absences (01h00) + alertes "
@@ -3149,6 +3354,7 @@ def absences():
     employe_id = request.args.get('employe_id', '').strip()
     date_debut = request.args.get('date_debut', '').strip()
     date_fin = request.args.get('date_fin', '').strip()
+    statut = request.args.get('statut', '').strip()
     page = max(1, request.args.get('page', 1, type=int))
     per_page = 10
 
@@ -3163,6 +3369,8 @@ def absences():
         where += " AND a.date >= %s"; params.append(date_debut)
     if date_fin:
         where += " AND a.date <= %s"; params.append(date_fin)
+    if statut in ABSENCE_STATUT_LABELS:
+        where += " AND a.statut = %s"; params.append(statut)
 
     with db_cursor() as (conn, cur):
         from_ = "absences a JOIN employes e ON a.employe_id = e.id"
@@ -3174,8 +3382,11 @@ def absences():
         absences_list = cur.fetchall()
         cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
         employees = cur.fetchall()
-    filters = {'search': search, 'employe_id': employe_id, 'date_debut': date_debut, 'date_fin': date_fin}
-    return render_template('absences.html', absences=absences_list, employees=employees, nb_total=total, filters=filters,
+    filters = {'search': search, 'employe_id': employe_id, 'date_debut': date_debut,
+               'date_fin': date_fin, 'statut': statut}
+    return render_template('absences.html', absences=absences_list, employees=employees,
+                           nb_total=total, filters=filters,
+                           statut_labels=ABSENCE_STATUT_LABELS,
                            pg=pg, page_items=page_list(pg['page'], pg['pages']),
                            base_qs=urlencode({k: v for k, v in filters.items() if v}))
 
@@ -3193,9 +3404,17 @@ def add_absence():
                 cur.execute("""
                     INSERT INTO absences (employe_id, date, motif, enregistre_par)
                     VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (employe_id, date) DO UPDATE SET motif = EXCLUDED.motif
+                    ON CONFLICT (employe_id, date) DO UPDATE SET
+                        motif = EXCLUDED.motif,
+                        enregistre_par = EXCLUDED.enregistre_par
                 """, (employe_id, date_val, motif, session.get('user_id')))
-            flash("Absence non justifiée enregistrée", "success")
+                message = (f"Une absence non justifiée a été enregistrée pour le {date_val}. "
+                           "Vous pouvez déposer un justificatif depuis votre espace employé.")
+                _notifier_employe_evenement(
+                    cur, int(employe_id), "Absence enregistrée", message, 'warning',
+                    cle_evenement=f"absence-manuelle:{employe_id}:{date_val}",
+                )
+            flash("Absence non justifiée enregistrée et employé informé", "success")
             return redirect(url_for('absences'))
         flash("Employé et date requis", "danger")
     with db_cursor() as (conn, cur):
@@ -3211,8 +3430,12 @@ def delete_absence(id):
     with db_cursor(commit=True) as (conn, cur):
         # On mémorise la date supprimée pour empêcher la génération automatique
         # de la recréer immédiatement (sinon elle réapparaît au prochain affichage).
-        cur.execute("SELECT employe_id, date FROM absences WHERE id = %s", (id,))
+        cur.execute("SELECT employe_id, date, statut, conge_id FROM absences WHERE id = %s", (id,))
         row = cur.fetchone()
+        if row and row.get('statut') == ABSENCE_ACCEPTEE:
+            flash("Une absence déjà requalifiée en congé maladie ne peut pas être supprimée.",
+                  "warning")
+            return redirect(url_for('absences'))
         if row:
             cur.execute("""
                 INSERT INTO absences_exclues (employe_id, date) VALUES (%s, %s)
@@ -3326,11 +3549,15 @@ def add_permission():
                          % (nombre_jours, d1.strftime('%d/%m/%Y'), d2.strftime('%d/%m/%Y')))
                 managers = _managers_du_departement(cur, dept)
                 for m in managers:
-                    create_notification(m['id'], titre, corps, 'info')
+                    create_notification(m['id'], titre, corps, 'info', cur=cur)
+                    queue_email(m.get('email'), titre, corps, cur=cur,
+                                event_key=f"permission-a-traiter:{pid}:{m['id']}")
                 if not managers:
-                    _notifier_roles(cur, ('admin', 'rh'), titre,
-                                    corps + " (aucun manager sur ce département)",
+                    message_rh = corps + " (aucun manager sur ce département)"
+                    _notifier_roles(cur, ('admin', 'rh'), titre, message_rh,
                                     'info', sauf=session.get('user_id'))
+                    _envoyer_roles(cur, ('admin', 'rh'), titre, message_rh,
+                                   f"permission-a-traiter:{pid}")
 
                 log_action(session.get('user_id'), session.get('username'),
                            "Demande de permission", "permission", pid, f"{nombre_jours} j")
@@ -3377,11 +3604,13 @@ def avis_permission(id):
                      commentaire or None, id))
 
         nom, _ = _libelle_employe(cur, pm['employe_id'])
-        _notifier_roles(cur, ('admin', 'rh'),
-                        "Permission à décider : %s" % nom,
-                        "Avis %s du manager %s. %s"
-                        % (avis, session.get('username'), commentaire[:120]),
+        sujet_rh = "Permission à décider : %s" % nom
+        message_rh = ("Avis %s du manager %s. %s"
+                      % (avis, session.get('username'), commentaire[:120]))
+        _notifier_roles(cur, ('admin', 'rh'), sujet_rh, message_rh,
                         'info', sauf=session.get('user_id'))
+        _envoyer_roles(cur, ('admin', 'rh'), sujet_rh, message_rh,
+                       f"permission-a-decider:{id}")
         uid = _user_id_de_employe(cur, pm['employe_id'])
         if uid:
             create_notification(uid, "Votre demande de permission avance",
@@ -3415,27 +3644,29 @@ def update_permission(id):
             flash("Cette demande est déjà tranchée.", "warning")
             return redirect(url_for('permissions'))
 
-        uid = _user_id_de_employe(cur, pm['employe_id'])
         if action == 'approuver':
             cur.execute("""UPDATE permissions SET statut = %s, decide_par = %s,
                               decide_le = CURRENT_DATE, motif_refus = NULL
                            WHERE id = %s""",
                         (DEMANDE_APPROUVEE, session.get('username'), id))
-            if uid:
-                create_notification(uid, "Permission approuvée",
-                                    "Votre permission du %s au %s est approuvée."
-                                    % (pm['date_debut'], pm['date_fin']), 'success')
+            _notifier_employe_evenement(
+                cur, pm['employe_id'], "Permission approuvée",
+                "Votre permission du %s au %s est approuvée."
+                % (pm['date_debut'], pm['date_fin']), 'success',
+                cle_evenement=f"permission-decision:{id}:approuve",
+            )
             flash("Permission approuvée", "success")
         elif action == 'refuser':
             cur.execute("""UPDATE permissions SET statut = %s, decide_par = %s,
                               decide_le = CURRENT_DATE, motif_refus = %s
                            WHERE id = %s""",
                         (DEMANDE_REFUSEE, session.get('username'), motif_refus, id))
-            if uid:
-                create_notification(uid, "Permission refusée",
-                                    "Votre demande du %s au %s a été refusée : %s"
-                                    % (pm['date_debut'], pm['date_fin'], motif_refus),
-                                    'danger')
+            _notifier_employe_evenement(
+                cur, pm['employe_id'], "Permission refusée",
+                "Votre demande du %s au %s a été refusée : %s"
+                % (pm['date_debut'], pm['date_fin'], motif_refus), 'danger',
+                cle_evenement=f"permission-decision:{id}:refuse",
+            )
             flash("Permission refusée : l'employé est informé du motif.", "info")
         else:
             flash("Action inconnue.", "danger")
@@ -3711,6 +3942,7 @@ def view_employee(id):
     cur.execute("""
         SELECT COUNT(*) AS nb FROM absences
         WHERE employe_id = %s AND EXTRACT(YEAR FROM date) = %s
+          AND COALESCE(statut, 'non_justifiee') <> 'acceptee'
     """, (id, annee_courante))
     nb_absences = cur.fetchone()['nb']
 
@@ -3928,10 +4160,19 @@ def _traiter_upload_document(conn, cur, employe_id, titre, description, date_exp
     cur.execute("""
         INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description, date_expiration, contenu)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
     """, (employe_id, titre or filename, filename, filename,
           filename.rsplit('.', 1)[1].lower(), len(contenu), description, date_expiration, psycopg2.Binary(contenu)))
+    document_id = cur.fetchone()['id']
+    if employe_id:
+        expiration = f" Il expire le {date_expiration}." if date_expiration else ""
+        _notifier_employe_evenement(
+            cur, int(employe_id), "Nouveau document dans votre dossier",
+            f"Le document « {titre or filename} » a été ajouté à votre dossier.{expiration}",
+            'info', cle_evenement=f"document-ajoute:{document_id}",
+        )
     conn.commit()
-    log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", None, f"{titre} ({filename})")
+    log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", document_id, f"{titre} ({filename})")
     return True, 'Document uploadé avec succès'
 
 
@@ -4529,9 +4770,21 @@ def add_employee():
             cur.execute("""
                 INSERT INTO employes (nom, prenom, poste, departement, email, telephone, salaire, date_embauche)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
             """, (nom, prenom, poste, departement, email, telephone, salaire, date_embauche))
+            employe_id = cur.fetchone()['id']
+            libelle = f"{prenom} {nom}"
+            _notifier_roles(
+                cur, ('admin', 'rh'), "Nouvel employé enregistré",
+                f"{libelle} a été ajouté au département {departement or 'non renseigné'}.",
+                'success', sauf=session.get('user_id'))
+            queue_email(
+                email, "Bienvenue — dossier salarié créé",
+                f"Bonjour {prenom},\n\nVotre dossier salarié a été créé dans Gestion du Personnel. "
+                "Les RH vous communiqueront vos accès à l'espace employé.",
+                cur=cur, event_key=f"employe-cree:{employe_id}")
             conn.commit()
-            flash("Employé ajouté avec succès", "success")
+            flash("Employé ajouté avec succès ; les personnes concernées ont été informées", "success")
             cur.close()
             conn.close()
             return redirect(url_for('index'))
@@ -6591,6 +6844,21 @@ def materiels_departement(id):
     """Raccourci : stock filtré sur un département."""
     return redirect(url_for('materiels', departement=id))
 
+
+# Premier découpage vertical du monolithe : le nouveau workflow de
+# justification des absences vit dans un Blueprint et reçoit explicitement ses
+# dépendances. Les routes historiques seront déplacées par lots ultérieurs,
+# sans réécriture massive risquée.
+app.register_blueprint(creer_blueprint_justifications({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'role_required': role_required,
+    'get_current_employee': get_current_employee,
+    'detect_file_type': detect_file_type,
+    'create_notification': create_notification,
+    'queue_email': queue_email,
+    'log_action': log_action,
+}))
 
 # Doit s'exécuter que l'app soit lancée directement (python app.py) OU importée
 # par un serveur WSGI (gunicorn app:app, cas du déploiement Render) : sinon les
