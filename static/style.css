@@ -2904,3 +2904,138 @@ footer {
     .navbar .nav-links.desktop-nav .nav-link { padding: 9px; }
     .navbar .nav-dropdown-menu span { display: inline; }
 }
+
+/* =========================================================================
+   GESTION DE PARC : exemplaires, maintenance, étiquettes QR
+   ========================================================================= */
+
+/* --- Badges d'état d'un exemplaire --- */
+.badge.etat-bon        { background:#dcfce7; color:#166534; }
+.badge.etat-usage      { background:#fef9c3; color:#854d0e; }
+.badge.etat-panne      { background:#fee2e2; color:#991b1b; }
+.badge.etat-reparation { background:#dbeafe; color:#1e40af; }
+.badge.etat-rebut      { background:#e2e8f0; color:#475569; }
+
+/* --- Bloc « Acquisition & patrimoine » du formulaire matériel --- */
+.fieldset-patrimoine {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin: 0 0 18px;
+}
+.fieldset-patrimoine legend {
+    font-weight: 600;
+    color: #1e293b;
+    padding: 0 8px;
+    font-size: 0.95rem;
+}
+.fieldset-patrimoine legend small { font-weight: 400; color: #94a3b8; }
+
+/* --- Fiche exemplaire : infos à gauche, QR à droite --- */
+.exemplaire-entete {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+.exemplaire-infos { flex: 1 1 340px; min-width: 0; }
+.exemplaire-qr { flex: 0 0 auto; text-align: center; }
+
+.qr-cadre {
+    width: 168px;
+    height: 168px;
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+}
+.qr-cadre svg { width: 100%; height: 100%; display: block; }
+.qr-legende { font-size: 0.78rem; color: #94a3b8; margin: 8px 0 0; }
+.qr-absent {
+    width: 168px; padding: 26px 10px;
+    border: 1px dashed #cbd5e1; border-radius: 12px;
+    color: #94a3b8; font-size: 0.82rem; text-align: center;
+}
+
+/* Liste de champs en deux colonnes (libellé / valeur) */
+.fiche-champs {
+    display: grid;
+    grid-template-columns: minmax(120px, auto) 1fr;
+    gap: 8px 18px;
+    margin: 0;
+}
+.fiche-champs dt {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #64748b;
+    align-self: center;
+}
+.fiche-champs dd { margin: 0; color: #1e293b; }
+
+/* --- Intervention en cours --- */
+.maint-encours {
+    background: #fffbeb;
+    border-left: 4px solid #f59e0b;
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+.maint-etapes {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-size: 0.85rem;
+}
+.maint-etapes .etape {
+    padding: 4px 10px; border-radius: 9999px;
+    background: #fff; border: 1px solid #e2e8f0; color: #94a3b8;
+}
+.maint-etapes .etape.faite {
+    background: #1e40af; border-color: #1e40af; color: #fff; font-weight: 600;
+}
+.maint-etapes .etape-fleche { color: #cbd5e1; }
+
+/* --- Planche d'étiquettes --- */
+.planche-etiquettes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+}
+.etiquette {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px dashed #94a3b8;
+    border-radius: 8px;
+    padding: 10px;
+    background: #fff;
+    break-inside: avoid;
+}
+.etiquette-qr { flex: 0 0 74px; }
+.etiquette-qr svg { width: 74px; height: 74px; display: block; }
+.etiquette-texte { min-width: 0; }
+.etiquette-numero {
+    font-weight: 700; font-size: 0.95rem; color: #0f172a;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+.etiquette-nom {
+    font-size: 0.82rem; color: #334155; margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.etiquette-detail { font-size: 0.72rem; color: #64748b; }
+
+/* Impression : seules les étiquettes sortent sur le papier. */
+@media print {
+    .navbar, footer, .no-print, .flash-messages, .alert { display: none !important; }
+    body { background: #fff; }
+    .container { padding: 0; margin: 0; max-width: none; }
+    .planche-etiquettes {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+    }
+    .etiquette { border-color: #cbd5e1; }
+    @page { margin: 10mm; }
+}
+
+@media (max-width: 768px) {
+    .exemplaire-qr { flex: 1 1 100%; }
+    .qr-cadre, .qr-absent { margin: 0 auto; }
+    .fiche-champs { grid-template-columns: 1fr; gap: 2px 0; }
+    .fiche-champs dd { margin-bottom: 10px; }
+}

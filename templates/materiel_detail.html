@@ -105,6 +105,113 @@
     </div>
 </div>
 
+<!-- ===== Exemplaires numérotés (gestion de parc) ===== -->
+<div class="card">
+    <div class="card-header">
+        <h3 style="margin:0;">🏷️ Exemplaires &amp; numéros d'inventaire</h3>
+        {% if exemplaires %}
+        <a href="{{ url_for('etiquettes_materiel', id=materiel.id) }}" class="btn btn-secondary" target="_blank">
+            🖨️ Étiquettes QR
+        </a>
+        {% endif %}
+    </div>
+
+    {% if exemplaires %}
+    <div class="materiels-stats" style="margin-bottom:14px;">
+        <div class="materiel-stat">
+            <div class="materiel-stat-value">{{ stats_ex.total }}</div>
+            <div class="materiel-stat-label">Exemplaires</div>
+        </div>
+        <div class="materiel-stat" style="background:#dcfce7;">
+            <div class="materiel-stat-value" style="color:#166534;">{{ stats_ex.disponibles }}</div>
+            <div class="materiel-stat-label">Disponibles</div>
+        </div>
+        <div class="materiel-stat" style="background:#fee2e2;">
+            <div class="materiel-stat-value" style="color:#991b1b;">{{ stats_ex.indisponibles }}</div>
+            <div class="materiel-stat-label">Panne / réparation</div>
+        </div>
+        <div class="materiel-stat" style="background:#f1f5f9;">
+            <div class="materiel-stat-value" style="color:#475569;">{{ stats_ex.rebuts }}</div>
+            <div class="materiel-stat-label">Au rebut</div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>N° inventaire</th>
+                    <th>N° de série</th>
+                    <th>État</th>
+                    <th>Détenteur</th>
+                    <th>Garantie</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ex in exemplaires %}
+                <tr>
+                    <td data-label="N° inventaire">
+                        <a href="{{ url_for('view_exemplaire', id=ex.id) }}"><strong>{{ ex.numero_inventaire }}</strong></a>
+                    </td>
+                    <td data-label="N° de série"><small>{{ ex.numero_serie or '—' }}</small></td>
+                    <td data-label="État">
+                        <span class="badge etat-{{ ex.etat }}">{{ etats_dict.get(ex.etat, ex.etat) }}</span>
+                        {% if ex.maintenance_id %}<br><small style="color:#b45309;">intervention en cours</small>{% endif %}
+                    </td>
+                    <td data-label="Détenteur">
+                        {% if ex.emp_nom %}{{ ex.emp_prenom }} {{ ex.emp_nom }}{% else %}—{% endif %}
+                    </td>
+                    <td data-label="Garantie">
+                        {% if ex.garantie_fin %}
+                            {% if ex.garantie_fin < aujourdhui_date %}
+                                <small style="color:#991b1b;">expirée le {{ ex.garantie_fin.strftime('%d/%m/%Y') }}</small>
+                            {% else %}
+                                <small style="color:#166534;">jusqu'au {{ ex.garantie_fin.strftime('%d/%m/%Y') }}</small>
+                            {% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td data-label="Action">
+                        <a href="{{ url_for('view_exemplaire', id=ex.id) }}" class="btn btn-sm btn-primary">Fiche</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="color:#64748b; margin-top:0;">
+        Aucun exemplaire numéroté pour l'instant. Le stock est suivi en quantité
+        ({{ materiel.quantite }} {{ materiel.unite }}).
+        Créez des exemplaires pour suivre chaque unité individuellement :
+        numéro d'inventaire, n° de série, garantie, pannes et étiquette QR.
+    </p>
+    {% endif %}
+
+    {% if peut_gerer_materiels %}
+    <form action="{{ url_for('add_exemplaire', id=materiel.id) }}" method="post"
+          class="materiels-filtres" style="margin:14px 0 0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="filtre-champ">
+            <label>Nombre à créer</label>
+            <input type="number" name="nombre" class="form-control" min="1" max="100" value="1" style="max-width:110px;">
+        </div>
+        <div class="filtre-champ">
+            <label>N° de série <small>(si 1 seul)</small></label>
+            <input type="text" name="numero_serie" class="form-control" placeholder="SN-XXXXX">
+        </div>
+        <div class="filtre-champ">
+            <label>Emplacement</label>
+            <input type="text" name="emplacement" class="form-control" placeholder="Bureau 4">
+        </div>
+        <button type="submit" class="btn btn-primary">+ Créer</button>
+    </form>
+    <small class="form-hint" style="display:block; margin-top:8px;">
+        Numérotation automatique : <code>{{ prefixe_propose }}-{{ annee_courante }}-001</code>, <code>…-002</code>…
+    </small>
+    {% endif %}
+</div>
+
 {% if attribuable %}
 <div class="card">
     <h3 style="margin-bottom:12px;">🤝 Attribuer à un employé</h3>

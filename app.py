@@ -3,13 +3,16 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from flask_wtf.csrf import CSRFProtect
+from markupsafe import Markup, escape
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 import os
+import re
 import secrets
 import logging
+import calendar
 from datetime import date, datetime, timedelta
 from functools import wraps
 import io
@@ -1067,6 +1070,75 @@ def init_db():
     # saisie à la main d'un ajustement issu d'un inventaire physique.
     cur.execute("ALTER TABLE materiels_mouvements ADD COLUMN IF NOT EXISTS origine VARCHAR(20) DEFAULT 'manuel'")
 
+    # --- Gestion de parc : patrimoine, exemplaires, maintenance --------------
+    # Informations patrimoniales portées par l'ARTICLE (valables pour tout le
+    # lot : marque, modèle, fournisseur...). Ce qui est propre à une unité
+    # précise (n° de série, garantie, état) vit dans `materiel_exemplaires`.
+    for col, typ in (
+        ('marque',            'VARCHAR(80)'),
+        ('modele',            'VARCHAR(120)'),
+        ('fournisseur',       'VARCHAR(150)'),
+        ('prix_acquisition',  'NUMERIC(14,2)'),
+        ('date_acquisition',  'DATE'),
+        ('duree_garantie_mois', 'INTEGER'),
+        # Un article « suivi à l'unité » génère des exemplaires numérotés
+        # (PC, mobilier) ; les consommables restent gérés en quantité.
+        ('suivi_unitaire',    'BOOLEAN DEFAULT FALSE'),
+        ('prefixe_inventaire', 'VARCHAR(12)'),
+    ):
+        cur.execute(f"ALTER TABLE materiels ADD COLUMN IF NOT EXISTS {col} {typ}")
+
+    # Un exemplaire = une unité physique identifiable, étiquetable, réparable.
+    # etat : 'bon' | 'usage' | 'panne' | 'reparation' | 'rebut'
+    cur.execute('''CREATE TABLE IF NOT EXISTS materiel_exemplaires (
+        id SERIAL PRIMARY KEY,
+        materiel_id INTEGER REFERENCES materiels(id) ON DELETE CASCADE,
+        numero_inventaire VARCHAR(40) UNIQUE NOT NULL,
+        numero_serie VARCHAR(120),
+        etat VARCHAR(15) NOT NULL DEFAULT 'bon',
+        employe_id INTEGER REFERENCES employes(id) ON DELETE SET NULL,
+        date_acquisition DATE,
+        prix_acquisition NUMERIC(14,2),
+        fournisseur VARCHAR(150),
+        garantie_fin DATE,
+        emplacement VARCHAR(150),
+        commentaire TEXT,
+        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_exemplaires_materiel ON materiel_exemplaires(materiel_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_exemplaires_num ON materiel_exemplaires(numero_inventaire)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_exemplaires_etat ON materiel_exemplaires(etat)")
+
+    # Circuit de réparation : panne → envoi → retour (réparé ou irréparable).
+    # statut : 'signale' | 'envoye' | 'repare' | 'irreparable' | 'annule'
+    cur.execute('''CREATE TABLE IF NOT EXISTS materiel_maintenances (
+        id SERIAL PRIMARY KEY,
+        exemplaire_id INTEGER REFERENCES materiel_exemplaires(id) ON DELETE CASCADE,
+        statut VARCHAR(15) NOT NULL DEFAULT 'signale',
+        panne TEXT NOT NULL,
+        technicien VARCHAR(150),
+        date_signalement DATE DEFAULT CURRENT_DATE,
+        date_envoi DATE,
+        date_retour DATE,
+        cout NUMERIC(14,2),
+        diagnostic TEXT,
+        signale_par VARCHAR(80),
+        cloture_par VARCHAR(80),
+        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_exemplaire ON materiel_maintenances(exemplaire_id, date_creation DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_statut ON materiel_maintenances(statut)")
+
+    # Compteurs des numéros d'inventaire : une séquence par préfixe et par
+    # année (PC-2026-001, PC-2026-002...). Table dédiée plutôt que MAX()+1,
+    # qui réattribuerait un numéro après suppression d'un exemplaire.
+    cur.execute('''CREATE TABLE IF NOT EXISTS materiel_compteurs (
+        prefixe VARCHAR(12) NOT NULL,
+        annee INTEGER NOT NULL,
+        dernier INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (prefixe, annee)
+    )''')
+
     # Seed employés
     cur.execute("SELECT COUNT(*) FROM employes")
     if cur.fetchone()['count'] == 0:
@@ -1160,6 +1232,7 @@ RECHERCHE_PAGES = [
     ('Départements',           'departements',         None,                        'building'),
     ('Matériels',              'materiels',            None,                        'box'),
     ('Inventaire physique',    'inventaires',          None,                        'box'),
+    ('Maintenance',            'maintenances',         None,                        'box'),
     ('Présences',              'presences',            None,                        'clock'),
     ('Historique',             'historique',           None,                        'history'),
     ('Absences',               'absences',             ('admin', 'rh', 'manager'),  'user-x'),
@@ -3987,6 +4060,139 @@ MATERIEL_CATEGORIES_DICT = dict(MATERIEL_CATEGORIES)
 # (un PC se remet à quelqu'un ; une ramette de papier se consomme).
 MATERIEL_CAT_ATTRIBUABLES = {'informatique', 'mobilier', 'autre'}
 
+# ---------------------------------------------------------------------------
+# GESTION DE PARC : numéros d'inventaire, états, maintenance, QR
+# ---------------------------------------------------------------------------
+
+# Préfixe par défaut du numéro d'inventaire, selon la catégorie.
+MATERIEL_PREFIXES = {
+    'informatique': 'PC',
+    'mobilier':     'MOB',
+    'papeterie':    'PAP',
+    'fourniture':   'FOU',
+    'entretien':    'ENT',
+    'autre':        'MAT',
+}
+
+EXEMPLAIRE_ETATS = [
+    ('bon',        'Bon état'),
+    ('usage',      'Usagé'),
+    ('panne',      'En panne'),
+    ('reparation', 'En réparation'),
+    ('rebut',      'Mis au rebut'),
+]
+EXEMPLAIRE_ETATS_DICT = dict(EXEMPLAIRE_ETATS)
+
+# États dans lesquels l'exemplaire n'est pas utilisable.
+EXEMPLAIRE_ETATS_INDISPONIBLES = {'panne', 'reparation', 'rebut'}
+
+MAINTENANCE_STATUTS = [
+    ('signale',     'Panne signalée'),
+    ('envoye',      'Envoyé en réparation'),
+    ('repare',      'Réparé'),
+    ('irreparable', 'Irréparable'),
+    ('annule',      'Annulé'),
+]
+MAINTENANCE_STATUTS_DICT = dict(MAINTENANCE_STATUTS)
+# Une intervention est « en cours » tant qu'elle n'est pas close.
+MAINTENANCE_OUVERTS = ('signale', 'envoye')
+
+
+def _prefixe_materiel(materiel):
+    """Préfixe du numéro d'inventaire : celui saisi, sinon celui de la catégorie."""
+    perso = (materiel.get('prefixe_inventaire') or '').strip().upper()
+    if perso:
+        return re.sub(r'[^A-Z0-9]', '', perso)[:12] or 'MAT'
+    return MATERIEL_PREFIXES.get(materiel.get('categorie'), 'MAT')
+
+
+def _generer_numero_inventaire(cur, materiel, annee=None):
+    """Réserve et renvoie le prochain numéro (ex. PC-2026-001).
+
+    Le compteur est incrémenté en base sous verrou (UPDATE ... RETURNING),
+    ce qui garantit l'unicité même si deux utilisateurs créent des
+    exemplaires en même temps.
+    """
+    prefixe = _prefixe_materiel(materiel)
+    annee = annee or date.today().year
+    cur.execute("""
+        INSERT INTO materiel_compteurs (prefixe, annee, dernier)
+        VALUES (%s, %s, 1)
+        ON CONFLICT (prefixe, annee)
+        DO UPDATE SET dernier = materiel_compteurs.dernier + 1
+        RETURNING dernier
+    """, (prefixe, annee))
+    n = cur.fetchone()['dernier']
+    return f"{prefixe}-{annee}-{n:03d}"
+
+
+def _garantie_fin(date_acq, duree_mois):
+    """Date de fin de garantie, sans dépendance externe (pas de dateutil)."""
+    if not date_acq or not duree_mois:
+        return None
+    mois = date_acq.month - 1 + int(duree_mois)
+    an = date_acq.year + mois // 12
+    mois = mois % 12 + 1
+    # 31 janvier + 1 mois → 28/29 février
+    dernier_jour = calendar.monthrange(an, mois)[1]
+    return date(an, mois, min(date_acq.day, dernier_jour))
+
+
+def _qr_svg(donnee, taille=6):
+    """QR code en SVG inline (aucun fichier écrit, aucun binaire requis).
+
+    Renvoie None si la bibliothèque `qrcode` n'est pas installée : le module
+    reste alors pleinement fonctionnel, seul le QR disparaît de l'affichage.
+    """
+    try:
+        import qrcode
+        import qrcode.image.svg
+    except ImportError:
+        return None
+    qr = qrcode.QRCode(version=None, box_size=taille, border=2,
+                       error_correction=qrcode.constants.ERROR_CORRECT_M)
+    qr.add_data(donnee)
+    qr.make(fit=True)
+    img = qr.make_image(image_factory=qrcode.image.svg.SvgPathImage)
+    flux = io.BytesIO()
+    img.save(flux)
+    svg = flux.getvalue().decode('utf-8')
+    # On retire la déclaration XML : le SVG est inséré dans du HTML.
+    return re.sub(r'<\?xml[^>]*\?>\s*', '', svg)
+
+
+def _champs_patrimoine(form):
+    """Lit les champs patrimoniaux du formulaire matériel.
+
+    Renvoie (valeurs, erreur). Les montants acceptent « 3 500 000 » ou
+    « 3500000,50 » : espaces et virgule décimale sont normalisés.
+    """
+    marque = (form.get('marque') or '').strip()
+    modele = (form.get('modele') or '').strip()
+    fournisseur = (form.get('fournisseur') or '').strip()
+    prefixe = re.sub(r'[^A-Za-z0-9]', '', (form.get('prefixe_inventaire') or '')).upper()[:12]
+    date_acq = (form.get('date_acquisition') or '').strip() or None
+    duree = form.get('duree_garantie_mois', type=int)
+    prix_brut = (form.get('prix_acquisition') or '').strip().replace(' ', '').replace('\u202f', '').replace(',', '.')
+
+    prix = None
+    if prix_brut:
+        try:
+            prix = float(prix_brut)
+        except ValueError:
+            return None, "Le prix d'acquisition doit être un nombre."
+        if prix < 0:
+            return None, "Le prix d'acquisition ne peut pas être négatif."
+    if duree is not None and duree < 0:
+        return None, "La durée de garantie ne peut pas être négative."
+
+    return {
+        'marque': marque or None, 'modele': modele or None,
+        'fournisseur': fournisseur or None, 'prefixe_inventaire': prefixe or None,
+        'date_acquisition': date_acq, 'duree_garantie_mois': duree,
+        'prix_acquisition': prix,
+    }, None
+
 
 def _peut_gerer_materiels():
     return session.get('role') in ('admin', 'rh', 'manager')
@@ -4151,6 +4357,7 @@ def add_materiel():
         seuil = request.form.get('seuil_alerte', type=int) or 0
         unite = (request.form.get('unite') or 'unité').strip()
         description = (request.form.get('description') or '').strip()
+        patrimoine, err_patrimoine = _champs_patrimoine(request.form)
 
         erreur = None
         if not nom:
@@ -4159,6 +4366,8 @@ def add_materiel():
             erreur = "Le département est obligatoire"
         elif quantite < 0 or seuil < 0:
             erreur = "Les quantités ne peuvent pas être négatives"
+        elif err_patrimoine:
+            erreur = err_patrimoine
 
         if erreur:
             flash(erreur, "danger")
@@ -4167,9 +4376,16 @@ def add_materiel():
                 with db_cursor(commit=True) as (conn, cur):
                     cur.execute("""
                         INSERT INTO materiels
-                            (nom, categorie, departement_id, quantite, seuil_alerte, unite, description)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
-                    """, (nom, categorie, dept_id, quantite, seuil, unite, description or None))
+                            (nom, categorie, departement_id, quantite, seuil_alerte,
+                             unite, description, marque, modele, fournisseur,
+                             prix_acquisition, date_acquisition, duree_garantie_mois,
+                             prefixe_inventaire)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                    """, (nom, categorie, dept_id, quantite, seuil, unite, description or None,
+                          patrimoine['marque'], patrimoine['modele'], patrimoine['fournisseur'],
+                          patrimoine['prix_acquisition'], patrimoine['date_acquisition'],
+                          patrimoine['duree_garantie_mois'], patrimoine['prefixe_inventaire']))
                     new_id = cur.fetchone()['id']
                     # Stock initial = premier mouvement d'entrée, pour que
                     # l'historique reste cohérent avec le stock affiché.
@@ -4216,9 +4432,12 @@ def edit_materiel(id):
         seuil = request.form.get('seuil_alerte', type=int) or 0
         unite = (request.form.get('unite') or 'unité').strip()
         description = (request.form.get('description') or '').strip()
+        patrimoine, err_patrimoine = _champs_patrimoine(request.form)
 
         if not nom or not dept_id:
             flash("Le nom et le département sont obligatoires", "danger")
+        elif err_patrimoine:
+            flash(err_patrimoine, "danger")
         else:
             try:
                 with db_cursor(commit=True) as (conn, cur):
@@ -4227,9 +4446,15 @@ def edit_materiel(id):
                     cur.execute("""
                         UPDATE materiels
                         SET nom = %s, categorie = %s, departement_id = %s,
-                            seuil_alerte = %s, unite = %s, description = %s
+                            seuil_alerte = %s, unite = %s, description = %s,
+                            marque = %s, modele = %s, fournisseur = %s,
+                            prix_acquisition = %s, date_acquisition = %s,
+                            duree_garantie_mois = %s, prefixe_inventaire = %s
                         WHERE id = %s
-                    """, (nom, categorie, dept_id, seuil, unite, description or None, id))
+                    """, (nom, categorie, dept_id, seuil, unite, description or None,
+                          patrimoine['marque'], patrimoine['modele'], patrimoine['fournisseur'],
+                          patrimoine['prix_acquisition'], patrimoine['date_acquisition'],
+                          patrimoine['duree_garantie_mois'], patrimoine['prefixe_inventaire'], id))
                     _notifier_stock_bas(cur, id)
                 log_action(session.get('user_id'), session.get('username'),
                            "Modification matériel", "materiel", id, nom)
@@ -4286,7 +4511,37 @@ def view_materiel(id):
         """, (materiel['departement_id'],))
         employes = cur.fetchall()
 
+        # Exemplaires numérotés (gestion de parc) et leur intervention en cours.
+        cur.execute("""
+            SELECT ex.*, emp.nom AS emp_nom, emp.prenom AS emp_prenom,
+                   mt.id AS maintenance_id, mt.statut AS maintenance_statut
+            FROM materiel_exemplaires ex
+            LEFT JOIN employes emp ON emp.id = ex.employe_id
+            LEFT JOIN LATERAL (
+                SELECT id, statut FROM materiel_maintenances
+                WHERE exemplaire_id = ex.id AND statut IN %s
+                ORDER BY date_creation DESC LIMIT 1
+            ) mt ON TRUE
+            WHERE ex.materiel_id = %s
+            ORDER BY ex.numero_inventaire
+        """, (MAINTENANCE_OUVERTS, id))
+        exemplaires = cur.fetchall()
+
+        cur.execute("""
+            SELECT COUNT(*) AS total,
+                   COUNT(*) FILTER (WHERE etat IN ('bon','usage'))       AS disponibles,
+                   COUNT(*) FILTER (WHERE etat IN ('panne','reparation')) AS indisponibles,
+                   COUNT(*) FILTER (WHERE etat = 'rebut')                AS rebuts
+            FROM materiel_exemplaires WHERE materiel_id = %s
+        """, (id,))
+        stats_ex = cur.fetchone()
+
     return render_template('materiel_detail.html',
+                           exemplaires=exemplaires, stats_ex=stats_ex,
+                           etats_dict=EXEMPLAIRE_ETATS_DICT,
+                           prefixe_propose=_prefixe_materiel(materiel),
+                           aujourdhui_date=date.today(),
+                           annee_courante=date.today().year,
                            materiel=materiel,
                            mouvements=mouvements,
                            attributions=attributions,
@@ -4770,6 +5025,497 @@ def annuler_inventaire(id):
         logger.error("Erreur annulation inventaire: %s", e, exc_info=True)
         flash(f"Erreur : {e}", "danger")
     return redirect(url_for('view_inventaire', id=id))
+
+
+# =============================================================================
+# GESTION DE PARC : exemplaires, maintenance, étiquettes QR
+# =============================================================================
+
+def _exemplaire_complet(cur, exemplaire_id):
+    """Exemplaire enrichi de son article, département et détenteur."""
+    cur.execute("""
+        SELECT e.*, m.nom AS materiel_nom, m.categorie, m.marque, m.modele,
+               m.id AS materiel_id, d.nom AS departement_nom,
+               emp.nom AS emp_nom, emp.prenom AS emp_prenom
+        FROM materiel_exemplaires e
+        JOIN materiels m ON m.id = e.materiel_id
+        LEFT JOIN departements d ON d.id = m.departement_id
+        LEFT JOIN employes emp ON emp.id = e.employe_id
+        WHERE e.id = %s
+    """, (exemplaire_id,))
+    return cur.fetchone()
+
+
+@app.route('/materiels/<int:id>/exemplaires/add', methods=['POST'])
+@login_required
+@role_required('rh', 'manager')
+def add_exemplaire(id):
+    """Crée un ou plusieurs exemplaires numérotés pour un article."""
+    nombre = request.form.get('nombre', type=int) or 1
+    numero_serie = (request.form.get('numero_serie') or '').strip()
+    emplacement = (request.form.get('emplacement') or '').strip()
+    numero_manuel = (request.form.get('numero_inventaire') or '').strip().upper()
+
+    if nombre < 1 or nombre > 100:
+        flash("Le nombre d'exemplaires doit être compris entre 1 et 100.", "danger")
+        return redirect(url_for('view_materiel', id=id))
+    if numero_manuel and nombre > 1:
+        flash("Un numéro d'inventaire imposé ne peut concerner qu'un seul exemplaire.", "danger")
+        return redirect(url_for('view_materiel', id=id))
+
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT * FROM materiels WHERE id = %s", (id,))
+            mat = cur.fetchone()
+            if not mat:
+                flash("Matériel introuvable", "danger")
+                return redirect(url_for('materiels'))
+
+            garantie = _garantie_fin(mat['date_acquisition'], mat['duree_garantie_mois'])
+            crees = []
+            for _ in range(nombre):
+                numero = numero_manuel or _generer_numero_inventaire(cur, mat)
+                cur.execute("""
+                    INSERT INTO materiel_exemplaires
+                        (materiel_id, numero_inventaire, numero_serie, etat,
+                         date_acquisition, prix_acquisition, fournisseur,
+                         garantie_fin, emplacement)
+                    VALUES (%s, %s, %s, 'bon', %s, %s, %s, %s, %s)
+                    RETURNING numero_inventaire
+                """, (id, numero, numero_serie or None, mat['date_acquisition'],
+                      mat['prix_acquisition'], mat['fournisseur'], garantie,
+                      emplacement or None))
+                crees.append(cur.fetchone()['numero_inventaire'])
+
+            # L'article devient « suivi à l'unité » dès son premier exemplaire.
+            cur.execute("UPDATE materiels SET suivi_unitaire = TRUE WHERE id = %s", (id,))
+
+        log_action(session.get('user_id'), session.get('username'),
+                   "Création exemplaires", "materiel", id, ", ".join(crees))
+        flash(f"{len(crees)} exemplaire(s) créé(s) : {', '.join(crees)}", "success")
+    except psycopg2.errors.UniqueViolation:
+        flash("Ce numéro d'inventaire existe déjà.", "danger")
+    except Exception as e:
+        logger.error("Erreur création exemplaire: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+    return redirect(url_for('view_materiel', id=id))
+
+
+@app.route('/exemplaires/<int:id>')
+@login_required
+def view_exemplaire(id):
+    """Fiche d'un exemplaire : identité, garantie, QR, historique des pannes.
+
+    C'est la page ouverte en scannant l'étiquette QR collée sur le matériel.
+    """
+    with db_cursor() as (conn, cur):
+        ex = _exemplaire_complet(cur, id)
+        if not ex:
+            flash("Exemplaire introuvable", "danger")
+            return redirect(url_for('materiels'))
+
+        cur.execute("""
+            SELECT * FROM materiel_maintenances
+            WHERE exemplaire_id = %s
+            ORDER BY date_creation DESC
+        """, (id,))
+        maintenances = cur.fetchall()
+
+        cur.execute("""
+            SELECT COALESCE(SUM(cout), 0) AS total_repare,
+                   COUNT(*) FILTER (WHERE statut IN ('repare','irreparable')) AS nb_closes
+            FROM materiel_maintenances WHERE exemplaire_id = %s
+        """, (id,))
+        stats = cur.fetchone()
+
+        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
+        employes = cur.fetchall()
+
+    url_fiche = url_for('view_exemplaire', id=id, _external=True)
+    return render_template('exemplaire_detail.html', ex=ex,
+                           maintenances=maintenances, stats=stats,
+                           employes=employes,
+                           etats=EXEMPLAIRE_ETATS,
+                           etats_dict=EXEMPLAIRE_ETATS_DICT,
+                           statuts_dict=MAINTENANCE_STATUTS_DICT,
+                           maintenance_ouverts=MAINTENANCE_OUVERTS,
+                           qr_svg=_qr_svg(url_fiche), url_fiche=url_fiche,
+                           aujourdhui=date.today())
+
+
+@app.route('/exemplaires/<int:id>/modifier', methods=['POST'])
+@login_required
+@role_required('rh', 'manager')
+def edit_exemplaire(id):
+    """Met à jour l'identité d'un exemplaire (série, état, détenteur...)."""
+    numero_serie = (request.form.get('numero_serie') or '').strip()
+    emplacement = (request.form.get('emplacement') or '').strip()
+    commentaire = (request.form.get('commentaire') or '').strip()
+    etat = (request.form.get('etat') or '').strip()
+    employe_id = request.form.get('employe_id', type=int)
+    garantie_fin = (request.form.get('garantie_fin') or '').strip()
+    prix = (request.form.get('prix_acquisition') or '').strip()
+
+    if etat and etat not in EXEMPLAIRE_ETATS_DICT:
+        flash("État invalide.", "danger")
+        return redirect(url_for('view_exemplaire', id=id))
+
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            # Une intervention ouverte pilote l'état : on ne le force pas à la main.
+            cur.execute("""SELECT COUNT(*) AS n FROM materiel_maintenances
+                           WHERE exemplaire_id = %s AND statut IN %s""",
+                        (id, MAINTENANCE_OUVERTS))
+            bloque = cur.fetchone()['n'] > 0
+
+            cur.execute("""
+                UPDATE materiel_exemplaires
+                SET numero_serie = %s, emplacement = %s, commentaire = %s,
+                    employe_id = %s, garantie_fin = %s, prix_acquisition = %s,
+                    etat = CASE WHEN %s THEN etat ELSE COALESCE(NULLIF(%s,''), etat) END
+                WHERE id = %s
+            """, (numero_serie or None, emplacement or None, commentaire or None,
+                  employe_id or None, garantie_fin or None,
+                  prix.replace(' ', '').replace(',', '.') or None,
+                  bloque, etat, id))
+        if bloque and etat:
+            flash("Exemplaire mis à jour. L'état reste piloté par l'intervention en cours.", "info")
+        else:
+            flash("Exemplaire mis à jour.", "success")
+        log_action(session.get('user_id'), session.get('username'),
+                   "Modification exemplaire", "exemplaire", id, None)
+    except Exception as e:
+        logger.error("Erreur modification exemplaire: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+    return redirect(url_for('view_exemplaire', id=id))
+
+
+@app.route('/exemplaires/<int:id>/supprimer', methods=['POST'])
+@login_required
+@role_required('rh')
+def delete_exemplaire(id):
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("""SELECT e.numero_inventaire, e.materiel_id
+                           FROM materiel_exemplaires e WHERE e.id = %s""", (id,))
+            row = cur.fetchone()
+            if not row:
+                flash("Exemplaire introuvable", "danger")
+                return redirect(url_for('materiels'))
+            cur.execute("DELETE FROM materiel_exemplaires WHERE id = %s", (id,))
+        log_action(session.get('user_id'), session.get('username'),
+                   "Suppression exemplaire", "exemplaire", id, row['numero_inventaire'])
+        flash(f"Exemplaire {row['numero_inventaire']} supprimé.", "success")
+        return redirect(url_for('view_materiel', id=row['materiel_id']))
+    except Exception as e:
+        logger.error("Erreur suppression exemplaire: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+        return redirect(url_for('view_exemplaire', id=id))
+
+
+# --- Circuit de maintenance -------------------------------------------------
+
+@app.route('/exemplaires/<int:id>/panne', methods=['POST'])
+@login_required
+def signaler_panne(id):
+    """Signale une panne. Ouvert à tous : celui qui constate n'est pas
+    forcément gestionnaire du parc."""
+    panne = (request.form.get('panne') or '').strip()
+    if not panne:
+        flash("Veuillez décrire la panne.", "danger")
+        return redirect(url_for('view_exemplaire', id=id))
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT etat FROM materiel_exemplaires WHERE id = %s", (id,))
+            ex = cur.fetchone()
+            if not ex:
+                flash("Exemplaire introuvable", "danger")
+                return redirect(url_for('materiels'))
+            if ex['etat'] == 'rebut':
+                flash("Cet exemplaire est au rebut : aucune intervention possible.", "warning")
+                return redirect(url_for('view_exemplaire', id=id))
+            cur.execute("""SELECT COUNT(*) AS n FROM materiel_maintenances
+                           WHERE exemplaire_id = %s AND statut IN %s""",
+                        (id, MAINTENANCE_OUVERTS))
+            if cur.fetchone()['n'] > 0:
+                flash("Une intervention est déjà en cours pour cet exemplaire.", "warning")
+                return redirect(url_for('view_exemplaire', id=id))
+
+            cur.execute("""
+                INSERT INTO materiel_maintenances (exemplaire_id, statut, panne, signale_par)
+                VALUES (%s, 'signale', %s, %s) RETURNING id
+            """, (id, panne, session.get('username')))
+            mid = cur.fetchone()['id']
+            cur.execute("UPDATE materiel_exemplaires SET etat = 'panne' WHERE id = %s", (id,))
+
+        log_action(session.get('user_id'), session.get('username'),
+                   "Signalement panne", "exemplaire", id, panne[:120])
+        flash("Panne signalée. L'exemplaire est marqué indisponible.", "success")
+    except Exception as e:
+        logger.error("Erreur signalement panne: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+    return redirect(url_for('view_exemplaire', id=id))
+
+
+@app.route('/maintenances/<int:id>/envoyer', methods=['POST'])
+@login_required
+@role_required('rh', 'manager')
+def envoyer_maintenance(id):
+    """Envoi chez le technicien / prestataire."""
+    technicien = (request.form.get('technicien') or '').strip()
+    date_envoi = (request.form.get('date_envoi') or '').strip()
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT * FROM materiel_maintenances WHERE id = %s", (id,))
+            mt = cur.fetchone()
+            if not mt:
+                flash("Intervention introuvable", "danger")
+                return redirect(url_for('maintenances'))
+            if mt['statut'] != 'signale':
+                flash("Seule une panne signalée peut être envoyée en réparation.", "warning")
+                return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+
+            cur.execute("""UPDATE materiel_maintenances
+                           SET statut = 'envoye', technicien = %s,
+                               date_envoi = COALESCE(NULLIF(%s,'')::date, CURRENT_DATE)
+                           WHERE id = %s""", (technicien or None, date_envoi, id))
+            cur.execute("""UPDATE materiel_exemplaires SET etat = 'reparation'
+                           WHERE id = %s AND etat <> 'rebut'""", (mt['exemplaire_id'],))
+        log_action(session.get('user_id'), session.get('username'),
+                   "Envoi en réparation", "maintenance", id, technicien or None)
+        flash("Matériel envoyé en réparation.", "success")
+        return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+    except Exception as e:
+        logger.error("Erreur envoi maintenance: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+        return redirect(url_for('maintenances'))
+
+
+@app.route('/maintenances/<int:id>/cloturer', methods=['POST'])
+@login_required
+@role_required('rh', 'manager')
+def cloturer_maintenance(id):
+    """Retour d'atelier : réparé (l'exemplaire redevient utilisable) ou
+    irréparable (mise au rebut)."""
+    resultat = (request.form.get('resultat') or '').strip()
+    cout = (request.form.get('cout') or '').strip().replace(' ', '').replace(',', '.')
+    diagnostic = (request.form.get('diagnostic') or '').strip()
+    date_retour = (request.form.get('date_retour') or '').strip()
+    etat_retour = (request.form.get('etat_retour') or 'bon').strip()
+
+    if resultat not in ('repare', 'irreparable'):
+        flash("Résultat invalide.", "danger")
+        return redirect(url_for('maintenances'))
+    if cout:
+        try:
+            if float(cout) < 0:
+                raise ValueError
+        except ValueError:
+            flash("Le coût doit être un nombre positif.", "danger")
+            return redirect(url_for('maintenances'))
+
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT * FROM materiel_maintenances WHERE id = %s", (id,))
+            mt = cur.fetchone()
+            if not mt:
+                flash("Intervention introuvable", "danger")
+                return redirect(url_for('maintenances'))
+            if mt['statut'] not in MAINTENANCE_OUVERTS:
+                flash("Cette intervention est déjà close.", "warning")
+                return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+
+            cur.execute("""UPDATE materiel_maintenances
+                           SET statut = %s, cout = %s, diagnostic = %s,
+                               date_retour = COALESCE(NULLIF(%s,'')::date, CURRENT_DATE),
+                               cloture_par = %s
+                           WHERE id = %s""",
+                        (resultat, cout or None, diagnostic or None,
+                         date_retour, session.get('username'), id))
+
+            if resultat == 'repare':
+                etat = etat_retour if etat_retour in ('bon', 'usage') else 'bon'
+            else:
+                etat = 'rebut'
+            cur.execute("UPDATE materiel_exemplaires SET etat = %s WHERE id = %s",
+                        (etat, mt['exemplaire_id']))
+
+        log_action(session.get('user_id'), session.get('username'),
+                   "Clôture maintenance", "maintenance", id,
+                   f"{resultat}, coût {cout or 0}")
+        flash("Réparé : le matériel est de nouveau disponible." if resultat == 'repare'
+              else "Matériel déclaré irréparable et mis au rebut.", "success")
+        return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+    except Exception as e:
+        logger.error("Erreur clôture maintenance: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+        return redirect(url_for('maintenances'))
+
+
+@app.route('/maintenances/<int:id>/annuler', methods=['POST'])
+@login_required
+@role_required('rh', 'manager')
+def annuler_maintenance(id):
+    """Fausse alerte : on referme sans réparation."""
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT * FROM materiel_maintenances WHERE id = %s", (id,))
+            mt = cur.fetchone()
+            if not mt:
+                flash("Intervention introuvable", "danger")
+                return redirect(url_for('maintenances'))
+            if mt['statut'] not in MAINTENANCE_OUVERTS:
+                flash("Cette intervention est déjà close.", "warning")
+                return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+            cur.execute("""UPDATE materiel_maintenances
+                           SET statut = 'annule', cloture_par = %s,
+                               date_retour = CURRENT_DATE
+                           WHERE id = %s""", (session.get('username'), id))
+            cur.execute("""UPDATE materiel_exemplaires SET etat = 'bon'
+                           WHERE id = %s AND etat <> 'rebut'""", (mt['exemplaire_id'],))
+        log_action(session.get('user_id'), session.get('username'),
+                   "Annulation maintenance", "maintenance", id, None)
+        flash("Intervention annulée : le matériel redevient disponible.", "info")
+        return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+    except Exception as e:
+        logger.error("Erreur annulation maintenance: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+        return redirect(url_for('maintenances'))
+
+
+@app.route('/maintenances')
+@login_required
+def maintenances():
+    """Tableau de bord des réparations, avec filtres et coûts."""
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 12
+    statut = (request.args.get('statut') or '').strip()
+    dept_id = request.args.get('departement', type=int)
+
+    where, params = [], []
+    if statut in MAINTENANCE_STATUTS_DICT:
+        where.append("mt.statut = %s")
+        params.append(statut)
+    elif statut == 'ouvert':
+        where.append("mt.statut IN %s")
+        params.append(MAINTENANCE_OUVERTS)
+    if dept_id:
+        where.append("m.departement_id = %s")
+        params.append(dept_id)
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+
+    with db_cursor() as (conn, cur):
+        cur.execute(f"""
+            SELECT COUNT(*) AS n FROM materiel_maintenances mt
+            JOIN materiel_exemplaires e ON e.id = mt.exemplaire_id
+            JOIN materiels m ON m.id = e.materiel_id {clause}
+        """, params)
+        total = cur.fetchone()['n']
+
+        cur.execute(f"""
+            SELECT mt.*, e.numero_inventaire, e.id AS exemplaire_id,
+                   m.nom AS materiel_nom, d.nom AS departement_nom
+            FROM materiel_maintenances mt
+            JOIN materiel_exemplaires e ON e.id = mt.exemplaire_id
+            JOIN materiels m ON m.id = e.materiel_id
+            LEFT JOIN departements d ON d.id = m.departement_id
+            {clause}
+            ORDER BY CASE WHEN mt.statut IN ('signale','envoye') THEN 0 ELSE 1 END,
+                     mt.date_creation DESC
+            LIMIT %s OFFSET %s
+        """, params + [per_page, (page - 1) * per_page])
+        interventions = cur.fetchall()
+
+        cur.execute("""
+            SELECT COUNT(*) FILTER (WHERE statut = 'signale')     AS signalees,
+                   COUNT(*) FILTER (WHERE statut = 'envoye')      AS en_cours,
+                   COUNT(*) FILTER (WHERE statut = 'repare')      AS reparees,
+                   COUNT(*) FILTER (WHERE statut = 'irreparable') AS rebuts,
+                   COALESCE(SUM(cout), 0)                         AS cout_total
+            FROM materiel_maintenances
+        """)
+        stats = cur.fetchone()
+        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        departements = cur.fetchall()
+
+    pg = pagination_info(total, page, per_page)
+    filters = {'statut': statut, 'departement': dept_id}
+    return render_template('maintenances.html',
+                           interventions=interventions, stats=stats,
+                           departements=departements, filters=filters,
+                           statuts=MAINTENANCE_STATUTS,
+                           statuts_dict=MAINTENANCE_STATUTS_DICT,
+                           pg=pg, page_items=page_list(pg['page'], pg['pages']),
+                           base_qs=urlencode({k: v for k, v in filters.items() if v}),
+                           peut_gerer=_peut_gerer_materiels())
+
+
+def _rendre_etiquettes(exemplaires, titre, sous_titre, retour_url):
+    """Fabrique une planche d'étiquettes QR (rendu commun aux deux planches)."""
+    etiquettes = [{
+        'ex': ex,
+        'qr': _qr_svg(url_for('view_exemplaire', id=ex['id'], _external=True), taille=4),
+    } for ex in exemplaires]
+    return render_template(
+        'etiquettes.html', etiquettes=etiquettes, titre=titre,
+        sous_titre=sous_titre, retour_url=retour_url,
+        qr_indisponible=bool(etiquettes) and etiquettes[0]['qr'] is None)
+
+
+@app.route('/materiels/<int:id>/etiquettes')
+@login_required
+def etiquettes_materiel(id):
+    """Planche d'étiquettes QR imprimables pour les exemplaires d'un article."""
+    # (le rendu commun est délégué à _rendre_etiquettes, voir plus bas)
+    with db_cursor() as (conn, cur):
+        cur.execute("""SELECT m.*, d.nom AS departement_nom FROM materiels m
+                       LEFT JOIN departements d ON d.id = m.departement_id
+                       WHERE m.id = %s""", (id,))
+        mat = cur.fetchone()
+        if not mat:
+            flash("Matériel introuvable", "danger")
+            return redirect(url_for('materiels'))
+        cur.execute("""SELECT ex.*, m.nom AS materiel_nom, m.marque, m.modele
+                       FROM materiel_exemplaires ex
+                       JOIN materiels m ON m.id = ex.materiel_id
+                       WHERE ex.materiel_id = %s
+                       ORDER BY ex.numero_inventaire""", (id,))
+        exemplaires = cur.fetchall()
+
+    sous_titre = None
+    if mat['departement_nom']:
+        sous_titre = Markup("Département : <strong>%s</strong>."
+                            % escape(mat['departement_nom']))
+    return _rendre_etiquettes(exemplaires, titre=mat['nom'], sous_titre=sous_titre,
+                              retour_url=url_for('view_materiel', id=id))
+
+
+@app.route('/departements/<int:id>/etiquettes')
+@login_required
+def etiquettes_departement(id):
+    """Planche d'étiquettes de tout le parc d'un département.
+
+    C'est le cas d'usage d'un inventaire : on imprime une planche unique pour
+    tous les exemplaires du service, puis on colle en une seule passe.
+    """
+    with db_cursor() as (conn, cur):
+        cur.execute("SELECT * FROM departements WHERE id = %s", (id,))
+        dept = cur.fetchone()
+        if not dept:
+            flash("Département introuvable", "danger")
+            return redirect(url_for('materiels'))
+        cur.execute("""SELECT ex.*, m.nom AS materiel_nom, m.marque, m.modele
+                       FROM materiel_exemplaires ex
+                       JOIN materiels m ON m.id = ex.materiel_id
+                       WHERE m.departement_id = %s AND ex.etat <> 'rebut'
+                       ORDER BY m.nom, ex.numero_inventaire""", (id,))
+        exemplaires = cur.fetchall()
+
+    sous_titre = Markup(
+        "Département : <strong>%s</strong> · %d exemplaire(s). "
+        "Le matériel mis au rebut est exclu." % (escape(dept['nom']), len(exemplaires)))
+    return _rendre_etiquettes(exemplaires, titre=dept['nom'], sous_titre=sous_titre,
+                              retour_url=url_for('materiels', departement=id))
 
 
 @app.route('/departements/<int:id>/materiels')

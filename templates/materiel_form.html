@@ -65,6 +65,68 @@
             </div>
         </div>
 
+        <!-- ===== Patrimoine : identité et acquisition ===== -->
+        <fieldset class="fieldset-patrimoine">
+            <legend>💰 Acquisition &amp; patrimoine <small>(facultatif)</small></legend>
+            <p class="form-hint" style="margin:0 0 12px;">
+                Renseignez ces informations pour un vrai suivi de parc (matériel durable :
+                ordinateurs, mobilier…). Elles servent de valeurs par défaut aux exemplaires créés.
+            </p>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="marque">Marque</label>
+                    <input type="text" id="marque" name="marque" class="form-control"
+                           placeholder="Dell, HP, Canon..."
+                           value="{{ materiel.marque if materiel and materiel.marque else '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="modele">Modèle</label>
+                    <input type="text" id="modele" name="modele" class="form-control"
+                           placeholder="Latitude 5420"
+                           value="{{ materiel.modele if materiel and materiel.modele else '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="fournisseur">Fournisseur</label>
+                    <input type="text" id="fournisseur" name="fournisseur" class="form-control"
+                           value="{{ materiel.fournisseur if materiel and materiel.fournisseur else '' }}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="date_acquisition">Date d'acquisition</label>
+                    <input type="date" id="date_acquisition" name="date_acquisition" class="form-control"
+                           value="{{ materiel.date_acquisition.strftime('%Y-%m-%d') if materiel and materiel.date_acquisition else '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="prix_acquisition">Prix d'acquisition (Ar)</label>
+                    <input type="text" id="prix_acquisition" name="prix_acquisition" class="form-control"
+                           inputmode="decimal" placeholder="3500000"
+                           value="{{ '%0.2f'|format(materiel.prix_acquisition) if materiel and materiel.prix_acquisition else '' }}">
+                    <small class="form-hint">Prix unitaire.</small>
+                </div>
+                <div class="form-group">
+                    <label for="duree_garantie_mois">Garantie (mois)</label>
+                    <input type="number" id="duree_garantie_mois" name="duree_garantie_mois"
+                           class="form-control" min="0" placeholder="36"
+                           value="{{ materiel.duree_garantie_mois if materiel and materiel.duree_garantie_mois else '' }}">
+                    <small class="form-hint">La date de fin est calculée automatiquement.</small>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="prefixe_inventaire">Préfixe des numéros d'inventaire</label>
+                <input type="text" id="prefixe_inventaire" name="prefixe_inventaire" class="form-control"
+                       maxlength="12" placeholder="PC" style="max-width:220px; text-transform:uppercase;"
+                       value="{{ materiel.prefixe_inventaire if materiel and materiel.prefixe_inventaire else '' }}">
+                <small class="form-hint">
+                    Laissez vide pour utiliser le préfixe de la catégorie. Les numéros suivent
+                    le format <code>PRÉFIXE-ANNÉE-001</code> (ex. <code>PC-2026-001</code>).
+                </small>
+            </div>
+        </fieldset>
+
         {% if materiel %}
         <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px 14px; margin-bottom:16px;">
             <strong style="color:#1e40af;">Stock actuel : {{ materiel.quantite }} {{ materiel.unite }}</strong>

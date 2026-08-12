@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card no-print">
+    <div class="card-header">
+        <h1>🖨️ Étiquettes — {{ titre }}</h1>
+        <div>
+            <button type="button" class="btn btn-primary" onclick="window.print();">Imprimer</button>
+            <a href="{{ retour_url }}" class="btn btn-secondary">← Retour</a>
+        </div>
+    </div>
+    <p style="color:#64748b; margin:0;">
+        Une étiquette par exemplaire, à coller sur le matériel. Le QR code ouvre
+        directement la fiche : numéro d'inventaire, garantie, historique des pannes
+        et signalement en un scan.
+        {% if sous_titre %}<br>{{ sous_titre }}{% endif %}
+    </p>
+    {% if qr_indisponible %}
+    <div class="inv-alerte inv-alerte-warn" style="margin-top:14px;">
+        <strong>QR codes indisponibles.</strong> La bibliothèque <code>qrcode</code> n'est pas
+        installée sur le serveur. Les étiquettes restent imprimables avec le numéro
+        d'inventaire seul. Pour activer les QR : <code>pip install qrcode</code>.
+    </div>
+    {% endif %}
+</div>
+
+<div class="planche-etiquettes">
+    {% for item in etiquettes %}
+    <div class="etiquette">
+        {% if item.qr %}
+        <div class="etiquette-qr">{{ item.qr|safe }}</div>
+        {% endif %}
+        <div class="etiquette-texte">
+            <div class="etiquette-numero">{{ item.ex.numero_inventaire }}</div>
+            <div class="etiquette-nom">{{ item.ex.materiel_nom }}</div>
+            {% if item.ex.marque or item.ex.modele %}
+            <div class="etiquette-detail">{{ item.ex.marque or '' }} {{ item.ex.modele or '' }}</div>
+            {% endif %}
+            {% if item.ex.numero_serie %}
+            <div class="etiquette-detail">SN : {{ item.ex.numero_serie }}</div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="card no-print">
+        <p style="color:#94a3b8; text-align:center; padding:24px; margin:0;">
+            Aucun exemplaire à étiqueter. Créez d'abord des exemplaires depuis la fiche du matériel.
+        </p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

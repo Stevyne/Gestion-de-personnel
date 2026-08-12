@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>🏷️ {{ ex.numero_inventaire }}</h1>
+        <div>
+            <a href="{{ url_for('view_materiel', id=ex.materiel_id) }}" class="btn btn-secondary">← Fiche article</a>
+        </div>
+    </div>
+
+    <div class="exemplaire-entete">
+        <div class="exemplaire-infos">
+            <h2 style="margin:0 0 4px; font-size:1.15rem;">{{ ex.materiel_nom }}</h2>
+            <p style="color:#64748b; margin:0 0 14px;">
+                {% if ex.marque or ex.modele %}{{ ex.marque or '' }} {{ ex.modele or '' }} · {% endif %}
+                {{ ex.departement_nom or 'Sans département' }}
+            </p>
+
+            <dl class="fiche-champs">
+                <dt>État</dt>
+                <dd><span class="badge etat-{{ ex.etat }}">{{ etats_dict.get(ex.etat, ex.etat) }}</span></dd>
+
+                <dt>N° de série</dt>
+                <dd>{{ ex.numero_serie or '—' }}</dd>
+
+                <dt>Détenteur</dt>
+                <dd>{% if ex.emp_nom %}{{ ex.emp_prenom }} {{ ex.emp_nom }}{% else %}Non attribué{% endif %}</dd>
+
+                <dt>Emplacement</dt>
+                <dd>{{ ex.emplacement or '—' }}</dd>
+
+                <dt>Acquisition</dt>
+                <dd>
+                    {% if ex.date_acquisition %}{{ ex.date_acquisition.strftime('%d/%m/%Y') }}{% else %}—{% endif %}
+                    {% if ex.prix_acquisition %} · <strong>{{ '{:,.0f}'.format(ex.prix_acquisition)|replace(',', ' ') }} Ar</strong>{% endif %}
+                </dd>
+
+                <dt>Fournisseur</dt>
+                <dd>{{ ex.fournisseur or '—' }}</dd>
+
+                <dt>Garantie</dt>
+                <dd>
+                    {% if ex.garantie_fin %}
+                        {% if ex.garantie_fin < aujourdhui %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">Expirée le {{ ex.garantie_fin.strftime('%d/%m/%Y') }}</span>
+                        {% else %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">Sous garantie jusqu'au {{ ex.garantie_fin.strftime('%d/%m/%Y') }}</span>
+                        {% endif %}
+                    {% else %}—{% endif %}
+                </dd>
+
+                {% if ex.commentaire %}
+                <dt>Commentaire</dt>
+                <dd>{{ ex.commentaire }}</dd>
+                {% endif %}
+            </dl>
+        </div>
+
+        <div class="exemplaire-qr">
+            {% if qr_svg %}
+                <div class="qr-cadre">{{ qr_svg|safe }}</div>
+                <p class="qr-legende">Scannez pour ouvrir cette fiche</p>
+            {% else %}
+                <div class="qr-absent">
+                    QR indisponible<br>
+                    <small>Installez <code>qrcode</code> pour l'activer</small>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ===== Maintenance ===== -->
+{% set intervention = maintenances | selectattr('statut', 'in', maintenance_ouverts) | first %}
+
+<div class="card">
+    <div class="card-header">
+        <h3 style="margin:0;">🔧 Maintenance</h3>
+        {% if stats.nb_closes %}
+        <span style="color:#64748b; font-size:0.9rem;">
+            {{ stats.nb_closes }} intervention(s) close(s) · coût cumulé
+            <strong>{{ '{:,.0f}'.format(stats.total_repare)|replace(',', ' ') }} Ar</strong>
+        </span>
+        {% endif %}
+    </div>
+
+    {% if intervention %}
+    <div class="maint-encours">
+        <div class="maint-etapes">
+            <span class="etape {{ 'faite' if intervention.statut in ['signale','envoye'] }}">1. Panne signalée</span>
+            <span class="etape-fleche">→</span>
+            <span class="etape {{ 'faite' if intervention.statut == 'envoye' }}">2. En réparation</span>
+            <span class="etape-fleche">→</span>
+            <span class="etape">3. Retour</span>
+        </div>
+
+        <p style="margin:12px 0 4px;"><strong>Panne :</strong> {{ intervention.panne }}</p>
+        <p style="margin:0; color:#64748b; font-size:0.88rem;">
+            Signalée le {{ intervention.date_signalement.strftime('%d/%m/%Y') if intervention.date_signalement else '—' }}
+            {% if intervention.signale_par %}par {{ intervention.signale_par }}{% endif %}
+            {% if intervention.date_envoi %}
+                · Envoyée le {{ intervention.date_envoi.strftime('%d/%m/%Y') }}
+                {% if intervention.technicien %}à <strong>{{ intervention.technicien }}</strong>{% endif %}
+            {% endif %}
+        </p>
+
+        {% if peut_gerer_materiels %}
+            {% if intervention.statut == 'signale' %}
+            <form method="POST" action="{{ url_for('envoyer_maintenance', id=intervention.id) }}"
+                  class="materiels-filtres" style="margin:14px 0 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="filtre-champ">
+                    <label>Technicien / prestataire</label>
+                    <input type="text" name="technicien" class="form-control" placeholder="Atelier Info+">
+                </div>
+                <div class="filtre-champ">
+                    <label>Date d'envoi</label>
+                    <input type="date" name="date_envoi" class="form-control" value="{{ aujourdhui.strftime('%Y-%m-%d') }}">
+                </div>
+                <button type="submit" class="btn btn-primary">📤 Envoyer en réparation</button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('cloturer_maintenance', id=intervention.id) }}"
+                  class="materiels-filtres" style="margin:14px 0 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="filtre-champ">
+                    <label>Résultat</label>
+                    <select name="resultat" class="form-control" required>
+                        <option value="repare">Réparé</option>
+                        <option value="irreparable">Irréparable (rebut)</option>
+                    </select>
+                </div>
+                <div class="filtre-champ">
+                    <label>Coût (Ar)</label>
+                    <input type="text" name="cout" class="form-control" inputmode="decimal" placeholder="150000">
+                </div>
+                <div class="filtre-champ">
+                    <label>Date de retour</label>
+                    <input type="date" name="date_retour" class="form-control" value="{{ aujourdhui.strftime('%Y-%m-%d') }}">
+                </div>
+                <div class="filtre-champ">
+                    <label>État au retour</label>
+                    <select name="etat_retour" class="form-control">
+                        <option value="bon">Bon état</option>
+                        <option value="usage">Usagé</option>
+                    </select>
+                </div>
+                <div class="filtre-champ" style="flex:1 1 260px;">
+                    <label>Diagnostic</label>
+                    <input type="text" name="diagnostic" class="form-control" placeholder="Disque remplacé">
+                </div>
+                <button type="submit" class="btn btn-primary">✓ Enregistrer le retour</button>
+            </form>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('annuler_maintenance', id=intervention.id) }}"
+                  class="confirm-form" style="margin-top:10px;"
+                  data-confirm-icon="🚫"
+                  data-confirm-title="Annuler cette intervention ?"
+                  data-confirm-subtitle="Fausse alerte : aucune réparation n'a eu lieu."
+                  data-confirm-warning="L'exemplaire redeviendra disponible et l'intervention sera close sans coût."
+                  data-confirm-confirm="Annuler l'intervention">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-secondary btn-sm">Fausse alerte — annuler</button>
+            </form>
+        {% endif %}
+    </div>
+
+    {% elif ex.etat == 'rebut' %}
+    <p style="color:#64748b; margin:0;">
+        Cet exemplaire est <strong>mis au rebut</strong> : aucune nouvelle intervention n'est possible.
+    </p>
+
+    {% else %}
+    <p style="color:#64748b; margin-top:0;">
+        Aucune intervention en cours. Signalez une panne si ce matériel ne fonctionne pas :
+        il sera immédiatement marqué indisponible.
+    </p>
+    <form method="POST" action="{{ url_for('signaler_panne', id=ex.id) }}"
+          class="materiels-filtres" style="margin-bottom:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="filtre-champ" style="flex:1 1 320px;">
+            <label>Description de la panne *</label>
+            <input type="text" name="panne" class="form-control" required
+                   placeholder="Ne s'allume plus, écran cassé...">
+        </div>
+        <button type="submit" class="btn btn-primary" style="background:#dc2626;">⚠ Signaler une panne</button>
+    </form>
+    {% endif %}
+</div>
+
+<!-- ===== Historique des interventions ===== -->
+{% set closes = maintenances | rejectattr('statut', 'in', maintenance_ouverts) | list %}
+{% if closes %}
+<div class="card">
+    <h3 style="margin-bottom:12px;">📜 Historique des réparations</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Signalée</th>
+                    <th>Panne</th>
+                    <th>Technicien</th>
+                    <th>Retour</th>
+                    <th>Coût</th>
+                    <th>Résultat</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in closes %}
+                <tr>
+                    <td data-label="Signalée"><small>{{ m.date_signalement.strftime('%d/%m/%Y') if m.date_signalement else '—' }}</small></td>
+                    <td data-label="Panne">
+                        {{ m.panne }}
+                        {% if m.diagnostic %}<br><small style="color:#64748b;">{{ m.diagnostic }}</small>{% endif %}
+                    </td>
+                    <td data-label="Technicien"><small>{{ m.technicien or '—' }}</small></td>
+                    <td data-label="Retour"><small>{{ m.date_retour.strftime('%d/%m/%Y') if m.date_retour else '—' }}</small></td>
+                    <td data-label="Coût">
+                        {% if m.cout %}<strong>{{ '{:,.0f}'.format(m.cout)|replace(',', ' ') }} Ar</strong>{% else %}—{% endif %}
+                    </td>
+                    <td data-label="Résultat">
+                        {% if m.statut == 'repare' %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">Réparé</span>
+                        {% elif m.statut == 'irreparable' %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">Irréparable</span>
+                        {% else %}
+                            <span class="badge" style="background:#e2e8f0;color:#475569;">Annulée</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- ===== Modification ===== -->
+{% if peut_gerer_materiels %}
+<div class="card">
+    <h3 style="margin-bottom:12px;">✏️ Modifier cet exemplaire</h3>
+    <form method="POST" action="{{ url_for('edit_exemplaire', id=ex.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="numero_serie">N° de série</label>
+                <input type="text" id="numero_serie" name="numero_serie" class="form-control"
+                       value="{{ ex.numero_serie or '' }}">
+            </div>
+            <div class="form-group">
+                <label for="etat">État</label>
+                <select id="etat" name="etat" class="form-control" {{ 'disabled' if intervention }}>
+                    {% for val, lib in etats %}
+                    <option value="{{ val }}" {{ 'selected' if ex.etat == val }}>{{ lib }}</option>
+                    {% endfor %}
+                </select>
+                {% if intervention %}
+                <small class="form-hint">Piloté par l'intervention en cours.</small>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label for="employe_id">Détenteur</label>
+                <select id="employe_id" name="employe_id" class="form-control">
+                    <option value="">— Non attribué —</option>
+                    {% for e in employes %}
+                    <option value="{{ e.id }}" {{ 'selected' if ex.employe_id == e.id }}>{{ e.prenom }} {{ e.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="emplacement">Emplacement</label>
+                <input type="text" id="emplacement" name="emplacement" class="form-control"
+                       value="{{ ex.emplacement or '' }}" placeholder="Bureau 4">
+            </div>
+            <div class="form-group">
+                <label for="garantie_fin">Fin de garantie</label>
+                <input type="date" id="garantie_fin" name="garantie_fin" class="form-control"
+                       value="{{ ex.garantie_fin.strftime('%Y-%m-%d') if ex.garantie_fin else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="prix_acquisition">Prix d'acquisition (Ar)</label>
+                <input type="text" id="prix_acquisition" name="prix_acquisition" class="form-control"
+                       inputmode="decimal"
+                       value="{{ '%0.2f'|format(ex.prix_acquisition) if ex.prix_acquisition else '' }}">
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="commentaire">Commentaire</label>
+            <textarea id="commentaire" name="commentaire" class="form-control" rows="2">{{ ex.commentaire or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+            {% if session.get('role') in ['admin', 'rh'] %}
+            {# Déclenche le bouton de la forme cachée pour passer par la modale
+               de confirmation (un form.submit() direct la contournerait). #}
+            <button type="button" class="btn btn-secondary" style="color:#991b1b;"
+                    onclick="document.getElementById('btnSuppressionExemplaire').click();">
+                Supprimer cet exemplaire
+            </button>
+            {% endif %}
+        </div>
+    </form>
+
+    {% if session.get('role') in ['admin', 'rh'] %}
+    <form id="formSuppression" method="POST" action="{{ url_for('delete_exemplaire', id=ex.id) }}"
+          class="confirm-form" style="display:none;"
+          data-confirm-icon="🗑️"
+          data-confirm-title="Supprimer {{ ex.numero_inventaire }} ?"
+          data-confirm-subtitle="L'exemplaire et son historique de réparations seront effacés."
+          data-confirm-warning="Cette action est irréversible. Pour un matériel hors service, préférez l'état « Mis au rebut », qui conserve la traçabilité."
+          data-confirm-confirm="Supprimer définitivement">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" id="btnSuppressionExemplaire">Confirmer</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
