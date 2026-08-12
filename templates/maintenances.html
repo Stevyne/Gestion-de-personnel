@@ -20,9 +20,17 @@
             <div class="materiel-stat-value" style="color:#854d0e;">{{ stats.signalees }}</div>
             <div class="materiel-stat-label">Pannes signalées</div>
         </div>
+        <div class="materiel-stat" style="background:#ede9fe;">
+            <div class="materiel-stat-value" style="color:#5b21b6;">{{ stats.assignees }}</div>
+            <div class="materiel-stat-label">Assignées</div>
+        </div>
         <div class="materiel-stat" style="background:#eff6ff;">
             <div class="materiel-stat-value" style="color:#1d4ed8;">{{ stats.en_cours }}</div>
             <div class="materiel-stat-label">En réparation</div>
+        </div>
+        <div class="materiel-stat" style="background:#ffedd5;">
+            <div class="materiel-stat-value" style="color:#9a3412;">{{ stats.a_valider }}</div>
+            <div class="materiel-stat-label">Retours à valider</div>
         </div>
         <div class="materiel-stat" style="background:#dcfce7;">
             <div class="materiel-stat-value" style="color:#166534;">{{ stats.reparees }}</div>
@@ -40,8 +48,25 @@
         </div>
     </div>
 
+    {% if mes_taches and (mes_taches.a_traiter or mes_taches.a_valider_moi) %}
+    <div class="inv-alerte inv-alerte-warn" style="margin-bottom:16px;">
+        <strong>Vous avez du travail :</strong>
+        {% if mes_taches.a_traiter %}{{ mes_taches.a_traiter }} réparation(s) qui vous sont assignées{% endif %}
+        {% if mes_taches.a_traiter and mes_taches.a_valider_moi %} · {% endif %}
+        {% if mes_taches.a_valider_moi %}{{ mes_taches.a_valider_moi }} retour(s) à valider{% endif %}.
+        <a href="{{ url_for('maintenances', portee='moi') }}">Voir mes interventions</a>
+    </div>
+    {% endif %}
+
     <!-- Filtres -->
     <form method="get" action="{{ url_for('maintenances') }}" class="materiels-filtres">
+        <div class="filtre-champ">
+            <label>Portée</label>
+            <select name="portee" class="form-control">
+                <option value="">Toutes les interventions</option>
+                <option value="moi" {{ 'selected' if filters.portee == 'moi' }}>Mes interventions</option>
+            </select>
+        </div>
         <div class="filtre-champ">
             <label>Statut</label>
             <select name="statut" class="form-control">
@@ -96,12 +121,19 @@
                             signalée le {{ m.date_signalement.strftime('%d/%m/%Y') if m.date_signalement else '—' }}
                         </small>
                     </td>
-                    <td data-label="Technicien"><small>{{ m.technicien or '—' }}</small></td>
+                    <td data-label="Technicien">
+                        <small>{{ m.technicien or '— non assignée —' }}</small>
+                        {% if m.prestataire_id %}<br><small style="color:#94a3b8;">prestataire externe</small>{% endif %}
+                    </td>
                     <td data-label="Statut">
                         {% if m.statut == 'signale' %}
                             <span class="badge" style="background:#fef9c3;color:#854d0e;">Panne signalée</span>
+                        {% elif m.statut == 'assigne' %}
+                            <span class="badge" style="background:#ede9fe;color:#5b21b6;">Assignée</span>
                         {% elif m.statut == 'envoye' %}
                             <span class="badge" style="background:#dbeafe;color:#1e40af;">En réparation</span>
+                        {% elif m.statut == 'a_valider' %}
+                            <span class="badge" style="background:#ffedd5;color:#9a3412;">Retour à valider</span>
                         {% elif m.statut == 'repare' %}
                             <span class="badge" style="background:#dcfce7;color:#166534;">Réparé</span>
                         {% elif m.statut == 'irreparable' %}
@@ -116,7 +148,10 @@
                     <td data-label="Action">
                         <a href="{{ url_for('view_exemplaire', id=m.exemplaire_id) }}"
                            class="btn btn-sm btn-primary">
-                            {% if m.statut in ['signale', 'envoye'] and peut_gerer %}Traiter{% else %}Voir{% endif %}
+                            {% if m.statut == 'signale' and peut_gerer %}Assigner
+                            {%- elif m.statut in ['assigne', 'envoye'] %}Traiter
+                            {%- elif m.statut == 'a_valider' %}Valider
+                            {%- else %}Voir{% endif %}
                         </a>
                     </td>
                 </tr>

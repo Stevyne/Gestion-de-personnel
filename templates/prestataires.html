@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>🛠️ Prestataires de réparation</h1>
+        <a href="{{ url_for('maintenances') }}" class="btn btn-secondary">← Maintenance</a>
+    </div>
+    <p style="color:#64748b; margin:0 0 16px;">
+        Ateliers et techniciens externes à qui confier une réparation. Un prestataire
+        désactivé n'apparaît plus dans la liste d'assignation, mais son historique
+        d'interventions est conservé.
+    </p>
+
+    <form method="POST" action="{{ url_for('prestataires_page') }}" class="materiels-filtres">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="filtre-champ">
+            <label>Nom *</label>
+            <input type="text" name="nom" class="form-control" placeholder="Atelier Info+" required>
+        </div>
+        <div class="filtre-champ">
+            <label>Spécialité</label>
+            <input type="text" name="specialite" class="form-control" placeholder="Informatique">
+        </div>
+        <div class="filtre-champ">
+            <label>Contact</label>
+            <input type="text" name="contact" class="form-control" placeholder="M. Rakoto">
+        </div>
+        <div class="filtre-champ">
+            <label>Téléphone</label>
+            <input type="text" name="telephone" class="form-control" placeholder="034 12 345 67">
+        </div>
+        <div class="filtre-champ">
+            <label>E-mail</label>
+            <input type="email" name="email" class="form-control" placeholder="contact@atelier.mg">
+        </div>
+        <button type="submit" class="btn btn-primary">+ Ajouter</button>
+    </form>
+</div>
+
+<div class="card">
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Prestataire</th>
+                    <th>Spécialité</th>
+                    <th>Contact</th>
+                    <th>Interventions</th>
+                    <th>Coût cumulé</th>
+                    <th>Statut</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in prestataires %}
+                <tr>
+                    <td data-label="Prestataire"><strong>{{ p.nom }}</strong></td>
+                    <td data-label="Spécialité">{{ p.specialite or '—' }}</td>
+                    <td data-label="Contact">
+                        {{ p.contact or '' }}
+                        {% if p.telephone %}<br><span style="color:#64748b;">{{ p.telephone }}</span>{% endif %}
+                        {% if p.email %}<br><span style="color:#64748b;">{{ p.email }}</span>{% endif %}
+                        {% if not (p.contact or p.telephone or p.email) %}—{% endif %}
+                    </td>
+                    <td data-label="Interventions">{{ p.nb_interventions }}</td>
+                    <td data-label="Coût cumulé">
+                        {% if p.cout_total %}{{ '{:,.0f}'.format(p.cout_total)|replace(',', ' ') }} Ar{% else %}—{% endif %}
+                    </td>
+                    <td data-label="Statut">
+                        {% if p.actif %}
+                        <span class="badge etat-bon">Actif</span>
+                        {% else %}
+                        <span class="badge etat-rebut">Inactif</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Action">
+                        <form method="POST" action="{{ url_for('basculer_prestataire', id=p.id) }}" style="margin:0;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-secondary btn-sm">
+                                {{ 'Désactiver' if p.actif else 'Réactiver' }}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align:center; color:#94a3b8; padding:24px;">
+                        Aucun prestataire enregistré. Ajoutez-en un ci-dessus pour pouvoir
+                        confier des réparations à un atelier externe.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

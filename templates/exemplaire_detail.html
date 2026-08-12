@@ -88,82 +88,181 @@
     {% if intervention %}
     <div class="maint-encours">
         <div class="maint-etapes">
-            <span class="etape {{ 'faite' if intervention.statut in ['signale','envoye'] }}">1. Panne signalée</span>
-            <span class="etape-fleche">→</span>
-            <span class="etape {{ 'faite' if intervention.statut == 'envoye' }}">2. En réparation</span>
-            <span class="etape-fleche">→</span>
-            <span class="etape">3. Retour</span>
+            <span class="etape faite">1. Signalée</span>
+            <span class="etape-fleche">&rarr;</span>
+            <span class="etape {{ 'faite' if intervention.statut in ['assigne','envoye','a_valider'] }}">2. Assignée</span>
+            <span class="etape-fleche">&rarr;</span>
+            <span class="etape {{ 'faite' if intervention.statut in ['envoye','a_valider'] }}">3. Réparation</span>
+            <span class="etape-fleche">&rarr;</span>
+            <span class="etape {{ 'faite' if intervention.statut == 'a_valider' }}">4. Validation</span>
         </div>
 
         <p style="margin:12px 0 4px;"><strong>Panne :</strong> {{ intervention.panne }}</p>
         <p style="margin:0; color:#64748b; font-size:0.88rem;">
             Signalée le {{ intervention.date_signalement.strftime('%d/%m/%Y') if intervention.date_signalement else '—' }}
             {% if intervention.signale_par %}par {{ intervention.signale_par }}{% endif %}
-            {% if intervention.date_envoi %}
-                · Envoyée le {{ intervention.date_envoi.strftime('%d/%m/%Y') }}
-                {% if intervention.technicien %}à <strong>{{ intervention.technicien }}</strong>{% endif %}
+            {% if intervention.technicien %}
+                · Assignée à <strong>{{ intervention.technicien }}</strong>
+                {%- if intervention.prestataire_id %} (prestataire externe){% endif %}
+            {% endif %}
+            {% if intervention.date_envoi %}· En réparation depuis le {{ intervention.date_envoi.strftime('%d/%m/%Y') }}{% endif %}
+        </p>
+        {% if intervention.motif_refus and intervention.statut == 'envoye' %}
+        <div class="inv-alerte inv-alerte-warn" style="margin-top:12px;">
+            <strong>Retour précédent refusé par le demandeur :</strong> {{ intervention.motif_refus }}
+        </div>
+        {% endif %}
+
+        {# --- Étape 2 : assignation (gestionnaires) --- #}
+        {% if droits.peut_assigner %}
+        <form method="POST" action="{{ url_for('assigner_maintenance', id=intervention.id) }}"
+              class="materiels-filtres" style="margin:14px 0 0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="filtre-champ">
+                <label>Confier à</label>
+                <select name="cible" class="form-control" id="cibleAssign">
+                    <option value="interne">Un collaborateur interne</option>
+                    <option value="externe">Un prestataire externe</option>
+                </select>
+            </div>
+            <div class="filtre-champ" id="champInterne">
+                <label>Collaborateur</label>
+                <select name="assigne_user_id" class="form-control">
+                    <option value="">— Choisir —</option>
+                    {% for u in assignables %}
+                    <option value="{{ u.id }}">{{ u.nom_complet or u.username }}{% if u.role == 'technicien' %} (technicien){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filtre-champ" id="champExterne" style="display:none;">
+                <label>Prestataire</label>
+                <select name="prestataire_id" class="form-control">
+                    <option value="">— Choisir —</option>
+                    {% for p in prestataires %}
+                    <option value="{{ p.id }}">{{ p.nom }}{% if p.specialite %} — {{ p.specialite }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+                <a href="{{ url_for('prestataires_page') }}" style="font-size:0.8rem;">Gérer les prestataires</a>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                {{ '↻ Réassigner' if intervention.statut == 'assigne' else '👤 Assigner' }}
+            </button>
+        </form>
+        {% endif %}
+
+        {# --- Étape 3a : démarrer la réparation (exécutant) --- #}
+        {% if droits.peut_demarrer %}
+        <form method="POST" action="{{ url_for('envoyer_maintenance', id=intervention.id) }}"
+              class="materiels-filtres" style="margin:14px 0 0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="filtre-champ">
+                <label>Date de départ en réparation</label>
+                <input type="date" name="date_envoi" class="form-control" value="{{ aujourdhui.strftime('%Y-%m-%d') }}">
+            </div>
+            <button type="submit" class="btn btn-primary">🔧 Démarrer la réparation</button>
+        </form>
+        {% endif %}
+
+        {# --- Étape 3b : retour d'atelier (exécutant) --- #}
+        {% if droits.peut_executer %}
+        <form method="POST" action="{{ url_for('cloturer_maintenance', id=intervention.id) }}"
+              class="materiels-filtres" style="margin:14px 0 0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="filtre-champ">
+                <label>Résultat</label>
+                <select name="resultat" class="form-control" required>
+                    <option value="repare">Réparé</option>
+                    <option value="irreparable">Irréparable (rebut)</option>
+                </select>
+            </div>
+            <div class="filtre-champ">
+                <label>Coût (Ar)</label>
+                <input type="text" name="cout" class="form-control" inputmode="decimal" placeholder="150000">
+            </div>
+            <div class="filtre-champ">
+                <label>Date de retour</label>
+                <input type="date" name="date_retour" class="form-control" value="{{ aujourdhui.strftime('%Y-%m-%d') }}">
+            </div>
+            <div class="filtre-champ">
+                <label>État au retour</label>
+                <select name="etat_retour" class="form-control">
+                    <option value="bon">Bon état</option>
+                    <option value="usage">Usagé</option>
+                </select>
+            </div>
+            <div class="filtre-champ" style="flex:1 1 260px;">
+                <label>Diagnostic</label>
+                <input type="text" name="diagnostic" class="form-control" placeholder="Disque remplacé">
+            </div>
+            <button type="submit" class="btn btn-primary">✓ Rendre le matériel</button>
+        </form>
+        <p style="margin:8px 0 0; color:#64748b; font-size:0.82rem;">
+            Le demandeur devra confirmer que la panne est bien résolue.
+        </p>
+        {% endif %}
+
+        {# --- Étape 4 : validation par le demandeur --- #}
+        {% if droits.peut_valider or droits.peut_forcer %}
+        <div class="maint-validation">
+            <p style="margin:0 0 10px;">
+                <strong>Retour d'atelier à valider.</strong>
+                {% if intervention.diagnostic %}Diagnostic : {{ intervention.diagnostic }}.{% endif %}
+                {% if droits.peut_valider %}
+                    La panne est-elle réellement résolue ?
+                {% else %}
+                    En attente de la confirmation du demandeur
+                    ({{ intervention.signale_par }}) — validation automatique sous {{ validation_jours }} jours.
+                {% endif %}
+            </p>
+            <form method="POST" action="{{ url_for('valider_maintenance', id=intervention.id) }}"
+                  class="materiels-filtres" style="margin:0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="decision" value="valider">
+                <button type="submit" class="btn btn-primary">
+                    {{ '✓ Oui, c\'est réparé' if droits.peut_valider else '✓ Clôturer sans réponse du demandeur' }}
+                </button>
+            </form>
+            {% if droits.peut_valider %}
+            <form method="POST" action="{{ url_for('valider_maintenance', id=intervention.id) }}"
+                  class="materiels-filtres" style="margin:10px 0 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="decision" value="refuser">
+                <div class="filtre-champ" style="flex:1 1 320px;">
+                    <label>La panne persiste ? Expliquez</label>
+                    <input type="text" name="motif_refus" class="form-control"
+                           placeholder="L'écran s'éteint toujours au bout de 5 minutes" required>
+                </div>
+                <button type="submit" class="btn btn-secondary">✗ Non, le problème persiste</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# Message pour les spectateurs sans action possible #}
+        {% if not (droits.peut_assigner or droits.peut_demarrer or droits.peut_executer
+                   or droits.peut_valider or droits.peut_forcer) %}
+        <p style="margin:14px 0 0; color:#64748b; font-size:0.88rem;">
+            {% if intervention.statut == 'signale' %}
+                En attente d'assignation par un gestionnaire.
+            {% elif intervention.statut == 'a_valider' %}
+                En attente de validation par {{ intervention.signale_par or 'le demandeur' }}.
+            {% else %}
+                Intervention en cours, prise en charge par {{ intervention.technicien or 'un technicien' }}.
             {% endif %}
         </p>
+        {% endif %}
 
-        {% if peut_gerer_materiels %}
-            {% if intervention.statut == 'signale' %}
-            <form method="POST" action="{{ url_for('envoyer_maintenance', id=intervention.id) }}"
-                  class="materiels-filtres" style="margin:14px 0 0;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="filtre-champ">
-                    <label>Technicien / prestataire</label>
-                    <input type="text" name="technicien" class="form-control" placeholder="Atelier Info+">
-                </div>
-                <div class="filtre-champ">
-                    <label>Date d'envoi</label>
-                    <input type="date" name="date_envoi" class="form-control" value="{{ aujourdhui.strftime('%Y-%m-%d') }}">
-                </div>
-                <button type="submit" class="btn btn-primary">📤 Envoyer en réparation</button>
-            </form>
-            {% else %}
-            <form method="POST" action="{{ url_for('cloturer_maintenance', id=intervention.id) }}"
-                  class="materiels-filtres" style="margin:14px 0 0;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="filtre-champ">
-                    <label>Résultat</label>
-                    <select name="resultat" class="form-control" required>
-                        <option value="repare">Réparé</option>
-                        <option value="irreparable">Irréparable (rebut)</option>
-                    </select>
-                </div>
-                <div class="filtre-champ">
-                    <label>Coût (Ar)</label>
-                    <input type="text" name="cout" class="form-control" inputmode="decimal" placeholder="150000">
-                </div>
-                <div class="filtre-champ">
-                    <label>Date de retour</label>
-                    <input type="date" name="date_retour" class="form-control" value="{{ aujourdhui.strftime('%Y-%m-%d') }}">
-                </div>
-                <div class="filtre-champ">
-                    <label>État au retour</label>
-                    <select name="etat_retour" class="form-control">
-                        <option value="bon">Bon état</option>
-                        <option value="usage">Usagé</option>
-                    </select>
-                </div>
-                <div class="filtre-champ" style="flex:1 1 260px;">
-                    <label>Diagnostic</label>
-                    <input type="text" name="diagnostic" class="form-control" placeholder="Disque remplacé">
-                </div>
-                <button type="submit" class="btn btn-primary">✓ Enregistrer le retour</button>
-            </form>
-            {% endif %}
-
-            <form method="POST" action="{{ url_for('annuler_maintenance', id=intervention.id) }}"
-                  class="confirm-form" style="margin-top:10px;"
-                  data-confirm-icon="🚫"
-                  data-confirm-title="Annuler cette intervention ?"
-                  data-confirm-subtitle="Fausse alerte : aucune réparation n'a eu lieu."
-                  data-confirm-warning="L'exemplaire redeviendra disponible et l'intervention sera close sans coût."
-                  data-confirm-confirm="Annuler l'intervention">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-secondary btn-sm">Fausse alerte — annuler</button>
-            </form>
+        {% if droits.peut_annuler %}
+        <form method="POST" action="{{ url_for('annuler_maintenance', id=intervention.id) }}"
+              class="confirm-form" style="margin-top:10px;"
+              data-confirm-icon="🚫"
+              data-confirm-title="Annuler cette intervention ?"
+              data-confirm-subtitle="Fausse alerte : aucune réparation n'a eu lieu."
+              data-confirm-warning="L'exemplaire redeviendra disponible et l'intervention sera close sans coût."
+              data-confirm-confirm="Annuler l'intervention">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary btn-sm">Fausse alerte — annuler</button>
+        </form>
         {% endif %}
     </div>
 
@@ -319,4 +418,21 @@
     {% endif %}
 </div>
 {% endif %}
+
+{# Bascule interne / prestataire dans le formulaire d'assignation. #}
+<script>
+(function () {
+    var sel = document.getElementById('cibleAssign');
+    if (!sel) return;
+    var interne = document.getElementById('champInterne');
+    var externe = document.getElementById('champExterne');
+    function maj() {
+        var ext = sel.value === 'externe';
+        interne.style.display = ext ? 'none' : '';
+        externe.style.display = ext ? '' : 'none';
+    }
+    sel.addEventListener('change', maj);
+    maj();
+})();
+</script>
 {% endblock %}

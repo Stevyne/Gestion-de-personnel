@@ -3039,3 +3039,13 @@ footer {
     .fiche-champs { grid-template-columns: 1fr; gap: 2px 0; }
     .fiche-champs dd { margin-bottom: 10px; }
 }
+
+/* --- Workflow de maintenance : zone de validation par le demandeur --- */
+.maint-validation {
+    margin-top: 14px;
+    padding: 14px 16px;
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+    border-radius: 10px;
+}
+.maint-validation p { color: #7c2d12; }

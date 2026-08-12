@@ -218,7 +218,8 @@ def send_html_email(recipients, subject, html_template, **context):
 
 HEURE_ARRIVEE_ATTENDUE = "09:00"
 
-ROLE_LABELS = {'admin':'Administrateur', 'rh':'Responsable RH', 'manager':'Manager', 'employe':'Employé'}
+ROLE_LABELS = {'admin':'Administrateur', 'rh':'Responsable RH', 'manager':'Manager',
+               'technicien':'Technicien', 'employe':'Employé'}
 
 def get_role_label(role):
     return ROLE_LABELS.get(role, role or 'Employé')
@@ -1128,6 +1129,44 @@ def init_db():
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_exemplaire ON materiel_maintenances(exemplaire_id, date_creation DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_statut ON materiel_maintenances(statut)")
+
+    # --- Workflow d'assignation à 4 acteurs -------------------------------
+    # Ajouté après coup : les colonnes sont nullables pour que les
+    # interventions déjà enregistrées restent valides sans reprise de données.
+    for col, typ in [
+        # Qui a signalé : on garde l'id en plus du username, pour pouvoir
+        # notifier le demandeur et lui demander de valider le retour.
+        ('signale_par_id',    'INTEGER'),
+        # Assignation : soit un utilisateur interne, soit un prestataire.
+        ('assigne_user_id',   'INTEGER'),
+        ('prestataire_id',    'INTEGER'),
+        ('date_assignation',  'DATE'),
+        ('assigne_par',       'VARCHAR(80)'),
+        # Retour d'atelier saisi par l'exécutant, avant validation.
+        ('date_execution',    'DATE'),
+        ('execute_par',       'VARCHAR(80)'),
+        # Validation par le demandeur.
+        ('valide_par',        'VARCHAR(80)'),
+        ('date_validation',   'DATE'),
+        ('motif_refus',       'TEXT'),
+        ('validation_forcee', 'BOOLEAN DEFAULT FALSE'),
+    ]:
+        cur.execute(f"ALTER TABLE materiel_maintenances ADD COLUMN IF NOT EXISTS {col} {typ}")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_assigne ON materiel_maintenances(assigne_user_id, statut)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_demandeur ON materiel_maintenances(signale_par_id, statut)")
+
+    # Annuaire des prestataires externes : remplace le champ texte libre, pour
+    # que « Atelier Info+ » soit la même entité d'une intervention à l'autre.
+    cur.execute('''CREATE TABLE IF NOT EXISTS prestataires (
+        id SERIAL PRIMARY KEY,
+        nom VARCHAR(150) NOT NULL,
+        contact VARCHAR(150),
+        telephone VARCHAR(40),
+        email VARCHAR(150),
+        specialite VARCHAR(100),
+        actif BOOLEAN DEFAULT TRUE,
+        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
 
     # Compteurs des numéros d'inventaire : une séquence par préfixe et par
     # année (PC-2026-001, PC-2026-002...). Table dédiée plutôt que MAX()+1,
@@ -2667,6 +2706,38 @@ def job_purge_sessions():
         logger.error("Erreur job_purge_sessions: %s", e, exc_info=True)
 
 
+def job_validation_auto_maintenances():
+    """Valide d'office les retours d'atelier restés sans réponse.
+
+    Sans ce filet, une intervention resterait « en attente de validation »
+    indéfiniment si le demandeur est absent, a quitté l'entreprise ou oublie
+    simplement de répondre — et fausserait les indicateurs.
+    """
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("""
+                SELECT mt.id, mt.exemplaire_id, ex.numero_inventaire
+                  FROM materiel_maintenances mt
+                  JOIN materiel_exemplaires ex ON ex.id = mt.exemplaire_id
+                 WHERE mt.statut = 'a_valider'
+                   AND mt.date_retour IS NOT NULL
+                   AND mt.date_retour < CURRENT_DATE - make_interval(days => %s)
+            """, (MAINTENANCE_VALIDATION_JOURS,))
+            echues = cur.fetchall()
+            for mt in echues:
+                cur.execute("""UPDATE materiel_maintenances
+                               SET statut = 'repare', valide_par = 'système',
+                                   date_validation = CURRENT_DATE,
+                                   validation_forcee = TRUE,
+                                   cloture_par = 'système'
+                               WHERE id = %s""", (mt['id'],))
+        if echues:
+            logger.info("Validation automatique de %s intervention(s) : %s",
+                        len(echues), ", ".join(m['numero_inventaire'] for m in echues))
+    except Exception as e:
+        logger.error("Erreur job_validation_auto_maintenances: %s", e, exc_info=True)
+
+
 def job_recalcul_soldes_conges():
     """Job planifié (1x/jour, voir `demarrer_scheduler`) : recalcule le nombre
     de jours de congé acquis (`jours_acquis`) de chaque employé pour l'année en
@@ -2738,6 +2809,10 @@ def demarrer_scheduler():
     scheduler.add_job(
         job_purge_sessions, 'cron',
         hour=3, minute=0, id='purge_sessions_actives', replace_existing=True
+    )
+    scheduler.add_job(
+        job_validation_auto_maintenances, 'cron',
+        hour=3, minute=30, id='validation_auto_maintenances', replace_existing=True
     )
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
@@ -3758,7 +3833,7 @@ def edit_utilisateur(user_id):
     Seul un admin peut promouvoir/rétrograder vers ou depuis le rôle 'admin'."""
     nouveau_role = request.form.get('role', '').strip()
     employe_id = request.form.get('employe_id') or None
-    roles_valides = ['admin', 'rh', 'manager', 'employe']
+    roles_valides = ['admin', 'rh', 'manager', 'technicien', 'employe']
 
     if nouveau_role not in roles_valides:
         flash("Rôle invalide.", "danger")
@@ -4088,14 +4163,22 @@ EXEMPLAIRE_ETATS_INDISPONIBLES = {'panne', 'reparation', 'rebut'}
 
 MAINTENANCE_STATUTS = [
     ('signale',     'Panne signalée'),
-    ('envoye',      'Envoyé en réparation'),
+    ('assigne',     'Assignée'),
+    ('envoye',      'En réparation'),
+    ('a_valider',   'Retour à valider'),
     ('repare',      'Réparé'),
     ('irreparable', 'Irréparable'),
     ('annule',      'Annulé'),
 ]
 MAINTENANCE_STATUTS_DICT = dict(MAINTENANCE_STATUTS)
-# Une intervention est « en cours » tant qu'elle n'est pas close.
-MAINTENANCE_OUVERTS = ('signale', 'envoye')
+# Une intervention est « en cours » tant qu'elle n'est pas close. `a_valider`
+# en fait partie : le matériel est revenu mais le demandeur n'a pas encore
+# confirmé que la panne est réellement résolue.
+MAINTENANCE_OUVERTS = ('signale', 'assigne', 'envoye', 'a_valider')
+# Étapes où le matériel est physiquement indisponible pour son utilisateur.
+MAINTENANCE_INDISPONIBLE = ('signale', 'assigne', 'envoye')
+# Délai au-delà duquel un retour sans réponse du demandeur est réputé validé.
+MAINTENANCE_VALIDATION_JOURS = int(os.environ.get('MAINTENANCE_VALIDATION_JOURS', 7))
 
 
 def _prefixe_materiel(materiel):
@@ -4196,6 +4279,55 @@ def _champs_patrimoine(form):
 
 def _peut_gerer_materiels():
     return session.get('role') in ('admin', 'rh', 'manager')
+
+
+# ==================== WORKFLOW DE MAINTENANCE (4 acteurs) ====================
+# Rôles pilotes : ils assignent, arbitrent et peuvent forcer une clôture.
+MAINTENANCE_PILOTES = ('admin', 'rh', 'manager')
+
+
+def _est_pilote_maintenance():
+    return session.get('role') in MAINTENANCE_PILOTES
+
+
+def _notifier_pilotes(cur, titre, message, type_='warning', sauf=None):
+    """Prévient les gestionnaires du parc (admin/rh/manager).
+
+    Les notifications ne doivent jamais faire échouer l'action métier : on
+    récupère les destinataires dans la transaction courante, mais l'insertion
+    passe par create_notification, qui avale ses propres erreurs.
+    """
+    cur.execute("SELECT id FROM users WHERE role IN %s", (MAINTENANCE_PILOTES,))
+    for row in cur.fetchall():
+        if sauf and row['id'] == sauf:
+            continue
+        create_notification(row['id'], titre, message, type_)
+
+
+def _acteurs_intervention(mt):
+    """Qui a le droit de faire quoi sur cette intervention, pour l'utilisateur courant."""
+    uid = session.get('user_id')
+    pilote = _est_pilote_maintenance()
+    est_assigne = bool(mt.get('assigne_user_id')) and mt['assigne_user_id'] == uid
+    est_demandeur = bool(mt.get('signale_par_id')) and mt['signale_par_id'] == uid
+    return {
+        # Assigner / réassigner : uniquement les pilotes.
+        'peut_assigner': pilote and mt['statut'] in ('signale', 'assigne'),
+        # Démarrer : l'assigné interne lui-même, ou un pilote (cas prestataire).
+        'peut_demarrer': mt['statut'] == 'assigne' and (pilote or est_assigne),
+        # Saisir le retour d'atelier : l'exécutant interne, ou un pilote qui
+        # retranscrit le retour d'un prestataire externe. Autorisé dès
+        # l'assignation : un technicien peut diagnostiquer un matériel mort
+        # sur place, sans passer par un départ en atelier.
+        'peut_executer': mt['statut'] in ('assigne', 'envoye') and (pilote or est_assigne),
+        # Valider : le demandeur. Un pilote peut forcer (employé absent/parti).
+        'peut_valider': mt['statut'] == 'a_valider' and est_demandeur,
+        'peut_forcer': mt['statut'] == 'a_valider' and pilote,
+        'peut_annuler': pilote and mt['statut'] in MAINTENANCE_OUVERTS,
+        'est_demandeur': est_demandeur,
+        'est_assigne': est_assigne,
+        'est_pilote': pilote,
+    }
 
 
 @app.context_processor
@@ -5131,14 +5263,36 @@ def view_exemplaire(id):
         cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
         employes = cur.fetchall()
 
+        # Cibles d'assignation : les techniciens d'abord, puis les autres
+        # comptes susceptibles de dépanner (informaticiens sans rôle dédié).
+        cur.execute("""
+            SELECT u.id, u.username, u.role,
+                   TRIM(COALESCE(e.prenom,'') || ' ' || COALESCE(e.nom,'')) AS nom_complet
+              FROM users u
+              LEFT JOIN employes e ON e.id = u.employe_id
+             ORDER BY CASE u.role WHEN 'technicien' THEN 0 ELSE 1 END, u.username
+        """)
+        assignables = cur.fetchall()
+        cur.execute("""SELECT id, nom, specialite FROM prestataires
+                       WHERE actif ORDER BY nom""")
+        prestataires = cur.fetchall()
+
+        # Droits sur l'intervention en cours, s'il y en a une.
+        ouverte = next((m for m in maintenances if m['statut'] in MAINTENANCE_OUVERTS), None)
+        droits = _acteurs_intervention(ouverte) if ouverte else {}
+
     url_fiche = url_for('view_exemplaire', id=id, _external=True)
     return render_template('exemplaire_detail.html', ex=ex,
                            maintenances=maintenances, stats=stats,
                            employes=employes,
+                           assignables=assignables, prestataires=prestataires,
+                           droits=droits,
                            etats=EXEMPLAIRE_ETATS,
                            etats_dict=EXEMPLAIRE_ETATS_DICT,
                            statuts_dict=MAINTENANCE_STATUTS_DICT,
                            maintenance_ouverts=MAINTENANCE_OUVERTS,
+                           maintenance_indisponible=MAINTENANCE_INDISPONIBLE,
+                           validation_jours=MAINTENANCE_VALIDATION_JOURS,
                            qr_svg=_qr_svg(url_fiche), url_fiche=url_fiche,
                            aujourdhui=date.today())
 
@@ -5242,27 +5396,127 @@ def signaler_panne(id):
                 return redirect(url_for('view_exemplaire', id=id))
 
             cur.execute("""
-                INSERT INTO materiel_maintenances (exemplaire_id, statut, panne, signale_par)
-                VALUES (%s, 'signale', %s, %s) RETURNING id
-            """, (id, panne, session.get('username')))
+                INSERT INTO materiel_maintenances
+                    (exemplaire_id, statut, panne, signale_par, signale_par_id)
+                VALUES (%s, 'signale', %s, %s, %s) RETURNING id
+            """, (id, panne, session.get('username'), session.get('user_id')))
             mid = cur.fetchone()['id']
             cur.execute("UPDATE materiel_exemplaires SET etat = 'panne' WHERE id = %s", (id,))
 
+            # Étape 1 du workflow : prévenir les gestionnaires qu'il y a une
+            # intervention à assigner.
+            cur.execute("""SELECT ex.numero_inventaire, m.nom
+                           FROM materiel_exemplaires ex
+                           JOIN materiels m ON m.id = ex.materiel_id
+                           WHERE ex.id = %s""", (id,))
+            info = cur.fetchone()
+            _notifier_pilotes(
+                cur, "Panne signalée : %s" % info['numero_inventaire'],
+                "%s — %s (signalé par %s). À assigner."
+                % (info['nom'], panne[:120], session.get('username')),
+                'warning', sauf=session.get('user_id'))
+
         log_action(session.get('user_id'), session.get('username'),
                    "Signalement panne", "exemplaire", id, panne[:120])
-        flash("Panne signalée. L'exemplaire est marqué indisponible.", "success")
+        flash("Panne signalée. Un gestionnaire va assigner l'intervention.", "success")
     except Exception as e:
         logger.error("Erreur signalement panne: %s", e, exc_info=True)
         flash(f"Erreur : {e}", "danger")
     return redirect(url_for('view_exemplaire', id=id))
 
 
-@app.route('/maintenances/<int:id>/envoyer', methods=['POST'])
+@app.route('/maintenances/<int:id>/assigner', methods=['POST'])
 @login_required
 @role_required('rh', 'manager')
+def assigner_maintenance(id):
+    """Étape 2 : le gestionnaire confie l'intervention à un exécutant.
+
+    Deux cas : un utilisateur interne (qui traitera lui-même dans
+    l'application) ou un prestataire externe (le retour sera retranscrit par
+    un gestionnaire).
+    """
+    cible = (request.form.get('cible') or '').strip()   # 'interne' | 'externe'
+    user_id = request.form.get('assigne_user_id', type=int)
+    prestataire_id = request.form.get('prestataire_id', type=int)
+
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT * FROM materiel_maintenances WHERE id = %s", (id,))
+            mt = cur.fetchone()
+            if not mt:
+                flash("Intervention introuvable", "danger")
+                return redirect(url_for('maintenances'))
+            if mt['statut'] not in ('signale', 'assigne'):
+                flash("Cette intervention ne peut plus être assignée.", "warning")
+                return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+
+            technicien = None
+            if cible == 'interne':
+                if not user_id:
+                    flash("Veuillez choisir la personne à qui assigner l'intervention.", "danger")
+                    return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+                cur.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
+                u = cur.fetchone()
+                if not u:
+                    flash("Utilisateur introuvable.", "danger")
+                    return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+                technicien, prestataire_id = u['username'], None
+            elif cible == 'externe':
+                if not prestataire_id:
+                    flash("Veuillez choisir un prestataire.", "danger")
+                    return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+                cur.execute("SELECT id, nom FROM prestataires WHERE id = %s", (prestataire_id,))
+                p = cur.fetchone()
+                if not p:
+                    flash("Prestataire introuvable.", "danger")
+                    return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+                technicien, user_id = p['nom'], None
+            else:
+                flash("Veuillez préciser à qui assigner l'intervention.", "danger")
+                return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+
+            cur.execute("""UPDATE materiel_maintenances
+                           SET statut = 'assigne', technicien = %s,
+                               assigne_user_id = %s, prestataire_id = %s,
+                               date_assignation = CURRENT_DATE, assigne_par = %s
+                           WHERE id = %s""",
+                        (technicien, user_id, prestataire_id,
+                         session.get('username'), id))
+
+            cur.execute("""SELECT ex.numero_inventaire, m.nom
+                           FROM materiel_exemplaires ex
+                           JOIN materiels m ON m.id = ex.materiel_id
+                           WHERE ex.id = %s""", (mt['exemplaire_id'],))
+            info = cur.fetchone()
+            if user_id:
+                create_notification(
+                    user_id, "Intervention assignée : %s" % info['numero_inventaire'],
+                    "%s — %s. Vous êtes chargé de cette réparation."
+                    % (info['nom'], (mt['panne'] or '')[:120]), 'info')
+            if mt.get('signale_par_id'):
+                create_notification(
+                    mt['signale_par_id'],
+                    "Panne prise en charge : %s" % info['numero_inventaire'],
+                    "Votre signalement a été assigné à %s." % technicien, 'info')
+
+        log_action(session.get('user_id'), session.get('username'),
+                   "Assignation maintenance", "maintenance", id, technicien)
+        flash("Intervention assignée à %s." % technicien, "success")
+        return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+    except Exception as e:
+        logger.error("Erreur assignation maintenance: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+        return redirect(url_for('maintenances'))
+
+
+@app.route('/maintenances/<int:id>/envoyer', methods=['POST'])
+@login_required
 def envoyer_maintenance(id):
-    """Envoi chez le technicien / prestataire."""
-    technicien = (request.form.get('technicien') or '').strip()
+    """Étape 3a : l'exécutant démarre la réparation (départ à l'atelier).
+
+    Accessible au technicien assigné lui-même, ou à un gestionnaire lorsque le
+    matériel part chez un prestataire externe.
+    """
     date_envoi = (request.form.get('date_envoi') or '').strip()
     try:
         with db_cursor(commit=True) as (conn, cur):
@@ -5271,19 +5525,33 @@ def envoyer_maintenance(id):
             if not mt:
                 flash("Intervention introuvable", "danger")
                 return redirect(url_for('maintenances'))
-            if mt['statut'] != 'signale':
-                flash("Seule une panne signalée peut être envoyée en réparation.", "warning")
+            droits = _acteurs_intervention(mt)
+            if mt['statut'] == 'signale':
+                flash("Cette intervention doit d'abord être assignée.", "warning")
+                return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+            if not droits['peut_demarrer']:
+                flash("Vous n'êtes pas en charge de cette intervention.", "danger")
                 return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
 
             cur.execute("""UPDATE materiel_maintenances
-                           SET statut = 'envoye', technicien = %s,
+                           SET statut = 'envoye',
                                date_envoi = COALESCE(NULLIF(%s,'')::date, CURRENT_DATE)
-                           WHERE id = %s""", (technicien or None, date_envoi, id))
+                           WHERE id = %s""", (date_envoi, id))
             cur.execute("""UPDATE materiel_exemplaires SET etat = 'reparation'
                            WHERE id = %s AND etat <> 'rebut'""", (mt['exemplaire_id'],))
+
+            if mt.get('signale_par_id'):
+                cur.execute("""SELECT ex.numero_inventaire FROM materiel_exemplaires ex
+                               WHERE ex.id = %s""", (mt['exemplaire_id'],))
+                num = cur.fetchone()['numero_inventaire']
+                create_notification(
+                    mt['signale_par_id'], "Réparation en cours : %s" % num,
+                    "Le matériel est parti en réparation chez %s."
+                    % (mt['technicien'] or 'le technicien'), 'info')
+
         log_action(session.get('user_id'), session.get('username'),
-                   "Envoi en réparation", "maintenance", id, technicien or None)
-        flash("Matériel envoyé en réparation.", "success")
+                   "Départ en réparation", "maintenance", id, mt['technicien'])
+        flash("Matériel parti en réparation.", "success")
         return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
     except Exception as e:
         logger.error("Erreur envoi maintenance: %s", e, exc_info=True)
@@ -5293,10 +5561,14 @@ def envoyer_maintenance(id):
 
 @app.route('/maintenances/<int:id>/cloturer', methods=['POST'])
 @login_required
-@role_required('rh', 'manager')
 def cloturer_maintenance(id):
-    """Retour d'atelier : réparé (l'exemplaire redevient utilisable) ou
-    irréparable (mise au rebut)."""
+    """Étape 3b : l'exécutant rend son retour d'atelier.
+
+    Si le matériel est réparé, l'intervention n'est PAS close : elle passe en
+    « retour à valider » et c'est le demandeur qui confirmera que la panne est
+    réellement résolue. Le cas irréparable, lui, est terminal (rien à valider :
+    le matériel part au rebut).
+    """
     resultat = (request.form.get('resultat') or '').strip()
     cout = (request.form.get('cout') or '').strip().replace(' ', '').replace(',', '.')
     diagnostic = (request.form.get('diagnostic') or '').strip()
@@ -5321,16 +5593,22 @@ def cloturer_maintenance(id):
             if not mt:
                 flash("Intervention introuvable", "danger")
                 return redirect(url_for('maintenances'))
+            droits = _acteurs_intervention(mt)
             if mt['statut'] not in MAINTENANCE_OUVERTS:
                 flash("Cette intervention est déjà close.", "warning")
                 return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+            if not droits['peut_executer']:
+                flash("Vous n'êtes pas en charge de cette intervention.", "danger")
+                return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
 
+            # Réparé → validation par le demandeur ; irréparable → terminal.
+            nouveau_statut = 'a_valider' if resultat == 'repare' else 'irreparable'
             cur.execute("""UPDATE materiel_maintenances
                            SET statut = %s, cout = %s, diagnostic = %s,
                                date_retour = COALESCE(NULLIF(%s,'')::date, CURRENT_DATE),
-                               cloture_par = %s
+                               date_execution = CURRENT_DATE, execute_par = %s
                            WHERE id = %s""",
-                        (resultat, cout or None, diagnostic or None,
+                        (nouveau_statut, cout or None, diagnostic or None,
                          date_retour, session.get('username'), id))
 
             if resultat == 'repare':
@@ -5340,14 +5618,133 @@ def cloturer_maintenance(id):
             cur.execute("UPDATE materiel_exemplaires SET etat = %s WHERE id = %s",
                         (etat, mt['exemplaire_id']))
 
+            cur.execute("""SELECT ex.numero_inventaire, m.nom
+                           FROM materiel_exemplaires ex
+                           JOIN materiels m ON m.id = ex.materiel_id
+                           WHERE ex.id = %s""", (mt['exemplaire_id'],))
+            info = cur.fetchone()
+            if resultat == 'repare' and mt.get('signale_par_id'):
+                create_notification(
+                    mt['signale_par_id'],
+                    "Matériel réparé, à valider : %s" % info['numero_inventaire'],
+                    "%s est revenu de réparation. Merci de confirmer que la panne "
+                    "est bien résolue (sans réponse sous %d jours, la validation "
+                    "sera automatique)." % (info['nom'], MAINTENANCE_VALIDATION_JOURS),
+                    'success')
+            elif resultat == 'irreparable':
+                if mt.get('signale_par_id'):
+                    create_notification(
+                        mt['signale_par_id'],
+                        "Matériel irréparable : %s" % info['numero_inventaire'],
+                        "%s a été déclaré irréparable et mis au rebut." % info['nom'],
+                        'danger')
+                _notifier_pilotes(
+                    cur, "Mise au rebut : %s" % info['numero_inventaire'],
+                    "%s déclaré irréparable par %s." % (info['nom'], session.get('username')),
+                    'danger', sauf=session.get('user_id'))
+
         log_action(session.get('user_id'), session.get('username'),
-                   "Clôture maintenance", "maintenance", id,
+                   "Retour d'intervention", "maintenance", id,
                    f"{resultat}, coût {cout or 0}")
-        flash("Réparé : le matériel est de nouveau disponible." if resultat == 'repare'
+        flash("Retour enregistré. En attente de validation par le demandeur."
+              if resultat == 'repare'
               else "Matériel déclaré irréparable et mis au rebut.", "success")
         return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
     except Exception as e:
         logger.error("Erreur clôture maintenance: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+        return redirect(url_for('maintenances'))
+
+
+@app.route('/maintenances/<int:id>/valider', methods=['POST'])
+@login_required
+def valider_maintenance(id):
+    """Étape 4 : le demandeur confirme — ou non — que la panne est résolue.
+
+    - Validation → l'intervention est close, le matériel reste disponible.
+    - Refus → l'intervention repart en réparation chez le même exécutant,
+      avec le motif du refus : c'est tout l'intérêt de l'étape.
+    Un gestionnaire peut forcer la validation (demandeur absent ou parti).
+    """
+    decision = (request.form.get('decision') or '').strip()
+    motif = (request.form.get('motif_refus') or '').strip()
+    if decision not in ('valider', 'refuser'):
+        flash("Décision invalide.", "danger")
+        return redirect(url_for('maintenances'))
+
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("SELECT * FROM materiel_maintenances WHERE id = %s", (id,))
+            mt = cur.fetchone()
+            if not mt:
+                flash("Intervention introuvable", "danger")
+                return redirect(url_for('maintenances'))
+            if mt['statut'] != 'a_valider':
+                flash("Cette intervention n'est pas en attente de validation.", "warning")
+                return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+
+            droits = _acteurs_intervention(mt)
+            forcee = False
+            if not droits['peut_valider']:
+                if droits['peut_forcer']:
+                    forcee = True   # clôture administrative
+                else:
+                    flash("Seul le demandeur peut valider ce retour.", "danger")
+                    return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+
+            cur.execute("""SELECT ex.numero_inventaire, m.nom
+                           FROM materiel_exemplaires ex
+                           JOIN materiels m ON m.id = ex.materiel_id
+                           WHERE ex.id = %s""", (mt['exemplaire_id'],))
+            info = cur.fetchone()
+
+            if decision == 'valider':
+                cur.execute("""UPDATE materiel_maintenances
+                               SET statut = 'repare', valide_par = %s,
+                                   date_validation = CURRENT_DATE,
+                                   validation_forcee = %s, cloture_par = %s
+                               WHERE id = %s""",
+                            (session.get('username'), forcee,
+                             session.get('username'), id))
+                _notifier_pilotes(
+                    cur, "Intervention clôturée : %s" % info['numero_inventaire'],
+                    "%s — retour validé par %s%s."
+                    % (info['nom'], session.get('username'),
+                       " (clôture forcée)" if forcee else ""),
+                    'success', sauf=session.get('user_id'))
+                log_action(session.get('user_id'), session.get('username'),
+                           "Validation retour", "maintenance", id,
+                           "forcée" if forcee else None)
+                flash("Retour validé : l'intervention est close.", "success")
+            else:
+                if not motif:
+                    flash("Merci d'indiquer pourquoi le retour n'est pas satisfaisant.", "danger")
+                    return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+                # Retour en réparation chez le même exécutant.
+                cur.execute("""UPDATE materiel_maintenances
+                               SET statut = 'envoye', motif_refus = %s,
+                                   date_retour = NULL, date_execution = NULL
+                               WHERE id = %s""", (motif, id))
+                cur.execute("""UPDATE materiel_exemplaires SET etat = 'reparation'
+                               WHERE id = %s AND etat <> 'rebut'""", (mt['exemplaire_id'],))
+                if mt.get('assigne_user_id'):
+                    create_notification(
+                        mt['assigne_user_id'],
+                        "Retour refusé : %s" % info['numero_inventaire'],
+                        "%s — le demandeur signale que la panne persiste : %s"
+                        % (info['nom'], motif[:150]), 'danger')
+                _notifier_pilotes(
+                    cur, "Retour refusé : %s" % info['numero_inventaire'],
+                    "%s — panne non résolue selon %s : %s"
+                    % (info['nom'], session.get('username'), motif[:150]),
+                    'danger', sauf=session.get('user_id'))
+                log_action(session.get('user_id'), session.get('username'),
+                           "Refus de retour", "maintenance", id, motif[:120])
+                flash("Retour refusé : l'intervention repart en réparation.", "warning")
+
+        return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
+    except Exception as e:
+        logger.error("Erreur validation maintenance: %s", e, exc_info=True)
         flash(f"Erreur : {e}", "danger")
         return redirect(url_for('maintenances'))
 
@@ -5391,6 +5788,7 @@ def maintenances():
     per_page = 12
     statut = (request.args.get('statut') or '').strip()
     dept_id = request.args.get('departement', type=int)
+    portee = (request.args.get('portee') or '').strip()
 
     where, params = [], []
     if statut in MAINTENANCE_STATUTS_DICT:
@@ -5402,6 +5800,11 @@ def maintenances():
     if dept_id:
         where.append("m.departement_id = %s")
         params.append(dept_id)
+    # « Mes interventions » : ce que je dois traiter (assigné) ou valider
+    # (demandeur). C'est la file de travail du technicien.
+    if portee == 'moi':
+        where.append("(mt.assigne_user_id = %s OR mt.signale_par_id = %s)")
+        params.extend([session.get('user_id'), session.get('user_id')])
     clause = ("WHERE " + " AND ".join(where)) if where else ""
 
     with db_cursor() as (conn, cur):
@@ -5420,7 +5823,8 @@ def maintenances():
             JOIN materiels m ON m.id = e.materiel_id
             LEFT JOIN departements d ON d.id = m.departement_id
             {clause}
-            ORDER BY CASE WHEN mt.statut IN ('signale','envoye') THEN 0 ELSE 1 END,
+            ORDER BY CASE WHEN mt.statut IN ('signale','assigne','envoye','a_valider')
+                           THEN 0 ELSE 1 END,
                      mt.date_creation DESC
             LIMIT %s OFFSET %s
         """, params + [per_page, (page - 1) * per_page])
@@ -5428,7 +5832,9 @@ def maintenances():
 
         cur.execute("""
             SELECT COUNT(*) FILTER (WHERE statut = 'signale')     AS signalees,
+                   COUNT(*) FILTER (WHERE statut = 'assigne')     AS assignees,
                    COUNT(*) FILTER (WHERE statut = 'envoye')      AS en_cours,
+                   COUNT(*) FILTER (WHERE statut = 'a_valider')   AS a_valider,
                    COUNT(*) FILTER (WHERE statut = 'repare')      AS reparees,
                    COUNT(*) FILTER (WHERE statut = 'irreparable') AS rebuts,
                    COALESCE(SUM(cout), 0)                         AS cout_total
@@ -5438,16 +5844,89 @@ def maintenances():
         cur.execute("SELECT id, nom FROM departements ORDER BY nom")
         departements = cur.fetchall()
 
+        # Ce que l'utilisateur courant doit traiter personnellement.
+        cur.execute("""
+            SELECT COUNT(*) FILTER (WHERE assigne_user_id = %s
+                                      AND statut IN ('assigne','envoye')) AS a_traiter,
+                   COUNT(*) FILTER (WHERE signale_par_id = %s
+                                      AND statut = 'a_valider')           AS a_valider_moi
+              FROM materiel_maintenances
+        """, (session.get('user_id'), session.get('user_id')))
+        mes_taches = cur.fetchone()
+
     pg = pagination_info(total, page, per_page)
-    filters = {'statut': statut, 'departement': dept_id}
+    filters = {'statut': statut, 'departement': dept_id, 'portee': portee}
     return render_template('maintenances.html',
                            interventions=interventions, stats=stats,
                            departements=departements, filters=filters,
                            statuts=MAINTENANCE_STATUTS,
                            statuts_dict=MAINTENANCE_STATUTS_DICT,
+                           mes_taches=mes_taches,
                            pg=pg, page_items=page_list(pg['page'], pg['pages']),
                            base_qs=urlencode({k: v for k, v in filters.items() if v}),
                            peut_gerer=_peut_gerer_materiels())
+
+
+@app.route('/prestataires', methods=['GET', 'POST'])
+@login_required
+@role_required('rh', 'manager')
+def prestataires_page():
+    """Annuaire des prestataires externes de réparation."""
+    if request.method == 'POST':
+        nom = (request.form.get('nom') or '').strip()
+        if not nom:
+            flash("Le nom du prestataire est obligatoire.", "danger")
+            return redirect(url_for('prestataires_page'))
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                cur.execute("""INSERT INTO prestataires
+                                 (nom, contact, telephone, email, specialite)
+                               VALUES (%s,%s,%s,%s,%s) RETURNING id""",
+                            (nom[:150],
+                             (request.form.get('contact') or '').strip()[:150] or None,
+                             (request.form.get('telephone') or '').strip()[:40] or None,
+                             (request.form.get('email') or '').strip()[:150] or None,
+                             (request.form.get('specialite') or '').strip()[:100] or None))
+                pid = cur.fetchone()['id']
+            log_action(session.get('user_id'), session.get('username'),
+                       "Création prestataire", "prestataire", pid, nom)
+            flash("Prestataire ajouté.", "success")
+        except Exception as e:
+            logger.error("Erreur création prestataire: %s", e, exc_info=True)
+            flash(f"Erreur : {e}", "danger")
+        return redirect(url_for('prestataires_page'))
+
+    with db_cursor() as (conn, cur):
+        cur.execute("""
+            SELECT p.*,
+                   COUNT(mt.id) AS nb_interventions,
+                   COALESCE(SUM(mt.cout), 0) AS cout_total
+              FROM prestataires p
+              LEFT JOIN materiel_maintenances mt ON mt.prestataire_id = p.id
+             GROUP BY p.id
+             ORDER BY p.actif DESC, p.nom
+        """)
+        liste = cur.fetchall()
+    return render_template('prestataires.html', prestataires=liste)
+
+
+@app.route('/prestataires/<int:id>/basculer', methods=['POST'])
+@login_required
+@role_required('rh', 'manager')
+def basculer_prestataire(id):
+    """Active / désactive un prestataire (on ne supprime pas : historique)."""
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("""UPDATE prestataires SET actif = NOT actif
+                           WHERE id = %s RETURNING nom, actif""", (id,))
+            row = cur.fetchone()
+        if row:
+            flash("%s %s." % (row['nom'], "réactivé" if row['actif'] else "désactivé"),
+                  "success")
+    except Exception as e:
+        logger.error("Erreur bascule prestataire: %s", e, exc_info=True)
+        flash(f"Erreur : {e}", "danger")
+    return redirect(url_for('prestataires_page'))
 
 
 def _rendre_etiquettes(exemplaires, titre, sous_titre, retour_url):
