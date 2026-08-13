@@ -26,6 +26,7 @@ from services.email_outbox import ajouter_email, traiter_outbox
 from blueprints.absence_justifications import (
     ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
 )
+from blueprints.messagerie import creer_blueprint_messagerie
 
 # ==================== LOGGING ====================
 logging.basicConfig(
@@ -1432,6 +1433,48 @@ def init_db():
         annee INTEGER NOT NULL,
         dernier INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (prefixe, annee)
+    )''')
+
+    # ==================== MESSAGERIE INTERNE ====================
+    # Messages privés, discussions de groupe, annonces RH. Voir
+    # blueprints/messagerie.py pour la logique.
+    cur.execute('''CREATE TABLE IF NOT EXISTS conversations (
+        id SERIAL PRIMARY KEY,
+        type VARCHAR(20) NOT NULL DEFAULT 'prive',
+        titre VARCHAR(200),
+        cible_role VARCHAR(20),
+        cree_par INTEGER REFERENCES users(id),
+        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS conversation_membres (
+        conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        dernier_message_lu_id INTEGER,
+        date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (conversation_id, user_id)
+    )''')
+    # Le contenu des pièces jointes est stocké EN BASE (BYTEA), pas sur le
+    # disque local éphémère du service — même raison que pour les documents
+    # et les photos de profil.
+    cur.execute('''CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
+        sender_id INTEGER REFERENCES users(id),
+        contenu TEXT,
+        piece_jointe_nom VARCHAR(255),
+        piece_jointe_type VARCHAR(50),
+        piece_jointe_taille INTEGER,
+        piece_jointe_contenu BYTEA,
+        date_envoi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, id)")
+    # Suivi de lecture des annonces : pas de ligne de membre par destinataire
+    # potentiel (pourrait être tous les employés), juste une marque de lecture.
+    cur.execute('''CREATE TABLE IF NOT EXISTS annonce_lues (
+        conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        lu_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (conversation_id, user_id)
     )''')
 
     # Seed employés
@@ -7157,6 +7200,15 @@ app.register_blueprint(creer_blueprint_justifications({
     'login_required': login_required,
     'role_required': role_required,
     'get_current_employee': get_current_employee,
+    'detect_file_type': detect_file_type,
+    'create_notification': create_notification,
+    'queue_email': queue_email,
+    'log_action': log_action,
+}))
+
+app.register_blueprint(creer_blueprint_messagerie({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
     'detect_file_type': detect_file_type,
     'create_notification': create_notification,
     'queue_email': queue_email,

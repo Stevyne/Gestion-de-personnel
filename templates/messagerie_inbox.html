@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>💬 Messages</h1>
+        <a href="{{ url_for('messagerie.messagerie_nouveau') }}" class="btn btn-primary">✏️ Nouveau message</a>
+    </div>
+
+    {% if conversations %}
+    <div style="display:flex; flex-direction:column; gap:2px;">
+        {% for c in conversations %}
+        <a href="{{ url_for('messagerie.messagerie_voir', id=c.id) }}"
+           style="display:flex; align-items:center; gap:14px; padding:14px 16px; text-decoration:none;
+                  color:inherit; border-radius:10px; {% if c.non_lu %}background:#eff6ff;{% endif %}">
+            <div style="width:42px; height:42px; border-radius:50%; flex-shrink:0; display:flex;
+                        align-items:center; justify-content:center; font-size:1.2rem; color:white;
+                        background:{% if c.type == 'annonce' %}#7c3aed{% elif c.type == 'groupe' %}#0891b2{% else %}#2563eb{% endif %};">
+                {% if c.type == 'annonce' %}📢{% elif c.type == 'groupe' %}👥{% else %}💬{% endif %}
+            </div>
+            <div style="flex:1; min-width:0;">
+                <div style="display:flex; justify-content:space-between; gap:10px;">
+                    <strong style="{% if c.non_lu %}color:#1e40af;{% endif %}">
+                        {% if c.type == 'annonce' %}
+                            {{ c.titre or 'Annonce RH' }}
+                            {% if c.cible_role %}<span class="badge" style="font-size:0.7rem;">{{ c.cible_role }}</span>{% endif %}
+                        {% elif c.type == 'groupe' %}
+                            {{ c.titre or c.autres_membres or 'Groupe' }}
+                        {% else %}
+                            {{ c.autres_membres or 'Conversation' }}
+                        {% endif %}
+                    </strong>
+                    <small style="color:#94a3b8; white-space:nowrap;">{{ c.date_dernier_message.strftime('%d/%m %H:%M') if c.date_dernier_message else '' }}</small>
+                </div>
+                <div style="color:#64748b; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    {{ c.dernier_message or 'Aucun message' }}
+                </div>
+            </div>
+            {% if c.non_lu %}<span style="width:9px; height:9px; border-radius:50%; background:#2563eb; flex-shrink:0;"></span>{% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding:40px; text-align:center; color:#64748b;">
+        Aucune conversation pour le moment. <a href="{{ url_for('messagerie.messagerie_nouveau') }}">Démarrez-en une</a>.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

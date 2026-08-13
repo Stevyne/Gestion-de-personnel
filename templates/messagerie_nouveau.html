@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width:640px; margin:0 auto;">
+    <div class="card-header">
+        <h1>✏️ Nouveau message</h1>
+        <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="btn btn-secondary">← Retour</a>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" id="formNouveauMessage">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+            <label>Type de message</label>
+            <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:6px;">
+                <label style="display:flex; align-items:center; gap:6px; font-weight:400;">
+                    <input type="radio" name="type" value="prive" checked onchange="majFormulaireType()"> 💬 Privé
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; font-weight:400;">
+                    <input type="radio" name="type" value="groupe" onchange="majFormulaireType()"> 👥 Groupe
+                </label>
+                {% if peut_annoncer %}
+                <label style="display:flex; align-items:center; gap:6px; font-weight:400;">
+                    <input type="radio" name="type" value="annonce" onchange="majFormulaireType()"> 📢 Annonce RH
+                </label>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-group" id="champDestinataires">
+            <label>Destinataire(s)</label>
+            <select name="destinataires" class="form-control" multiple size="6">
+                {% for u in utilisateurs %}
+                <option value="{{ u.id }}">{{ u.prenom or '' }} {{ u.nom or '' }} ({{ u.username }})</option>
+                {% endfor %}
+            </select>
+            <small style="color:#64748b;">Ctrl/Cmd + clic pour sélectionner plusieurs destinataires (= discussion de groupe).</small>
+        </div>
+
+        <div class="form-group" id="champCible" style="display:none;">
+            <label>Diffuser à</label>
+            <select name="cible_role" class="form-control">
+                <option value="">Tout le monde</option>
+                {% for r in roles %}
+                <option value="{{ r }}">{{ r }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group" id="champTitre" style="display:none;">
+            <label>Titre</label>
+            <input type="text" name="titre" class="form-control" placeholder="Ex: Fermeture exceptionnelle, Projet X...">
+        </div>
+
+        <div class="form-group">
+            <label>Message</label>
+            <textarea name="contenu" class="form-control" rows="5" required></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Pièce jointe (optionnel)</label>
+            <input type="file" name="piece_jointe" class="form-control" style="padding:8px;">
+        </div>
+
+        <button type="submit" class="btn btn-primary">Envoyer</button>
+    </form>
+</div>
+
+<script>
+function majFormulaireType() {
+    const type = document.querySelector('input[name="type"]:checked').value;
+    document.getElementById('champDestinataires').style.display = (type === 'annonce') ? 'none' : 'block';
+    document.getElementById('champCible').style.display = (type === 'annonce') ? 'block' : 'none';
+    document.getElementById('champTitre').style.display = (type === 'prive') ? 'none' : 'block';
+    document.querySelector('select[name="destinataires"]').required = (type !== 'annonce');
+}
+majFormulaireType();
+</script>
+{% endblock %}

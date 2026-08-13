@@ -237,6 +237,8 @@
 <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
 {%- elif name == 'chevron' -%}
 <path d="m6 9 6 6 6-6"/>
+{%- elif name == 'message' -%}
+<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
 {%- endif -%}
 </svg>
 {%- endmacro %}
@@ -368,6 +370,14 @@
                     </form>
                     <div class="nav-search-panel" id="globalSearchPanel" role="listbox" hidden></div>
                 </div>
+
+                <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="nav-notif {% if request.endpoint and request.endpoint.startswith('messagerie.') %}active{% endif %}"
+                   aria-label="Messages" title="Messages">
+                    {{ icon('message', 19) }}
+                    {% if messages_non_lus and messages_non_lus > 0 %}
+                    <span class="notif-badge">{{ messages_non_lus if messages_non_lus < 100 else '99+' }}</span>
+                    {% endif %}
+                </a>
 
                 <a href="{{ url_for('notifications') }}" class="nav-notif {% if request.endpoint == 'notifications' %}active{% endif %}"
                    aria-label="Notifications" title="Notifications">
