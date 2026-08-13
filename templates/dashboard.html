@@ -11,7 +11,7 @@
     </div>
     <div>
       {% if current_role in ['admin','rh','manager'] %}
-      <a href="{{ url_for('presences') }}" class="btn btn-secondary">🕒 Présences</a>
+      <a href="{{ url_for('presences.presences') }}" class="btn btn-secondary">🕒 Présences</a>
       {% else %}
       <a href="{{ url_for('self_service') }}" class="btn btn-secondary">👤 Mon espace</a>
       {% endif %}

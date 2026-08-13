@@ -15,7 +15,7 @@
         un compte technique.
     </p>
 
-    <form method="POST" action="{{ url_for('register') }}" id="registerForm">
+    <form method="POST" action="{{ url_for('utilisateurs.register') }}" id="registerForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="form-group">
@@ -95,7 +95,7 @@
                 <span id="btnText">Créer le compte</span>
                 <span id="btnSpinner" class="register-spinner" hidden></span>
             </button>
-            <a href="{{ url_for('utilisateurs_page') }}" class="btn btn-secondary">Annuler</a>
+            <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="btn btn-secondary">Annuler</a>
         </div>
     </form>
 </div>

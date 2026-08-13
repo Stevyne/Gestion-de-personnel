@@ -289,14 +289,14 @@
 
                 {# --- Temps : présences, historique, absences --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['presences','historique','absences','add_presence','add_absence'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['presences.presences','presences.historique','absences','presences.add_presence','add_absence'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('clock') }}<span>Temps</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
-                        <a href="{{ url_for('presences') }}" class="nav-dropdown-link {% if request.endpoint == 'presences' %}active{% endif %}">
+                        <a href="{{ url_for('presences.presences') }}" class="nav-dropdown-link {% if request.endpoint == 'presences.presences' %}active{% endif %}">
                             {{ icon('clock', 17) }}<span>Présences</span>
                         </a>
-                        <a href="{{ url_for('historique') }}" class="nav-dropdown-link {% if request.endpoint == 'historique' %}active{% endif %}">
+                        <a href="{{ url_for('presences.historique') }}" class="nav-dropdown-link {% if request.endpoint == 'presences.historique' %}active{% endif %}">
                             {{ icon('history', 17) }}<span>Historique</span>
                         </a>
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
@@ -354,7 +354,7 @@
                 </div>
 
                 {% if session.get('role') in ['admin', 'rh'] %}
-                <a href="{{ url_for('utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">
+                <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs.utilisateurs_page', 'utilisateurs.register'] %}active{% endif %}">
                     {{ icon('shield') }}<span>Utilisateurs</span>
                 </a>
                 {% endif %}
@@ -393,7 +393,7 @@
                 <div class="nav-dropdown user-menu">
                     <button type="button" class="user-trigger nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Menu du compte">
                         {% if photo_profil %}
-                        <img src="{{ url_for('avatar_image', filename=photo_profil) }}" alt="" class="user-avatar user-avatar-img">
+                        <img src="{{ url_for('auth.avatar_image', filename=photo_profil) }}" alt="" class="user-avatar user-avatar-img">
                         {% else %}
                         <span class="user-avatar">{{ _uname[:1]|upper }}</span>
                         {% endif %}
@@ -406,7 +406,7 @@
                     <div class="nav-dropdown-menu user-menu-panel">
                         <div class="user-menu-head">
                             {% if photo_profil %}
-                            <img src="{{ url_for('avatar_image', filename=photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
+                            <img src="{{ url_for('auth.avatar_image', filename=photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
                             {% else %}
                             <span class="user-avatar lg">{{ _uname[:1]|upper }}</span>
                             {% endif %}
@@ -415,7 +415,7 @@
                                 <span class="user-role">{{ role_label or current_role }}</span>
                             </span>
                         </div>
-                        <a href="{{ url_for('mon_profil') }}" class="nav-dropdown-link {% if request.endpoint == 'mon_profil' %}active{% endif %}">
+                        <a href="{{ url_for('auth.mon_profil') }}" class="nav-dropdown-link {% if request.endpoint == 'auth.mon_profil' %}active{% endif %}">
                             {{ icon('user', 17) }}<span>Mon espace</span>
                         </a>
                         <a href="{{ url_for('self_service') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('self_service') %}active{% endif %}">
@@ -428,11 +428,11 @@
                             {% endif %}
                         </a>
                         {% if session.get('role') in ['admin', 'rh'] %}
-                        <a href="{{ url_for('utilisateurs_page') }}" class="nav-dropdown-link">
+                        <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-dropdown-link">
                             {{ icon('shield', 17) }}<span>Gestion des accès</span>
                         </a>
                         {% endif %}
-                        <a href="{{ url_for('logout') }}" class="nav-dropdown-link danger">
+                        <a href="{{ url_for('auth.logout') }}" class="nav-dropdown-link danger">
                             {{ icon('logout', 17) }}<span>Déconnexion</span>
                         </a>
                     </div>
@@ -442,7 +442,7 @@
             <div class="nav-links desktop-nav">
 
                 {% if current_role == 'admin' %}
-                <a href="{{ url_for('register') }}" class="nav-link" style="background:#e0e7ff;color:#1e40af;padding:6px 14px;border-radius:6px;font-weight:600;">
+                <a href="{{ url_for('utilisateurs.register') }}" class="nav-link" style="background:#e0e7ff;color:#1e40af;padding:6px 14px;border-radius:6px;font-weight:600;">
                     👤 Inscrire
                 </a>
                 {% endif %}
@@ -464,9 +464,9 @@
         
         <div class="drawer-links">
             {% if session.get('user_id') %}
-                <a href="{{ url_for('mon_profil') }}" class="drawer-user-card">
+                <a href="{{ url_for('auth.mon_profil') }}" class="drawer-user-card">
                     {% if photo_profil %}
-                    <img src="{{ url_for('avatar_image', filename=photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
+                    <img src="{{ url_for('auth.avatar_image', filename=photo_profil) }}" alt="" class="user-avatar lg user-avatar-img">
                     {% else %}
                     <span class="user-avatar lg">{{ _uname[:1]|upper }}</span>
                     {% endif %}
@@ -488,8 +488,8 @@
                 {% endif %}
 
                 <p class="drawer-section">Temps</p>
-                <a href="{{ url_for('presences') }}" class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">{{ icon('clock') }}<span>Présences</span></a>
-                <a href="{{ url_for('historique') }}" class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}">{{ icon('history') }}<span>Historique</span></a>
+                <a href="{{ url_for('presences.presences') }}" class="nav-link {% if request.endpoint == 'presences.presences' %}active{% endif %}">{{ icon('clock') }}<span>Présences</span></a>
+                <a href="{{ url_for('presences.historique') }}" class="nav-link {% if request.endpoint == 'presences.historique' %}active{% endif %}">{{ icon('history') }}<span>Historique</span></a>
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
                 <a href="{{ url_for('absences') }}" class="nav-link {% if request.endpoint == 'absences' %}active{% endif %}">{{ icon('user-x') }}<span>Absences</span></a>
                 {% endif %}
@@ -507,11 +507,11 @@
                 <a href="{{ url_for('parc.inventaires') }}" class="nav-link {% if request.endpoint in ['parc.inventaires', 'parc.add_inventaire', 'parc.view_inventaire'] %}active{% endif %}">{{ icon('clipboard') }}<span>Inventaire</span></a>
                 <a href="{{ url_for('parc.maintenances') }}" class="nav-link {% if request.endpoint in ['parc.maintenances', 'parc.view_exemplaire'] %}active{% endif %}">{{ icon('wrench') }}<span>Maintenance</span></a>
                 {% if session.get('role') in ['admin', 'rh'] %}
-                <a href="{{ url_for('utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">{{ icon('shield') }}<span>Utilisateurs</span></a>
+                <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs.utilisateurs_page', 'utilisateurs.register'] %}active{% endif %}">{{ icon('shield') }}<span>Utilisateurs</span></a>
                 {% endif %}
 
                 <div class="drawer-user-section">
-                    <a href="{{ url_for('mon_profil') }}" class="nav-link {% if request.endpoint == 'mon_profil' %}active{% endif %}">
+                    <a href="{{ url_for('auth.mon_profil') }}" class="nav-link {% if request.endpoint == 'auth.mon_profil' %}active{% endif %}">
                         {{ icon('user') }}<span>Mon espace</span>
                     </a>
                     <a href="{{ url_for('self_service') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('self_service') %}active{% endif %}">
@@ -530,11 +530,11 @@
                         <span class="menu-count">{{ unread_notifications }}</span>
                         {% endif %}
                     </a>
-                    <a href="{{ url_for('logout') }}" class="drawer-logout">{{ icon('logout') }}<span>Déconnexion</span></a>
+                    <a href="{{ url_for('auth.logout') }}" class="drawer-logout">{{ icon('auth.logout') }}<span>Déconnexion</span></a>
                 </div>
             {% else %}
                 {% if current_role == 'admin' %}
-                <a href="{{ url_for('register') }}" class="nav-link" style="margin:8px 20px;justify-content:center;font-weight:600;">
+                <a href="{{ url_for('utilisateurs.register') }}" class="nav-link" style="margin:8px 20px;justify-content:center;font-weight:600;">
                     {{ icon('user') }}<span>Inscrire</span>
                 </a>
                 {% endif %}

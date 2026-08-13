@@ -324,14 +324,17 @@ Blueprints Flask :
   maintenance, prestataires et étiquettes QR ;
 - `documents.py` : dépôt, liste, suppression et téléchargement protégé ;
 - `departements.py` : consultation et administration des départements ;
+- `presences.py` : pointages, saisie des présences et historique du temps ;
+- `utilisateurs.py` : comptes, rôles, sessions et création d'accès ;
+- `auth.py` : connexion, déconnexion, profil, photo et mot de passe ;
 - `absence_justifications.py` : workflow confidentiel des justificatifs ;
 - `messagerie.py` : messagerie interne.
 
 Les dépendances communes sont injectées à l'enregistrement des Blueprints : il
 n'existe aucun import circulaire vers `app.py`. Les URLs publiques restent
-inchangées (`/materiels`, `/documents`, `/departements`, etc.) ; seuls les noms
-d'endpoints internes sont préfixés (`parc.*`, `documents.*`, `departements.*`).
-Un test structurel maintient `app.py` sous 5 600 lignes.
+inchangées (`/materiels`, `/documents`, `/departements`, `/presences`, `/login`,
+etc.) ; seuls les noms d'endpoints internes sont préfixés par leur domaine.
+Un test structurel maintient désormais `app.py` sous 4 700 lignes.
 
 ## 📁 Structure du projet
 
@@ -342,6 +345,9 @@ Gestion-de-personnel/
 │   ├── parc.py             # Stock, inventaires, exemplaires et maintenance
 │   ├── documents.py        # Documents RH et contrôle des téléchargements
 │   ├── departements.py     # Gestion des départements
+│   ├── presences.py        # Pointages et historique
+│   ├── utilisateurs.py     # Comptes, rôles et sessions
+│   ├── auth.py             # Authentification et profil
 │   ├── absence_justifications.py
 │   └── messagerie.py
 ├── services/

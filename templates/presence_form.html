@@ -6,7 +6,7 @@
         <h1>🕒 Enregistrer / Modifier une présence</h1>
     </div>
 
-    <form method="POST" action="{{ url_for('add_presence') }}">
+    <form method="POST" action="{{ url_for('presences.add_presence') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         
         <div class="form-group">
@@ -59,7 +59,7 @@
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Enregistrer la présence</button>
-            <a href="{{ url_for('presences') }}" class="btn btn-secondary">Annuler</a>
+            <a href="{{ url_for('presences.presences') }}" class="btn btn-secondary">Annuler</a>
         </div>
     </form>
 </div>

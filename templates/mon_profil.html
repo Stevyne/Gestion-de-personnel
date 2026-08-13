@@ -22,7 +22,7 @@
         <div class="card profil-side">
             <div class="profil-photo-zone">
                 {% if user and user.photo %}
-                <img src="{{ url_for('avatar_image', filename=user.photo) }}"
+                <img src="{{ url_for('auth.avatar_image', filename=user.photo) }}"
                      alt="Photo de profil" class="profil-photo">
                 {% else %}
                 <div class="profil-photo profil-photo-initiales">
@@ -40,7 +40,7 @@
             </p>
             <span class="profil-role">{{ role_label or current_role }}</span>
 
-            <form action="{{ url_for('mon_profil_photo') }}" method="post"
+            <form action="{{ url_for('auth.mon_profil_photo') }}" method="post"
                   enctype="multipart/form-data" class="profil-photo-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="file" name="photo" id="photoInput" accept="image/png,image/jpeg" hidden>
@@ -55,7 +55,7 @@
             </form>
 
             {% if user and user.photo %}
-            <form action="{{ url_for('mon_profil_photo_supprimer') }}" method="post"
+            <form action="{{ url_for('auth.mon_profil_photo_supprimer') }}" method="post"
                   class="confirm-form"
                   data-confirm-title="Supprimer votre photo ?"
                   data-confirm-subtitle="Retour aux initiales"
@@ -74,7 +74,7 @@
             <div class="card">
                 <div class="card-header"><h2>Mes informations</h2></div>
 
-                <form action="{{ url_for('mon_profil_infos') }}" method="post">
+                <form action="{{ url_for('auth.mon_profil_infos') }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                     <div class="form-row">
@@ -137,7 +137,7 @@
 
             <div class="card">
                 <div class="card-header"><h2>Sécurité</h2></div>
-                <form action="{{ url_for('mon_profil_mot_de_passe') }}" method="post">
+                <form action="{{ url_for('auth.mon_profil_mot_de_passe') }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="form-group">
                         <label for="mdp_actuel">Mot de passe actuel *</label>

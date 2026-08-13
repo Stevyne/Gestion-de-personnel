@@ -5,7 +5,7 @@
     <div class="card-header">
         <h1>👤 Gestion des Utilisateurs</h1>
         <div>
-            <a href="{{ url_for('register') }}" class="js-modal-form btn btn-primary"
+            <a href="{{ url_for('utilisateurs.register') }}" class="js-modal-form btn btn-primary"
                data-modal-title="Créer un compte utilisateur">+ Nouvel utilisateur</a>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
         </div>
@@ -32,7 +32,7 @@
                     <td data-label="Identifiant">
                         <div class="user-cell">
                             {% if u.photo %}
-                            <img src="{{ url_for('avatar_image', filename=u.photo) }}"
+                            <img src="{{ url_for('auth.avatar_image', filename=u.photo) }}"
                                  alt="" class="user-cell-avatar user-cell-avatar-img">
                             {% else %}
                             <div class="user-cell-avatar">{{ u.username[0]|upper }}</div>
@@ -86,8 +86,8 @@
                                     data-role="{{ u.role }}"
                                     data-employe-id="{{ u.employe_id or '' }}"
                                     data-is-self="{{ '1' if is_self else '0' }}"
-                                    data-edit-url="{{ url_for('edit_utilisateur', user_id=u.id) }}"
-                                    data-password-url="{{ url_for('reset_password_utilisateur', user_id=u.id) }}">
+                                    data-edit-url="{{ url_for('utilisateurs.edit_utilisateur', user_id=u.id) }}"
+                                    data-password-url="{{ url_for('utilisateurs.reset_password_utilisateur', user_id=u.id) }}">
                                 ✏️ Modifier
                             </button>
                             {% else %}
@@ -98,7 +98,7 @@
                             {% endif %}
 
                             {% if session.get('role') == 'admin' and not is_self and u.nb_sessions and u.nb_sessions > 0 %}
-                            <form action="{{ url_for('deconnecter_utilisateur', user_id=u.id) }}" method="post"
+                            <form action="{{ url_for('utilisateurs.deconnecter_utilisateur', user_id=u.id) }}" method="post"
                                   style="display:inline;"
                                   class="confirm-form"
                                   data-confirm-title="Déconnecter {{ u.username }} ?"
@@ -114,7 +114,7 @@
                             {% endif %}
 
                             {% if not is_self %}
-                            <form action="{{ url_for('delete_utilisateur', user_id=u.id) }}" method="post"
+                            <form action="{{ url_for('utilisateurs.delete_utilisateur', user_id=u.id) }}" method="post"
                                   style="display:inline;"
                                   class="confirm-form"
                                   data-confirm-title="Supprimer cet utilisateur ?"

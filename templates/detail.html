@@ -7,7 +7,7 @@
         <div class="employee-header">
             <div class="employee-identity">
                 {% if employee.photo %}
-                <img src="{{ url_for('avatar_image', filename=employee.photo) }}"
+                <img src="{{ url_for('auth.avatar_image', filename=employee.photo) }}"
                      alt="Photo de {{ employee.prenom }} {{ employee.nom }}"
                      class="avatar-large avatar-img">
                 {% else %}
@@ -37,14 +37,14 @@
                     <span>✏️</span> Modifier
                 </a>
                 
-                <form action="{{ url_for('clock_in', employe_id=employee.id) }}" method="post" style="display:inline;">
+                <form action="{{ url_for('presences.clock_in', employe_id=employee.id) }}" method="post" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-success">
                         ⏰ Pointer arrivée
                     </button>
                 </form>
                 
-                <form action="{{ url_for('clock_out', employe_id=employee.id) }}" method="post" style="display:inline;">
+                <form action="{{ url_for('presences.clock_out', employe_id=employee.id) }}" method="post" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-warning">
                         🏁 Pointer sortie
@@ -183,7 +183,7 @@
                 {% else %}
                     <div class="presence-empty">
                         <p>Aucune présence enregistrée.</p>
-                        <a data-modal-title="Enregistrer une présence" href="{{ url_for('add_presence') }}" class="js-modal-form btn btn-sm btn-secondary">Enregistrer une présence</a>
+                        <a data-modal-title="Enregistrer une présence" href="{{ url_for('presences.add_presence') }}" class="js-modal-form btn btn-sm btn-secondary">Enregistrer une présence</a>
                     </div>
                 {% endif %}
             </div>
@@ -280,10 +280,10 @@
                 </div>
                 
                 <div class="quick-actions-list">
-                    <a href="{{ url_for('presences') }}?employe_id={{ employee.id }}" class="quick-link">
+                    <a href="{{ url_for('presences.presences') }}?employe_id={{ employee.id }}" class="quick-link">
                         🕒 Voir toutes les présences
                     </a>
-                    <a data-modal-title="Enregistrer une présence" href="{{ url_for('add_presence') }}" class="js-modal-form quick-link">
+                    <a data-modal-title="Enregistrer une présence" href="{{ url_for('presences.add_presence') }}" class="js-modal-form quick-link">
                         📝 Ajouter une présence manuelle
                     </a>
                     

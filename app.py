@@ -1,14 +1,13 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, send_file, jsonify, g
+from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, jsonify, g
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from flask_wtf.csrf import CSRFProtect
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 import os
-import re
 import secrets
 import logging
 from datetime import date, datetime, timedelta
@@ -27,6 +26,9 @@ from blueprints.absence_justifications import (
 from blueprints.messagerie import creer_blueprint_messagerie
 from blueprints.documents import creer_blueprint_documents
 from blueprints.departements import creer_blueprint_departements
+from blueprints.presences import creer_blueprint_presences
+from blueprints.utilisateurs import creer_blueprint_utilisateurs
+from blueprints.auth import creer_blueprint_auth
 from blueprints.parc import (
     MAINTENANCE_OUVERTS,  # réexport de compatibilité pour les tests/plug-ins  # noqa: F401
     MAINTENANCE_VALIDATION_JOURS,
@@ -374,10 +376,10 @@ def _refuser_session_revoquee():
     session.clear()
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         resp = make_response('', 204)
-        resp.headers['X-Redirect-To'] = url_for('login')
+        resp.headers['X-Redirect-To'] = url_for('auth.login')
         return resp
     flash("Votre session a été fermée par un administrateur.", "warning")
-    return redirect(url_for('login'))
+    return redirect(url_for('auth.login'))
 
 
 def role_required(*allowed_roles):
@@ -386,7 +388,7 @@ def role_required(*allowed_roles):
         def decorated(*args, **kwargs):
             if 'user_id' not in session:
                 flash('Veuillez vous connecter.', 'warning')
-                return redirect(url_for('login'))
+                return redirect(url_for('auth.login'))
             if not session_active():
                 return _refuser_session_revoquee()
             role = session.get('role', 'employe')
@@ -501,10 +503,10 @@ DEPARTMENT_RESOURCE_GUARDS = {
     'edit_employee': ("SELECT departement FROM employes WHERE id = %s", 'id'),
     'delete_employee': ("SELECT departement FROM employes WHERE id = %s", 'id'),
     'documents.add_employee_document': ("SELECT departement FROM employes WHERE id = %s", 'id'),
-    'clock_in': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
-    'clock_out': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
+    'presences.clock_in': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
+    'presences.clock_out': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
     'update_solde_conges': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
-    'delete_presence': ("SELECT e.departement FROM presences p JOIN employes e ON e.id=p.employe_id WHERE p.id=%s", 'id'),
+    'presences.delete_presence': ("SELECT e.departement FROM presences p JOIN employes e ON e.id=p.employe_id WHERE p.id=%s", 'id'),
     'avis_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
     'update_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
     'annuler_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
@@ -541,13 +543,13 @@ DEPARTMENT_RESOURCE_GUARDS = {
     'parc.annuler_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
     'parc.etiquettes_departement': ("SELECT nom AS departement FROM departements WHERE id=%s", 'id'),
     'parc.materiels_departement': ("SELECT nom AS departement FROM departements WHERE id=%s", 'id'),
-    'avatar_image': ("SELECT e.departement FROM users u LEFT JOIN employes e ON e.id=u.employe_id WHERE u.photo=%s", 'filename'),
+    'auth.avatar_image': ("SELECT e.departement FROM users u LEFT JOIN employes e ON e.id=u.employe_id WHERE u.photo=%s", 'filename'),
     # Le Blueprint des justificatifs applique une règle plus stricte que le
     # département (propriétaire ou RH) et conserve ses réponses 404/403.
 }
 
 FORM_EMPLOYEE_SCOPE_FIELDS = {
-    'presences': 'quick_employe_id', 'add_presence': 'employe_id',
+    'presences.presences': 'quick_employe_id', 'presences.add_presence': 'employe_id',
     'add_conge': 'employe_id', 'add_permission': 'employe_id',
     'add_absence': 'employe_id', 'documents.documents': 'employe_id',
     'parc.attribuer_materiel': 'employe_id', 'parc.add_mouvement_materiel': 'employe_id',
@@ -865,7 +867,7 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
             flash('Veuillez vous connecter.', 'warning')
-            return redirect(url_for('login'))
+            return redirect(url_for('auth.login'))
         # Une session révoquée à distance est rejetée dès la requête suivante.
         if not session_active():
             return _refuser_session_revoquee()
@@ -1736,36 +1738,8 @@ def init_db():
     conn.close()
     logger.info("Base PostgreSQL initialisée (Self-Service + Exports + Emails HTML + Soldes Congés)")
 # ==================== AUTH ====================
-@app.route('/login', methods=['GET','POST'])
-def login():
-    if 'user_id' in session: return redirect(url_for('dashboard'))
-    if request.method == 'POST':
-        u = request.form.get('username','').strip()
-        p = request.form.get('password','')
-        with db_cursor() as (conn, cur):
-            cur.execute("SELECT * FROM users WHERE username=%s", (u,))
-            user = cur.fetchone()
-        if user and check_password_hash(user['password_hash'], p):
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            session['role'] = user['role']
-            session['role_label'] = get_role_label(user['role'])
-            # Inscription au registre des sessions : permet l'indicateur de
-            # présence et la déconnexion à distance par un administrateur.
-            session['sid'] = enregistrer_session(user['id'], user['username'])
-            log_action(user_id=user['id'], username=user['username'], action="LOGIN")
-            flash(f'Bienvenue, {user["username"]} !', 'success')
-            return redirect(url_for('dashboard'))
-        flash('Identifiants ou mot de passe incorrects.', 'danger')
-    return render_template('login.html')
-
-@app.route('/logout')
-def logout():
-    log_action(session.get('user_id'), session.get('username'), "LOGOUT")
-    cloturer_session(session.get('sid'), par='(déconnexion volontaire)')
-    session.clear()
-    flash('Déconnecté.', 'success')
-    return redirect(url_for('login'))
+# ==================== AUTHENTIFICATION ======================================
+# Routes extraites dans blueprints/auth.py.
 
 # ==================== RECHERCHE GLOBALE ====================
 # Une seule fonction sert l'aperçu instantané (JSON) et la page de résultats :
@@ -1794,17 +1768,17 @@ RECHERCHE_PAGES = [
     ('Matériels',              'parc.materiels',       None,                        'box'),
     ('Inventaire physique',    'parc.inventaires',     None,                        'box'),
     ('Maintenance',            'parc.maintenances',    None,                        'box'),
-    ('Présences',              'presences',            None,                        'clock'),
-    ('Historique',             'historique',           None,                        'history'),
+    ('Présences',              'presences.presences',  None,                        'clock'),
+    ('Historique',             'presences.historique', None,                        'history'),
     ('Absences',               'absences',             ('admin', 'rh', 'manager'),  'user-x'),
     ('Congés',                 'conges',               None,                        'palm'),
     ('Calendrier des congés',  'calendrier_conges',    None,                        'calendar'),
     ('Soldes de congés',       'soldes_conges_page',   None,                        'wallet'),
     ('Permissions',            'permissions',          None,                        'file'),
     ('Documents',              'documents.documents',  None,                        'file'),
-    ('Utilisateurs',           'utilisateurs_page',    ('admin', 'rh'),             'shield'),
+    ('Utilisateurs',           'utilisateurs.utilisateurs_page', ('admin', 'rh'),            'shield'),
     ('Notifications',          'notifications',        None,                        'bell'),
-    ('Mon espace',             'mon_profil',           None,                        'user'),
+    ('Mon espace',             'auth.mon_profil',      None,                        'user'),
 ]
 
 
@@ -1995,9 +1969,9 @@ def recherche_globale(terme, role, limite_par_categorie=5):
                 'sous_titre': ' · '.join(x for x in [
                     get_role_label(r.get('role')),
                     (f"{r['prenom']} {r['nom']}" if r.get('nom') else None)] if x),
-                'url': url_for('utilisateurs_page'),
+                'url': url_for('utilisateurs.utilisateurs_page'),
                 'photo': r.get('photo'),
-            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('utilisateurs_page'))
+            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('utilisateurs.utilisateurs_page'))
 
     # ---- Pages de l'application ----
     terme_bas = terme.lower()
@@ -2052,162 +2026,8 @@ def recherche_page():
     total = sum(g['total'] for g in groupes)
     return render_template('recherche.html', terme=terme, groupes=groupes, total=total)
 
-# ==================== ESPACE PERSONNEL (profil) ====================
-# Champs que l'utilisateur peut modifier lui-même sur sa propre fiche.
-# Poste, département, salaire et date d'embauche en sont volontairement exclus :
-# ce sont des données contractuelles, du ressort des RH.
-CHAMPS_PROFIL_MODIFIABLES = ('nom', 'prenom', 'email', 'telephone')
-
-
-@app.route('/mon-profil')
-@login_required
-def mon_profil():
-    """Espace personnel : consultation de ses informations et de sa photo."""
-    user = get_current_user_row()
-    emp = get_current_employee()
-    return render_template('mon_profil.html', user=user, emp=emp)
-
-
-@app.route('/mon-profil/infos', methods=['POST'])
-@login_required
-def mon_profil_infos():
-    """Mise à jour des informations personnelles de l'utilisateur connecté."""
-    user = get_current_user_row()
-    if not user or not user['employe_id']:
-        flash("Aucune fiche employé n'est liée à votre compte.", "warning")
-        return redirect(url_for('mon_profil'))
-
-    valeurs = {c: (request.form.get(c) or '').strip() for c in CHAMPS_PROFIL_MODIFIABLES}
-
-    if not valeurs['nom'] or not valeurs['prenom']:
-        flash("Le nom et le prénom sont obligatoires.", "danger")
-        return redirect(url_for('mon_profil'))
-
-    email = valeurs['email']
-    if email and ('@' not in email or '.' not in email.split('@')[-1]):
-        flash("L'adresse email n'est pas valide.", "danger")
-        return redirect(url_for('mon_profil'))
-
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("""
-            UPDATE employes
-               SET nom = %s, prenom = %s, email = %s, telephone = %s
-             WHERE id = %s
-        """, (valeurs['nom'], valeurs['prenom'], email or None,
-              valeurs['telephone'] or None, user['employe_id']))
-
-    log_action(session.get('user_id'), session.get('username'),
-               "UPDATE_PROFIL", "employe", user['employe_id'],
-               "Mise à jour de ses informations personnelles")
-    flash("Vos informations ont été enregistrées.", "success")
-    return redirect(url_for('mon_profil'))
-
-
-@app.route('/mon-profil/photo', methods=['POST'])
-@login_required
-def mon_profil_photo():
-    """Envoi ou remplacement de la photo de profil."""
-    user = get_current_user_row()
-    if not user:
-        return redirect(url_for('login'))
-
-    nom, erreur, contenu = enregistrer_photo_profil(request.files.get('photo'), user['id'])
-    if erreur:
-        flash(erreur, "danger")
-        return redirect(url_for('mon_profil'))
-
-    ancienne = user['photo']
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("UPDATE users SET photo = %s, photo_contenu = %s WHERE id = %s",
-                    (nom, psycopg2.Binary(contenu), user['id']))
-    supprimer_photo_profil(ancienne)   # on ne la retire qu'après la mise à jour
-
-    log_action(session.get('user_id'), session.get('username'),
-               "UPDATE_PHOTO", "user", user['id'], "Photo de profil modifiée")
-    flash("Votre photo de profil a été mise à jour.", "success")
-    return redirect(url_for('mon_profil'))
-
-
-@app.route('/mon-profil/photo/supprimer', methods=['POST'])
-@login_required
-def mon_profil_photo_supprimer():
-    """Retire la photo de profil et revient aux initiales."""
-    user = get_current_user_row()
-    if not user:
-        return redirect(url_for('login'))
-    if not user['photo']:
-        flash("Vous n'avez pas de photo de profil.", "info")
-        return redirect(url_for('mon_profil'))
-
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("UPDATE users SET photo = NULL, photo_contenu = NULL WHERE id = %s", (user['id'],))
-    supprimer_photo_profil(user['photo'])
-
-    log_action(session.get('user_id'), session.get('username'),
-               "DELETE_PHOTO", "user", user['id'], "Photo de profil supprimée")
-    flash("Votre photo de profil a été supprimée.", "success")
-    return redirect(url_for('mon_profil'))
-
-
-@app.route('/avatar/<path:filename>')
-@login_required
-def avatar_image(filename):
-    """Sert une photo de profil. Lit d'abord en base (persistant, survit à un
-    redémarrage du service), puis retombe sur le disque local si besoin
-    (photo uploadée avant ce correctif et jamais perdue depuis)."""
-    filename = secure_filename(filename)
-    with db_cursor() as (conn, cur):
-        cur.execute("SELECT photo_contenu FROM users WHERE photo = %s LIMIT 1", (filename,))
-        row = cur.fetchone()
-
-    mimetype = 'image/png' if filename.lower().endswith('.png') else 'image/jpeg'
-
-    if row and row.get('photo_contenu') is not None:
-        resp = send_file(io.BytesIO(bytes(row['photo_contenu'])), mimetype=mimetype)
-        resp.headers['Cache-Control'] = 'private, max-age=86400'
-        return resp
-
-    chemin = os.path.join(AVATAR_FOLDER, filename)
-    if os.path.dirname(os.path.abspath(chemin)) == os.path.abspath(AVATAR_FOLDER) and os.path.isfile(chemin):
-        resp = send_file(chemin, mimetype=mimetype)
-        resp.headers['Cache-Control'] = 'private, max-age=86400'
-        return resp
-
-    # Photo perdue (redémarrage du service avant ce correctif) : image par
-    # défaut plutôt qu'une icône cassée dans le navigateur.
-    return redirect(url_for('static', filename='Logo.png'))
-
-
-@app.route('/mon-profil/mot-de-passe', methods=['POST'])
-@login_required
-def mon_profil_mot_de_passe():
-    """Changement de son propre mot de passe (ancien mot de passe exigé)."""
-    actuel = request.form.get('mdp_actuel', '')
-    nouveau = request.form.get('nouveau_mdp', '')
-    confirmation = request.form.get('confirmer_mdp', '')
-
-    if len(nouveau) < 6:
-        flash("Le nouveau mot de passe doit contenir au moins 6 caractères.", "danger")
-        return redirect(url_for('mon_profil'))
-    if nouveau != confirmation:
-        flash("La confirmation ne correspond pas au nouveau mot de passe.", "danger")
-        return redirect(url_for('mon_profil'))
-
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("SELECT password_hash FROM users WHERE id = %s", (session['user_id'],))
-        row = cur.fetchone()
-        if not row or not check_password_hash(row['password_hash'], actuel):
-            flash("Votre mot de passe actuel est incorrect.", "danger")
-            return redirect(url_for('mon_profil'))
-        cur.execute("UPDATE users SET password_hash = %s WHERE id = %s",
-                    (generate_password_hash(nouveau), session['user_id']))
-
-    log_action(session.get('user_id'), session.get('username'),
-               "CHANGE_PASSWORD", "user", session['user_id'],
-               "Changement de son propre mot de passe")
-    flash("Votre mot de passe a été modifié.", "success")
-    return redirect(url_for('mon_profil'))
-
+# ==================== ESPACE PERSONNEL =====================================
+# Routes extraites dans blueprints/auth.py.
 
 # ==================== SELF-SERVICE ====================
 @app.route('/self-service')
@@ -2878,197 +2698,8 @@ def dashboard():
         modules_couverts=12 if vue_globale else 9,
     )
 
-@app.route('/presences', methods=['GET', 'POST'])
-@login_required
-def presences():
-    conn = get_db()
-    cur = get_cursor(conn)
-    scope_where, scope_params = department_scope_sql('e', cur=cur)
-
-    today = date.today().strftime('%Y-%m-%d')
-    
-        # === Retards aujourd'hui ===
-    cur.execute("""
-        SELECT p.*, e.nom, e.prenom 
-        FROM presences p 
-        JOIN employes e ON p.employe_id = e.id 
-        WHERE p.date = %s AND """ + scope_where,
-        [today] + scope_params)
-    presences_today = cur.fetchall()
-
-    retards_aujourdhui = []
-    total_retards_minutes = 0
-    for p in presences_today:
-        retard = calculer_retard(p.get('heure_arrivee'))
-        if retard > 0:
-            p['retard_minutes'] = retard
-            retards_aujourdhui.append(p)
-            total_retards_minutes += retard
-
-    nb_retards = len(retards_aujourdhui)
-
-    # === Gestion du pointage rapide (POST) ===
-    if request.method == 'POST':
-        action = request.form.get('action')
-        employe_id = request.form.get('quick_employe_id')
-        date_val = datetime.now().strftime('%Y-%m-%d')
-        
-        if action and employe_id:
-            employe_id = int(employe_id)
-            
-            if action == 'clock_in':
-                cur.execute("""
-                    INSERT INTO presences (employe_id, date, heure_arrivee, statut)
-                    VALUES (%s, %s, CURRENT_TIME, 'présent')
-                    ON CONFLICT (employe_id, date) 
-                    DO UPDATE SET heure_arrivee = CURRENT_TIME
-                """, (employe_id, date_val))
-                conn.commit()
-                flash('Entrée pointée', 'success')
-            
-            elif action == 'clock_out':
-                cur.execute("""
-                    INSERT INTO presences (employe_id, date, heure_depart)
-                    VALUES (%s, %s, CURRENT_TIME)
-                    ON CONFLICT (employe_id, date) 
-                    DO UPDATE SET heure_depart = CURRENT_TIME
-                """, (employe_id, date_val))
-                conn.commit()
-                flash('Sortie pointée', 'success')
-            
-            cur.close(); conn.close()
-            return redirect(url_for('presences'))
-
-        # Normal GET: display the page with filters + pagination
-    search_raw = request.args.get('search', '').strip()
-    search = search_raw.lower()
-    date_filter = request.args.get('date', '').strip()
-    page = max(1, request.args.get('page', 1, type=int))
-    per_page = 10
-
-    where = f" AND {scope_where}"
-    params = list(scope_params)
-    if search:
-        where += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
-        params += [f"%{search}%", f"%{search}%"]
-    if date_filter:
-        where += " AND p.date = %s"; params.append(date_filter)
-
-    from_ = "presences p JOIN employes e ON p.employe_id = e.id"
-    cur.execute(f"SELECT COUNT(*) AS nb FROM {from_} WHERE 1=1{where}", params)
-    total = cur.fetchone()['nb']
-    pg = pagination_info(total, page, per_page)
-    offset = (pg['page'] - 1) * per_page
-    cur.execute(f"SELECT p.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY p.date DESC, p.heure_arrivee DESC LIMIT %s OFFSET %s", params + [per_page, offset])
-    presences_list = cur.fetchall()
-
-    for p in presences_list:
-        if p.get('heure_arrivee'):
-            p['heure_arrivee'] = str(p['heure_arrivee'])[:5]
-        if p.get('heure_depart'):
-            p['heure_depart'] = str(p['heure_depart'])[:5]
-        p['retard_minutes'] = calculer_retard(p['heure_arrivee'])
-        p['retard'] = p['retard_minutes'] > 0
-
-    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
-                scope_params)
-    employees = cur.fetchall()
-    cur.close()
-    conn.close()
-    filters = {'search': search_raw, 'date': date_filter}
-    return render_template('presences.html', presences=presences_list, employees=employees, today=today,
-                           retards_aujourdhui=retards_aujourdhui, nb_retards=nb_retards, total_retards_minutes=total_retards_minutes,
-                           search=search_raw, date_filter=date_filter, pg=pg, page_items=page_list(pg['page'], pg['pages']),
-                           base_qs=urlencode({k: v for k, v in filters.items() if v}))
-
-@app.route('/presences/clock_in/<int:employe_id>', methods=['POST'])
-@login_required
-def clock_in(employe_id):
-    date_val = request.form.get('date') or datetime.now().strftime('%Y-%m-%d')
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("SELECT nom, prenom, email FROM employes WHERE id = %s", (employe_id,))
-        emp = cur.fetchone()
-        cur.execute("INSERT INTO presences (employe_id, date, heure_arrivee, statut) VALUES (%s, %s, CURRENT_TIME, 'présent') ON CONFLICT (employe_id, date) DO UPDATE SET heure_arrivee = CURRENT_TIME", (employe_id, date_val))
-        cur.execute("SELECT heure_arrivee FROM presences WHERE employe_id=%s AND date=%s", (employe_id, date_val))
-        res = cur.fetchone()
-        heure = str(res['heure_arrivee'])[:5] if res else '09:00'
-        retard = calculer_retard(heure)
-        if retard > 0 and emp:
-            send_retard_email(f"{emp['prenom']} {emp['nom']}", emp.get('email'), retard, date_val, heure)
-    flash('Entrée pointée', 'success')
-    return redirect(url_for('presences'))
-
-@app.route('/presences/clock_out/<int:employe_id>', methods=['POST'])
-@login_required
-def clock_out(employe_id):
-    date_val = request.form.get('date') or datetime.now().strftime('%Y-%m-%d')
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("""
-            INSERT INTO presences (employe_id, date, heure_depart)
-            VALUES (%s, %s, CURRENT_TIME)
-            ON CONFLICT (employe_id, date) 
-            DO UPDATE SET heure_depart = CURRENT_TIME
-        """, (employe_id, date_val))
-    flash('Sortie pointée', 'success')
-    return redirect(url_for('presences'))
-
-@app.route('/presences/add', methods=['GET', 'POST'])
-@login_required
-def add_presence():
-    conn = get_db()
-    cur = get_cursor(conn)
-
-    if request.method == 'POST':
-        employe_id = request.form.get('employe_id')
-        date_val = request.form.get('date')
-        heure_arrivee = request.form.get('heure_arrivee')
-        heure_depart = request.form.get('heure_depart')
-        statut = request.form.get('statut', 'présent')
-        commentaire = request.form.get('commentaire', '')
-
-        if employe_id and date_val:
-            cur.execute("""
-                INSERT INTO presences (employe_id, date, heure_arrivee, heure_depart, statut, commentaire)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (employe_id, date) 
-                DO UPDATE SET 
-                    heure_arrivee = COALESCE(EXCLUDED.heure_arrivee, presences.heure_arrivee),
-                    heure_depart = COALESCE(EXCLUDED.heure_depart, presences.heure_depart),
-                    statut = EXCLUDED.statut,
-                    commentaire = EXCLUDED.commentaire
-            """, (employe_id, date_val, heure_arrivee or None, heure_depart or None, statut, commentaire))
-            _notifier_employe_evenement(
-                cur, int(employe_id), "Présence enregistrée",
-                f"Votre présence du {date_val} a été enregistrée avec le statut « {statut} ». ",
-                'info',
-                cle_evenement=(f"presence:{employe_id}:{date_val}:{statut}:"
-                               f"{heure_arrivee}:{heure_depart}"),
-            )
-            conn.commit()
-            flash("Présence enregistrée / modifiée avec succès", "success")
-            cur.close(); conn.close()
-            return redirect(url_for('presences'))
-
-    # GET → formulaire limité au département courant
-    scope_where, scope_params = department_scope_sql('e', cur=cur)
-    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
-                scope_params)
-    employees = cur.fetchall()
-    cur.close(); conn.close()
-    return render_template('presence_form.html', employees=employees)
-
-
-@app.route('/presences/delete/<int:id>', methods=['POST'])
-@login_required
-@role_required('admin', 'rh', 'manager')
-def delete_presence(id):
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute("DELETE FROM presences WHERE id = %s", (id,))
-    conn.commit()
-    cur.close(); conn.close()
-    flash("Présence supprimée", "success")
-    return redirect(url_for('presences'))
+# ==================== PRÉSENCES ==============================================
+# Routes extraites dans blueprints/presences.py.
 
 @app.route('/conges')
 @login_required
@@ -4683,407 +4314,14 @@ def rapports():
 # ==================== MAIN ====================
 
 # ==================== STUB ROUTES (pour compatibilité templates) ====================
-@app.route('/historique')
-@login_required
-def historique():
-    conn = get_db()
-    cur = get_cursor(conn)
-    scope_where, scope_params = department_scope_sql('e', cur=cur)
+# ==================== HISTORIQUE DES PRÉSENCES ==============================
+# Route extraite dans blueprints/presences.py.
 
-    selected_employe = request.args.get('employe_id', '').strip()
-    date_debut = request.args.get('date_debut', '').strip()
-    date_fin = request.args.get('date_fin', '').strip()
-    selected_statut = request.args.get('statut', '').strip()
-    page = max(1, request.args.get('page', 1, type=int))
-    per_page = 10
-
-    where = f" AND {scope_where}"
-    params = list(scope_params)
-    if selected_employe and selected_employe.isdigit():
-        where += " AND p.employe_id = %s"; params.append(int(selected_employe))
-    if date_debut:
-        where += " AND p.date >= %s"; params.append(date_debut)
-    if date_fin:
-        where += " AND p.date <= %s"; params.append(date_fin)
-    if selected_statut:
-        where += " AND p.statut = %s"; params.append(selected_statut)
-
-    from_ = "presences p JOIN employes e ON p.employe_id = e.id"
-    # On récupère tout le jeu filtré (borné) pour les stats, puis on pagine l'affichage
-    cur.execute(f"SELECT p.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY p.date DESC, p.heure_arrivee DESC LIMIT 5000", params)
-    all_presences = cur.fetchall()
-
-    total_pointages = len(all_presences)
-    total_heures = 0.0
-    employes_set = set()
-    for p in all_presences:
-        if p.get('heure_arrivee'):
-            p['heure_arrivee'] = str(p['heure_arrivee'])[:5]
-        if p.get('heure_depart'):
-            p['heure_depart'] = str(p['heure_depart'])[:5]
-        employes_set.add(p.get('employe_id'))
-        try:
-            if p.get('heure_arrivee') and p.get('heure_depart'):
-                ha_parts = str(p['heure_arrivee']).split(':')[:2]
-                hd_parts = str(p['heure_depart']).split(':')[:2]
-                ha_min = int(ha_parts[0]) * 60 + int(ha_parts[1])
-                hd_min = int(hd_parts[0]) * 60 + int(hd_parts[1])
-                mins = hd_min - ha_min
-                if mins > 0:
-                    p['duree_heures'] = round(mins / 60, 1)
-                    total_heures += mins / 60
-                else:
-                    p['duree_heures'] = None
-            else:
-                p['duree_heures'] = None
-        except Exception:
-            p['duree_heures'] = None
-        p['retard_minutes'] = calculer_retard(p.get('heure_arrivee'))
-        p['retard'] = p['retard_minutes'] > 0
-
-    employes_concernes = len(employes_set)
-    pg = pagination_info(total_pointages, page, per_page)
-    offset = (pg['page'] - 1) * per_page
-    presences_list = all_presences[offset:offset + per_page]
-
-    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom, prenom",
-                scope_params)
-    employees = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    filters = {'employe_id': selected_employe, 'date_debut': date_debut, 'date_fin': date_fin, 'statut': selected_statut}
-    return render_template('historique.html', presences=presences_list, employees=employees,
-                           total_pointages=total_pointages, total_heures=round(total_heures, 1),
-                           employes_concernes=employes_concernes, selected_employe=selected_employe,
-                           date_debut=date_debut, date_fin=date_fin, selected_statut=selected_statut,
-                           pg=pg, page_items=page_list(pg['page'], pg['pages']),
-                           base_qs=urlencode({k: v for k, v in filters.items() if v}))
 # ==================== DÉPARTEMENTS ===========================================
 # Routes extraites dans blueprints/departements.py.
 
-@app.route('/utilisateurs')
-@login_required
-@role_required('admin', 'rh')
-def utilisateurs_page():
-    """Page de gestion des comptes utilisateurs (admin/rh)."""
-    with db_cursor() as (conn, cur):
-        # On joint le registre des sessions pour connaître l'état de connexion
-        # de chaque compte : nombre de sessions ouvertes et dernière activité.
-        cur.execute("""
-            SELECT u.id, u.username, u.role, u.employe_id, u.photo, e.nom, e.prenom,
-                   COALESCE(s.nb_sessions, 0) AS nb_sessions,
-                   s.last_seen,
-                   (s.last_seen > CURRENT_TIMESTAMP - (%s * INTERVAL '1 minute')) AS en_ligne
-            FROM users u
-            LEFT JOIN employes e ON u.employe_id = e.id
-            LEFT JOIN (
-                SELECT user_id, COUNT(*) AS nb_sessions, MAX(last_seen) AS last_seen
-                  FROM sessions_actives
-                 WHERE revoked_at IS NULL
-                   -- Au-delà de la durée de vie d'une session Flask, le cookie
-                   -- n'est plus valable : la session ne compte plus comme ouverte.
-                   AND last_seen > CURRENT_TIMESTAMP - (%s * INTERVAL '1 second')
-                 GROUP BY user_id
-            ) s ON s.user_id = u.id
-            ORDER BY u.role, u.username
-        """, (SESSION_ONLINE_WINDOW_MIN, app.config['PERMANENT_SESSION_LIFETIME']))
-        users_list = cur.fetchall()
-        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
-        employees = cur.fetchall()
-    return render_template('utilisateurs.html', users=users_list, employees=employees)
-
-
-@app.route('/utilisateurs/<int:user_id>/edit', methods=['POST'])
-@login_required
-@role_required('admin', 'rh')
-def edit_utilisateur(user_id):
-    """Modifie le rôle et/ou l'employé lié d'un utilisateur.
-    Seul un admin peut promouvoir/rétrograder vers ou depuis le rôle 'admin'."""
-    nouveau_role = request.form.get('role', '').strip()
-    employe_id = request.form.get('employe_id') or None
-    roles_valides = ['admin', 'rh', 'manager', 'technicien', 'employe']
-
-    if nouveau_role not in roles_valides:
-        flash("Rôle invalide.", "danger")
-        return redirect(url_for('utilisateurs_page'))
-
-    with db_cursor() as (conn, cur):
-        cur.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
-        cible = cur.fetchone()
-
-    if not cible:
-        flash("Utilisateur introuvable.", "danger")
-        return redirect(url_for('utilisateurs_page'))
-
-    # Seul un admin peut attribuer ou retirer le rôle admin
-    if (nouveau_role == 'admin' or cible['role'] == 'admin') and session.get('role') != 'admin':
-        flash("Seul un administrateur peut modifier un compte administrateur.", "danger")
-        return redirect(url_for('utilisateurs_page'))
-
-    # Empêche de se rétrograder soi-même par erreur (perte d'accès admin)
-    if user_id == session.get('user_id') and nouveau_role != cible['role']:
-        flash("Vous ne pouvez pas modifier votre propre rôle.", "danger")
-        return redirect(url_for('utilisateurs_page'))
-
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("UPDATE users SET role = %s, employe_id = %s WHERE id = %s",
-                    (nouveau_role, employe_id, user_id))
-
-    log_action(session.get('user_id'), session.get('username'), "UPDATE_USER", "user", user_id,
-              f"{cible['username']} → rôle={nouveau_role}, employe_id={employe_id}")
-    flash(f"Utilisateur '{cible['username']}' mis à jour.", "success")
-    return redirect(url_for('utilisateurs_page'))
-
-
-@app.route('/utilisateurs/<int:user_id>/reset-password', methods=['POST'])
-@login_required
-@role_required('admin', 'rh')
-def reset_password_utilisateur(user_id):
-    """Réinitialise le mot de passe d'un utilisateur (admin/rh)."""
-    nouveau_mdp = request.form.get('nouveau_mdp', '')
-
-    if len(nouveau_mdp) < 6:
-        flash("Le mot de passe doit contenir au moins 6 caractères.", "danger")
-        return redirect(url_for('utilisateurs_page'))
-
-    with db_cursor() as (conn, cur):
-        cur.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
-        cible = cur.fetchone()
-
-    if not cible:
-        flash("Utilisateur introuvable.", "danger")
-        return redirect(url_for('utilisateurs_page'))
-
-    if cible['role'] == 'admin' and session.get('role') != 'admin':
-        flash("Seul un administrateur peut réinitialiser le mot de passe d'un administrateur.", "danger")
-        return redirect(url_for('utilisateurs_page'))
-
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("UPDATE users SET password_hash = %s WHERE id = %s",
-                    (generate_password_hash(nouveau_mdp), user_id))
-
-    log_action(session.get('user_id'), session.get('username'), "RESET_PASSWORD", "user", user_id,
-              f"Mot de passe réinitialisé pour {cible['username']}")
-    flash(f"Mot de passe de '{cible['username']}' réinitialisé.", "success")
-    return redirect(url_for('utilisateurs_page'))
-
-
-@app.route('/utilisateurs/<int:user_id>/deconnecter', methods=['POST'])
-@login_required
-@role_required('admin')
-def deconnecter_utilisateur(user_id):
-    """Ferme toutes les sessions ouvertes d'un utilisateur (admin uniquement).
-
-    La révocation prend effet à la requête suivante de l'intéressé : son cookie
-    reste dans son navigateur, mais il n'est plus accepté par le serveur.
-    """
-    if user_id == session.get('user_id'):
-        flash("Utilisez le bouton Déconnexion pour fermer votre propre session.", "warning")
-        return redirect(url_for('utilisateurs_page'))
-
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("SELECT username FROM users WHERE id = %s", (user_id,))
-        cible = cur.fetchone()
-        if not cible:
-            flash("Utilisateur introuvable.", "danger")
-            return redirect(url_for('utilisateurs_page'))
-
-        cur.execute("""
-            UPDATE sessions_actives
-               SET revoked_at = CURRENT_TIMESTAMP, revoked_by = %s
-             WHERE user_id = %s AND revoked_at IS NULL
-        """, (session.get('username'), user_id))
-        nb = cur.rowcount
-
-    if nb:
-        log_action(session.get('user_id'), session.get('username'),
-                   "FORCE_LOGOUT", "user", user_id,
-                   f"{nb} session(s) fermée(s) pour {cible['username']}")
-        create_notification(user_id, "Session fermée",
-                            f"Votre session a été fermée par {session.get('username')}.",
-                            "warning")
-        flash(f"{nb} session(s) fermée(s) pour « {cible['username']} ».", "success")
-    else:
-        flash(f"« {cible['username']} » n'a aucune session ouverte.", "info")
-    return redirect(url_for('utilisateurs_page'))
-
-
-@app.route('/utilisateurs/<int:user_id>/delete', methods=['POST'])
-@login_required
-@role_required('admin', 'rh')
-def delete_utilisateur(user_id):
-    """Supprime un compte utilisateur, avec garde-fous de sécurité."""
-    if user_id == session.get('user_id'):
-        flash("Vous ne pouvez pas supprimer votre propre compte.", "danger")
-        return redirect(url_for('utilisateurs_page'))
-
-    with db_cursor() as (conn, cur):
-        cur.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
-        cible = cur.fetchone()
-
-        if not cible:
-            flash("Utilisateur introuvable.", "danger")
-            return redirect(url_for('utilisateurs_page'))
-
-        if cible['role'] == 'admin':
-            if session.get('role') != 'admin':
-                flash("Seul un administrateur peut supprimer un compte administrateur.", "danger")
-                return redirect(url_for('utilisateurs_page'))
-            cur.execute("SELECT COUNT(*) as total FROM users WHERE role = 'admin'")
-            if cur.fetchone()['total'] <= 1:
-                flash("Impossible de supprimer le dernier compte administrateur.", "danger")
-                return redirect(url_for('utilisateurs_page'))
-
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("DELETE FROM notifications WHERE user_id = %s", (user_id,))
-        cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
-
-    log_action(session.get('user_id'), session.get('username'), "DELETE_USER", "user", user_id,
-              f"Utilisateur '{cible['username']}' supprimé")
-    flash(f"Utilisateur '{cible['username']}' supprimé.", "success")
-    return redirect(url_for('utilisateurs_page'))
-
-
-ROLES_CREATION_UTILISATEUR = [
-    ('employe', 'Employé'),
-    ('manager', 'Manager'),
-    ('technicien', 'Technicien'),
-    ('rh', 'Responsable RH'),
-    ('admin', 'Administrateur'),
-]
-
-
-def _contexte_creation_utilisateur(username='', role='employe', employe_id=''):
-    """Données du formulaire, en excluant les salariés déjà liés à un compte."""
-    with db_cursor() as (conn, cur):
-        cur.execute("""
-            SELECT e.id, e.nom, e.prenom, e.poste, e.departement
-              FROM employes e
-             WHERE NOT EXISTS (
-                   SELECT 1 FROM users u WHERE u.employe_id = e.id
-             )
-             ORDER BY e.nom, e.prenom
-        """)
-        employes_disponibles = cur.fetchall()
-
-    roles = ROLES_CREATION_UTILISATEUR
-    if session.get('role') != 'admin':
-        roles = [r for r in roles if r[0] != 'admin']
-    return {
-        'employees': employes_disponibles,
-        'roles_creation': roles,
-        'form_values': {
-            'username': username,
-            'role': role,
-            'employe_id': str(employe_id or ''),
-        },
-    }
-
-
-@app.route('/register', methods=['GET', 'POST'])
-@login_required
-@role_required('admin', 'rh')
-def register():
-    """Crée en une étape un compte opérationnel, avec rôle et salarié lié."""
-    if request.method == 'GET':
-        return render_template('register.html', **_contexte_creation_utilisateur())
-
-    # Les identifiants sont normalisés en minuscules : la connexion est ainsi
-    # prévisible et la contrainte UNIQUE bloque aussi les variantes de casse.
-    username = request.form.get('username', '').strip().lower()
-    password = request.form.get('password', '')
-    confirm_password = request.form.get('confirm_password', '')
-    role = request.form.get('role', 'employe').strip()
-    employe_brut = request.form.get('employe_id', '').strip()
-    employe_id = int(employe_brut) if employe_brut.isdigit() else None
-    contexte = lambda: _contexte_creation_utilisateur(username, role, employe_brut)
-
-    if not username or not password or not confirm_password:
-        flash("Veuillez remplir tous les champs obligatoires.", "danger")
-        return render_template('register.html', **contexte())
-    if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{2,79}', username):
-        flash("L'identifiant doit contenir 3 à 80 caractères : lettres non accentuées, "
-              "chiffres, point, tiret ou soulignement.", "danger")
-        return render_template('register.html', **contexte())
-    if len(password) < 8 or len(password) > 128:
-        flash("Le mot de passe doit contenir entre 8 et 128 caractères.", "danger")
-        return render_template('register.html', **contexte())
-    if password != confirm_password:
-        flash("Les mots de passe ne correspondent pas.", "danger")
-        return render_template('register.html', **contexte())
-
-    roles_valides = {code for code, _ in ROLES_CREATION_UTILISATEUR}
-    if role not in roles_valides:
-        flash("Rôle invalide.", "danger")
-        return render_template('register.html', **contexte())
-    if role == 'admin' and session.get('role') != 'admin':
-        flash("Seul un administrateur peut créer un compte administrateur.", "danger")
-        return render_template('register.html', **contexte())
-    if employe_brut and employe_id is None:
-        flash("Employé invalide.", "danger")
-        return render_template('register.html', **contexte())
-
-    user_id = None
-    try:
-        with db_cursor(commit=True) as (conn, cur):
-            # Le verrou sur la fiche salarié sérialise deux créations
-            # concurrentes qui tenteraient de rattacher la même personne.
-            employe = None
-            if employe_id is not None:
-                cur.execute("""
-                    SELECT id, nom, prenom, email FROM employes
-                     WHERE id = %s FOR UPDATE
-                """, (employe_id,))
-                employe = cur.fetchone()
-                if not employe:
-                    flash("Employé introuvable.", "danger")
-                    return render_template('register.html', **contexte())
-                cur.execute("SELECT username FROM users WHERE employe_id = %s LIMIT 1",
-                            (employe_id,))
-                compte_existant = cur.fetchone()
-                if compte_existant:
-                    flash("Cet employé est déjà lié au compte "
-                          f"« {compte_existant['username']} ».", "danger")
-                    return render_template('register.html', **contexte())
-
-            cur.execute("SELECT id FROM users WHERE LOWER(username) = %s", (username,))
-            if cur.fetchone():
-                flash("Ce nom d'utilisateur est déjà utilisé.", "danger")
-                return render_template('register.html', **contexte())
-
-            cur.execute("""
-                INSERT INTO users (username, password_hash, role, employe_id)
-                VALUES (%s, %s, %s, %s) RETURNING id
-            """, (username, generate_password_hash(password), role, employe_id))
-            user_id = cur.fetchone()['id']
-            create_notification(
-                user_id, "Votre compte a été créé",
-                "Votre accès à Gestion du Personnel est actif. Pensez à modifier "
-                "votre mot de passe après votre première connexion.",
-                'success', cur=cur)
-            if employe:
-                queue_email(
-                    employe.get('email'), "Votre accès Gestion du Personnel est créé",
-                    f"Bonjour {employe['prenom']},\n\nVotre compte « {username} » est actif. "
-                    "Contactez les RH pour recevoir votre mot de passe initial, puis "
-                    "modifiez-le après votre première connexion.",
-                    cur=cur, event_key=f"compte-cree:{user_id}")
-    except psycopg2.errors.UniqueViolation:
-        # Garde-fou pour deux requêtes strictement simultanées.
-        flash("Ce nom d'utilisateur est déjà utilisé.", "danger")
-        return render_template('register.html', **contexte())
-    except Exception as e:
-        logger.error("Erreur register: %s", e, exc_info=True)
-        flash("Le compte n'a pas pu être créé. Réessayez ou contactez l'administrateur.",
-              "danger")
-        return render_template('register.html', **contexte())
-
-    log_action(session.get('user_id'), session.get('username'),
-               "CREATE_USER", "user", user_id,
-               f"username={username}, role={role}, employe_id={employe_id}")
-    flash(f"Compte « {username} » créé avec le rôle {get_role_label(role)}.", "success")
-    return redirect(url_for('utilisateurs_page'))
+# ==================== UTILISATEURS ET ACCÈS ==================================
+# Routes extraites dans blueprints/utilisateurs.py.
 
 @app.route('/add_employee', methods=['GET', 'POST'])
 @login_required
@@ -5184,6 +4422,47 @@ def add_employee_alt():
 
 # Blueprints métier : dépendances partagées injectées explicitement pour éviter
 # les imports circulaires avec l'application historique.
+app.register_blueprint(creer_blueprint_auth({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'get_current_user_row': get_current_user_row,
+    'get_current_employee': get_current_employee,
+    'enregistrer_session': enregistrer_session,
+    'cloturer_session': cloturer_session,
+    'log_action': log_action,
+    'get_role_label': get_role_label,
+    'enregistrer_photo_profil': enregistrer_photo_profil,
+    'supprimer_photo_profil': supprimer_photo_profil,
+    'avatar_folder': AVATAR_FOLDER,
+}))
+
+app.register_blueprint(creer_blueprint_utilisateurs({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'role_required': role_required,
+    'log_action': log_action,
+    'get_role_label': get_role_label,
+    'create_notification': create_notification,
+    'queue_email': queue_email,
+    'session_online_window': SESSION_ONLINE_WINDOW_MIN,
+    'permanent_session_lifetime': app.config['PERMANENT_SESSION_LIFETIME'],
+    'logger': logger,
+}))
+
+app.register_blueprint(creer_blueprint_presences({
+    'get_db': get_db,
+    'get_cursor': get_cursor,
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'role_required': role_required,
+    'department_scope_sql': department_scope_sql,
+    'calculer_retard': calculer_retard,
+    'send_retard_email': send_retard_email,
+    'notifier_employe_evenement': _notifier_employe_evenement,
+    'pagination_info': pagination_info,
+    'page_list': page_list,
+}))
+
 app.register_blueprint(creer_blueprint_departements({
     'get_db': get_db,
     'get_cursor': get_cursor,

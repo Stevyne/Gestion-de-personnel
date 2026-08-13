@@ -6,13 +6,13 @@
     <div class="card-header">
         <h1>📋 Historique des Pointages</h1>
         <div>
-            <a href="{{ url_for('presences') }}" class="btn btn-secondary">← Retour aux Présences</a>
+            <a href="{{ url_for('presences.presences') }}" class="btn btn-secondary">← Retour aux Présences</a>
         </div>
     </div>
 
     <!-- Filtres avancés -->
     <div class="filters" style="margin-bottom: 24px;">
-        <form method="get" action="{{ url_for('historique') }}" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+        <form method="get" action="{{ url_for('presences.historique') }}" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <div style="min-width: 220px; flex: 1;">
@@ -49,7 +49,7 @@
             </div>
 
             <button type="submit" class="btn btn-primary">🔍 Filtrer</button>
-            <a href="{{ url_for('historique') }}" class="btn btn-secondary">Réinitialiser</a>
+            <a href="{{ url_for('presences.historique') }}" class="btn btn-secondary">Réinitialiser</a>
         </form>
     </div>
 
@@ -132,9 +132,9 @@
                     </td>
                     <td data-label="Actions">
                         <div class="actions" style="gap:4px;">
-                            <a data-modal-title="Enregistrer / modifier une présence" href="{{ url_for('add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}" 
+                            <a data-modal-title="Enregistrer / modifier une présence" href="{{ url_for('presences.add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}"
                                class="js-modal-form btn btn-secondary" style="padding:3px 9px; font-size:0.7rem;">✏️ Modifier</a>
-                            <form action="{{ url_for('delete_presence', id=p.id) }}" method="post" style="display:inline;"
+                            <form action="{{ url_for('presences.delete_presence', id=p.id) }}" method="post" style="display:inline;"
                                   class="confirm-form"
                                   data-confirm-title="Supprimer ce pointage ?"
                                   data-confirm-subtitle="Action irréversible"
@@ -159,7 +159,7 @@
         </table>
     </div>
 
-    {{ pagination('historique', base_qs, pg, page_items) }}
+    {{ pagination('presences.historique', base_qs, pg, page_items) }}
 
     <div style="margin-top: 16px; text-align: center; font-size: 0.85rem; color: #64748b;">
         {{ presences|length }} enregistrement(s) affichés

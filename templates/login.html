@@ -8,7 +8,7 @@
     </div>
 
     <div style="padding: 30px 28px;">
-        <form method="POST" action="{{ url_for('login') }}">
+        <form method="POST" action="{{ url_for('auth.login') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="form-group" style="margin-bottom: 18px;">
