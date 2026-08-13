@@ -88,6 +88,8 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Exports PDF (ReportLab) et Excel (Openpyxl) pour présences et congés
 
 ### 💬 Messagerie interne
+- Interface responsive inspirée de Messenger : liste des discussions à gauche, fil actif à droite, bulles, avatars, recherche instantanée et zone de saisie fixe
+- Sur mobile, navigation plein écran entre la liste et la conversation ; `Entrée` envoie et `Maj+Entrée` ajoute une ligne
 - Conversations privées et groupes avec suivi lu/non-lu et badge dans la navigation
 - Pour manager/technicien/employé, le sélecteur et les identifiants forgés sont limités au département courant ; admin/RH peuvent contacter tous les comptes
 - Conversations privées strictement réservées à leurs membres, y compris pour admin/RH ; contrôle identique sur les réponses et les pièces jointes

@@ -1,0 +1,50 @@
+<aside class="msg-sidebar" aria-label="Conversations">
+  <div class="msg-sidebar-head">
+    <div>
+      <span class="msg-eyebrow">Messagerie</span>
+      <h1>Discussions</h1>
+    </div>
+    <a href="{{ url_for('messagerie.messagerie_nouveau') }}" class="msg-compose-btn"
+       aria-label="Nouveau message" title="Nouveau message">✎</a>
+  </div>
+
+  <label class="msg-search">
+    <span aria-hidden="true">⌕</span>
+    <input type="search" id="conversationSearch" placeholder="Rechercher dans Messenger"
+           autocomplete="off" aria-label="Rechercher une conversation">
+  </label>
+
+  <nav class="msg-conversation-list" id="conversationList">
+    {% for c in conversations %}
+    <a href="{{ url_for('messagerie.messagerie_voir', id=c.id) }}"
+       class="msg-conversation {% if active_conversation_id == c.id %}is-active{% endif %} {% if c.non_lu %}is-unread{% endif %}"
+       data-conversation-search="{{ (c.libelle ~ ' ' ~ (c.dernier_message or ''))|lower }}">
+      <span class="msg-avatar msg-avatar--{{ c.type }}">
+        {% if c.type == 'prive' and c.avatar_photo %}
+        <img src="{{ url_for('auth.avatar_image', filename=c.avatar_photo) }}" alt="">
+        {% else %}
+        <span>{{ c.avatar_initiale }}</span>
+        {% endif %}
+      </span>
+      <span class="msg-conversation-body">
+        <span class="msg-conversation-topline">
+          <strong>{{ c.libelle }}</strong>
+          <time>{{ c.date_dernier_message.strftime('%H:%M') if c.date_dernier_message else '' }}</time>
+        </span>
+        <span class="msg-conversation-preview">
+          {% if c.type == 'annonce' and c.cible_role %}<b>{{ c.cible_role }}</b> · {% endif %}
+          {{ c.dernier_message or 'Démarrer la conversation' }}
+        </span>
+      </span>
+      {% if c.non_lu %}<span class="msg-unread-dot" aria-label="Non lu"></span>{% endif %}
+    </a>
+    {% else %}
+    <div class="msg-sidebar-empty">
+      <span>💬</span>
+      <p>Aucune discussion</p>
+      <a href="{{ url_for('messagerie.messagerie_nouveau') }}">Écrire un message</a>
+    </div>
+    {% endfor %}
+    <div class="msg-no-search-result" id="conversationNoResult" hidden>Aucune conversation trouvée.</div>
+  </nav>
+</aside>

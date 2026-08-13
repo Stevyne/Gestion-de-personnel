@@ -39,19 +39,43 @@ def test_routes_messagerie_exigent_connexion(client):
         assert '/login' in response.headers['Location']
 
 
+def test_interface_messenger_conserve_les_formulaires_et_actions(app):
+    employe = _client_connecte(app, 'employe', 'user123')
+    _creer_prive(employe, contenu='Test interface Messenger')
+    conv_id = _id_conversation()
+
+    inbox = employe.get('/messages')
+    assert b'msg-shell--inbox' in inbox.data
+    assert b'id="conversationSearch"' in inbox.data
+    assert b'messagerie.css' in inbox.data and b'messagerie.js' in inbox.data
+
+    thread = employe.get(f'/messages/{conv_id}')
+    assert b'msg-shell--thread' in thread.data
+    assert b'id="messageStream"' in thread.data
+    assert b'id="messageComposer"' in thread.data
+    assert b'name="piece_jointe"' in thread.data
+    assert b'Test interface Messenger' in thread.data
+
+    nouveau = employe.get('/messages/nouveau')
+    assert b'msg-shell--compose' in nouveau.data
+    assert b'id="recipientSearch"' in nouveau.data
+    assert b'name="destinataires"' in nouveau.data
+    assert b'name="type"' in nouveau.data
+
+
 def test_destinataires_sont_cloisonnes_par_departement(app):
     employe = _client_connecte(app, 'employe', 'user123')
     response = employe.get('/messages/nouveau')
     assert response.status_code == 200
-    assert b'(manager)' in response.data
-    assert b'(rh)' not in response.data
-    assert b'(admin)' not in response.data
+    assert b'@manager' in response.data
+    assert b'@rh' not in response.data
+    assert b'@admin' not in response.data
 
     admin = _client_connecte(app, 'admin', 'admin123')
     response = admin.get('/messages/nouveau')
-    assert b'(manager)' in response.data
-    assert b'(rh)' in response.data
-    assert b'(employe)' in response.data
+    assert b'@manager' in response.data
+    assert b'@rh' in response.data
+    assert b'@employe' in response.data
 
 
 def test_creation_message_prive_membres_lecture_notification_et_audit(app):
@@ -156,7 +180,7 @@ def test_lecture_et_reponse_met_a_jour_le_non_lu(app):
 
     manager = _client_connecte(app, 'manager', 'manager123')
     inbox = manager.get('/messages')
-    assert b'background:#eff6ff' in inbox.data
+    assert b'is-unread' in inbox.data
     manager.get(f'/messages/{conv_id}')
     with application.db_cursor() as (conn, cur):
         cur.execute('SELECT dernier_message_lu_id FROM conversation_membres '

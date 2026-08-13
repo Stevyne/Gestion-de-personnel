@@ -1,81 +1,92 @@
 {% extends "base.html" %}
+{% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='messagerie.css') }}">{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width:640px; margin:0 auto;">
-    <div class="card-header">
-        <h1>✏️ Nouveau message</h1>
-        <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="btn btn-secondary">← Retour</a>
-    </div>
+<div class="msg-shell msg-shell--compose">
+  {% include "_messagerie_sidebar.html" %}
 
-    <form method="post" enctype="multipart/form-data" id="formNouveauMessage">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <main class="msg-main msg-compose">
+    <header class="msg-thread-head msg-compose-head">
+      <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="msg-mobile-back" aria-label="Retour aux discussions">‹</a>
+      <div class="msg-thread-identity">
+        <h1>Nouveau message</h1>
+        <p>Commencez une conversation</p>
+      </div>
+    </header>
 
-        <div class="form-group">
-            <label>Type de message</label>
-            <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:6px;">
-                <label style="display:flex; align-items:center; gap:6px; font-weight:400;">
-                    <input type="radio" name="type" value="prive" checked onchange="majFormulaireType()"> 💬 Privé
-                </label>
-                <label style="display:flex; align-items:center; gap:6px; font-weight:400;">
-                    <input type="radio" name="type" value="groupe" onchange="majFormulaireType()"> 👥 Groupe
-                </label>
-                {% if peut_annoncer %}
-                <label style="display:flex; align-items:center; gap:6px; font-weight:400;">
-                    <input type="radio" name="type" value="annonce" onchange="majFormulaireType()"> 📢 Annonce RH
-                </label>
-                {% endif %}
-            </div>
+    <form method="post" enctype="multipart/form-data" id="formNouveauMessage" class="msg-compose-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <fieldset class="msg-type-switcher">
+        <legend class="sr-only">Type de message</legend>
+        <label><input type="radio" name="type" value="prive" checked><span>💬 Privé</span></label>
+        <label><input type="radio" name="type" value="groupe"><span>👥 Groupe</span></label>
+        {% if peut_annoncer %}
+        <label><input type="radio" name="type" value="annonce"><span>📢 Annonce</span></label>
+        {% endif %}
+      </fieldset>
+
+      <section class="msg-compose-section" id="champDestinataires">
+        <div class="msg-compose-label">
+          <div><strong>À qui écrivez-vous ?</strong><small>Sélectionnez une ou plusieurs personnes</small></div>
+          <span id="recipientCount">0 sélectionné</span>
         </div>
-
-        <div class="form-group" id="champDestinataires">
-            <label>Destinataire(s)</label>
-            <select name="destinataires" class="form-control" multiple size="6">
-                {% for u in utilisateurs %}
-                <option value="{{ u.id }}">{{ u.prenom or '' }} {{ u.nom or '' }} ({{ u.username }}){% if u.departement %} — {{ u.departement }}{% endif %}</option>
-                {% endfor %}
-            </select>
-            <small style="color:#64748b;">Ctrl/Cmd + clic pour sélectionner plusieurs destinataires (= discussion de groupe).</small>
+        <label class="msg-search msg-recipient-search">
+          <span aria-hidden="true">⌕</span>
+          <input type="search" id="recipientSearch" placeholder="Rechercher un collègue" autocomplete="off">
+        </label>
+        <div class="msg-recipient-list" id="recipientList">
+          {% for u in utilisateurs %}
+          <label class="msg-recipient" data-recipient-search="{{ (u.prenom ~ ' ' ~ u.nom ~ ' ' ~ u.username ~ ' ' ~ (u.departement or ''))|lower }}">
+            <input type="checkbox" name="destinataires" value="{{ u.id }}">
+            <span class="msg-avatar msg-avatar--recipient"><span>{{ (u.prenom or u.username)[:1]|upper }}</span></span>
+            <span class="msg-recipient-info">
+              <strong>{{ ((u.prenom or '') ~ ' ' ~ (u.nom or ''))|trim or u.username }}</strong>
+              <small>@{{ u.username }}{% if u.departement %} · {{ u.departement }}{% endif %}</small>
+            </span>
+            <span class="msg-recipient-check">✓</span>
+          </label>
+          {% else %}
+          <div class="msg-sidebar-empty"><p>Aucun destinataire disponible dans votre périmètre.</p></div>
+          {% endfor %}
         </div>
+      </section>
 
-        <div class="form-group" id="champCible" style="display:none;">
-            <label>Diffuser à</label>
-            <select name="cible_role" class="form-control">
-                <option value="">Tout le monde</option>
-                {% for r in roles %}
-                <option value="{{ r }}">{{ r }}</option>
-                {% endfor %}
-            </select>
-        </div>
+      <section class="msg-compose-section" id="champCible" hidden>
+        <label for="cibleRole"><strong>Diffuser l’annonce à</strong></label>
+        <select name="cible_role" id="cibleRole" class="form-control">
+          <option value="">Tous les utilisateurs</option>
+          {% for r in roles %}<option value="{{ r }}">{{ r|capitalize }}</option>{% endfor %}
+        </select>
+      </section>
 
-        <div class="form-group" id="champTitre" style="display:none;">
-            <label>Titre</label>
-            <input type="text" name="titre" class="form-control" maxlength="200"
-                   placeholder="Ex: Fermeture exceptionnelle, Projet X...">
-        </div>
+      <section class="msg-compose-section" id="champTitre" hidden>
+        <label for="messageTitle"><strong>Titre de la discussion</strong></label>
+        <input type="text" id="messageTitle" name="titre" class="form-control" maxlength="200"
+               placeholder="Ex. Projet site web, Réunion d’équipe…">
+      </section>
 
-        <div class="form-group">
-            <label>Message</label>
-            <textarea name="contenu" class="form-control" rows="5" maxlength="20000"></textarea>
-            <small style="color:#64748b;">Le texte peut être vide si une pièce jointe est fournie.</small>
-        </div>
+      <section class="msg-compose-section">
+        <label for="newMessageText"><strong>Message</strong></label>
+        <textarea name="contenu" id="newMessageText" class="form-control" rows="5" maxlength="20000"
+                  placeholder="Écrivez votre message…"></textarea>
+      </section>
 
-        <div class="form-group">
-            <label>Pièce jointe (optionnel)</label>
-            <input type="file" name="piece_jointe" class="form-control" style="padding:8px;">
-        </div>
+      <section class="msg-compose-section">
+        <label class="msg-upload-zone" id="newMessageUpload">
+          <input type="file" name="piece_jointe" id="newMessageFile" hidden>
+          <span class="msg-upload-icon">＋</span>
+          <span><strong>Ajouter une pièce jointe</strong><small>PDF, Office, image ou texte · 8 Mo maximum</small></span>
+          <span class="msg-upload-name" id="newMessageFileName"></span>
+        </label>
+      </section>
 
-        <button type="submit" class="btn btn-primary">Envoyer</button>
+      <div class="msg-compose-actions">
+        <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="msg-secondary-action">Annuler</a>
+        <button type="submit" class="msg-primary-action">Envoyer le message <span>➤</span></button>
+      </div>
     </form>
+  </main>
 </div>
-
-<script>
-function majFormulaireType() {
-    const type = document.querySelector('input[name="type"]:checked').value;
-    document.getElementById('champDestinataires').style.display = (type === 'annonce') ? 'none' : 'block';
-    document.getElementById('champCible').style.display = (type === 'annonce') ? 'block' : 'none';
-    document.getElementById('champTitre').style.display = (type === 'prive') ? 'none' : 'block';
-    document.querySelector('select[name="destinataires"]').required = (type !== 'annonce');
-}
-majFormulaireType();
-</script>
+<script src="{{ url_for('static', filename='messagerie.js') }}"></script>
 {% endblock %}

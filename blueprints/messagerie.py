@@ -137,6 +137,65 @@ def creer_blueprint_messagerie(deps):
         """, (user_id, user_id, role, user_id, role, user_id))
         return cur.fetchone()['nb']
 
+    def _charger_conversations(cur, user_id, role):
+        """Charge la colonne de gauche commune à la boîte, au fil et à la
+        composition d'un message."""
+        cur.execute("""
+            SELECT c.id, c.type, c.titre, c.cible_role, c.date_creation,
+                   cm.dernier_message_lu_id,
+                   (SELECT contenu FROM messages WHERE conversation_id = c.id
+                    ORDER BY id DESC LIMIT 1) AS dernier_message,
+                   (SELECT date_envoi FROM messages WHERE conversation_id = c.id
+                    ORDER BY id DESC LIMIT 1) AS date_dernier_message,
+                   (SELECT MAX(id) FROM messages WHERE conversation_id = c.id) AS dernier_message_id,
+                   (SELECT string_agg(u.username, ', ' ORDER BY u.username)
+                      FROM conversation_membres cm2 JOIN users u ON u.id = cm2.user_id
+                     WHERE cm2.conversation_id = c.id AND cm2.user_id != %s) AS autres_membres,
+                   (SELECT u.photo FROM conversation_membres cm3
+                      JOIN users u ON u.id = cm3.user_id
+                     WHERE cm3.conversation_id = c.id AND cm3.user_id != %s
+                     ORDER BY u.username LIMIT 1) AS avatar_photo,
+                   (SELECT u.username FROM conversation_membres cm4
+                      JOIN users u ON u.id = cm4.user_id
+                     WHERE cm4.conversation_id = c.id AND cm4.user_id != %s
+                     ORDER BY u.username LIMIT 1) AS avatar_username
+              FROM conversations c
+              JOIN conversation_membres cm ON cm.conversation_id = c.id AND cm.user_id = %s
+             WHERE c.type IN ('prive', 'groupe')
+            UNION ALL
+            SELECT c.id, c.type, c.titre, c.cible_role, c.date_creation,
+                   NULL::INTEGER, (SELECT contenu FROM messages WHERE conversation_id=c.id ORDER BY id DESC LIMIT 1),
+                   (SELECT date_envoi FROM messages WHERE conversation_id=c.id ORDER BY id DESC LIMIT 1),
+                   (SELECT MAX(id) FROM messages WHERE conversation_id=c.id),
+                   NULL, NULL, NULL
+              FROM conversations c
+             WHERE c.type='annonce'
+               AND (%s IN ('admin','rh') OR c.cree_par=%s
+                    OR c.cible_role IS NULL OR c.cible_role=%s)
+             ORDER BY date_dernier_message DESC NULLS LAST
+        """, (user_id, user_id, user_id, user_id, role, user_id, role))
+        conversations = cur.fetchall()
+        cur.execute("SELECT conversation_id FROM annonce_lues WHERE user_id=%s", (user_id,))
+        annonces_lues = {r['conversation_id'] for r in cur.fetchall()}
+        for conversation in conversations:
+            apercu = conversation.get('dernier_message') or ''
+            if len(apercu) > 80:
+                apercu = apercu[:80] + '…'
+            conversation['dernier_message'] = apercu
+            if conversation['type'] == 'annonce':
+                conversation['non_lu'] = bool(conversation['dernier_message_id']) and conversation['id'] not in annonces_lues
+                conversation['libelle'] = conversation.get('titre') or 'Annonce RH'
+                conversation['avatar_initiale'] = '📢'
+            else:
+                conversation['non_lu'] = bool(conversation['dernier_message_id']) and (
+                    conversation['dernier_message_lu_id'] is None
+                    or conversation['dernier_message_id'] > conversation['dernier_message_lu_id'])
+                conversation['libelle'] = (conversation.get('titre') if conversation['type'] == 'groupe'
+                                           else None) or conversation.get('autres_membres') or 'Conversation'
+                conversation['avatar_initiale'] = ('👥' if conversation['type'] == 'groupe'
+                                                    else (conversation.get('avatar_username') or '?')[:1].upper())
+        return conversations
+
     # ------------------------------------------------------------- routes
     @bp.route('/messages')
     @login_required
@@ -144,52 +203,9 @@ def creer_blueprint_messagerie(deps):
         user_id = session['user_id']
         role = session.get('role', 'employe')
         with db_cursor() as (conn, cur):
-            cur.execute("""
-                SELECT c.id, c.type, c.titre, c.cible_role, c.date_creation,
-                       cm.dernier_message_lu_id,
-                       (SELECT contenu FROM messages WHERE conversation_id = c.id
-                        ORDER BY id DESC LIMIT 1) AS dernier_message,
-                       (SELECT date_envoi FROM messages WHERE conversation_id = c.id
-                        ORDER BY id DESC LIMIT 1) AS date_dernier_message,
-                       (SELECT MAX(id) FROM messages WHERE conversation_id = c.id) AS dernier_message_id,
-                       (SELECT string_agg(u.username, ', ') FROM conversation_membres cm2
-                        JOIN users u ON u.id = cm2.user_id
-                        WHERE cm2.conversation_id = c.id AND cm2.user_id != %s) AS autres_membres
-                FROM conversations c
-                JOIN conversation_membres cm ON cm.conversation_id = c.id AND cm.user_id = %s
-                WHERE c.type IN ('prive', 'groupe')
-                UNION ALL
-                SELECT c.id, c.type, c.titre, c.cible_role, c.date_creation,
-                       NULL::INTEGER AS dernier_message_lu_id,
-                       (SELECT contenu FROM messages WHERE conversation_id = c.id
-                        ORDER BY id DESC LIMIT 1) AS dernier_message,
-                       (SELECT date_envoi FROM messages WHERE conversation_id = c.id
-                        ORDER BY id DESC LIMIT 1) AS date_dernier_message,
-                       (SELECT MAX(id) FROM messages WHERE conversation_id = c.id) AS dernier_message_id,
-                       NULL AS autres_membres
-                FROM conversations c
-                WHERE c.type = 'annonce'
-                  AND (%s IN ('admin','rh') OR c.cree_par = %s
-                       OR c.cible_role IS NULL OR c.cible_role = %s)
-                ORDER BY date_dernier_message DESC NULLS LAST
-            """, (user_id, user_id, role, user_id, role))
-            conversations = cur.fetchall()
-
-            # Lu/non-lu par conversation (annonces : table dédiée, pas de pointeur)
-            cur.execute("SELECT conversation_id FROM annonce_lues WHERE user_id = %s", (user_id,))
-            annonces_lues = {r['conversation_id'] for r in cur.fetchall()}
-
-        for c in conversations:
-            if c['dernier_message'] and len(c['dernier_message']) > 80:
-                c['dernier_message'] = c['dernier_message'][:80] + '…'
-            if c['type'] == 'annonce':
-                c['non_lu'] = bool(c['dernier_message_id']) and c['id'] not in annonces_lues
-            else:
-                c['non_lu'] = bool(c['dernier_message_id']) and (
-                    c['dernier_message_lu_id'] is None or c['dernier_message_id'] > c['dernier_message_lu_id']
-                )
-
-        return render_template('messagerie_inbox.html', conversations=conversations)
+            conversations = _charger_conversations(cur, user_id, role)
+        return render_template('messagerie_inbox.html', conversations=conversations,
+                               active_conversation_id=None)
 
     @bp.route('/messages/nouveau', methods=['GET', 'POST'])
     @login_required
@@ -328,8 +344,10 @@ def creer_blueprint_messagerie(deps):
                 ORDER BY u.username
             """, [session['user_id']] + scope_params)
             utilisateurs = cur.fetchall()
+            conversations = _charger_conversations(cur, session['user_id'], role)
 
         return render_template('messagerie_nouveau.html', utilisateurs=utilisateurs,
+                               conversations=conversations, active_conversation_id=None,
                                peut_annoncer=peut_annoncer, roles=ROLES_VALIDES)
 
     @bp.route('/messages/<int:id>')
@@ -349,7 +367,8 @@ def creer_blueprint_messagerie(deps):
             cur.execute("""
                 SELECT m.id, m.contenu, m.date_envoi, m.sender_id,
                        m.piece_jointe_nom, m.piece_jointe_taille,
-                       COALESCE(u.username, 'Utilisateur supprimé') AS sender_username
+                       COALESCE(u.username, 'Utilisateur supprimé') AS sender_username,
+                       u.photo AS sender_photo
                 FROM messages m LEFT JOIN users u ON u.id = m.sender_id
                 WHERE m.conversation_id = %s ORDER BY m.id ASC
             """, (id,))
@@ -378,8 +397,17 @@ def creer_blueprint_messagerie(deps):
                 """, (id,))
                 membres = [r['username'] for r in cur.fetchall()]
 
+            conversations = _charger_conversations(cur, user_id, role)
+            active_conversation = next(
+                (c for c in conversations if c['id'] == id),
+                {'id': id, 'type': conv['type'], 'libelle': conv.get('titre') or 'Conversation',
+                 'avatar_initiale': '💬', 'avatar_photo': None})
+
         return render_template('messagerie_thread.html', conv=conv, messages=messages,
-                               membres=membres, user_id=user_id)
+                               membres=membres, user_id=user_id,
+                               conversations=conversations,
+                               active_conversation=active_conversation,
+                               active_conversation_id=id)
 
     @bp.route('/messages/<int:id>/repondre', methods=['POST'])
     @login_required

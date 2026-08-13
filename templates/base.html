@@ -162,6 +162,7 @@
             background: #b91c1c;
         }
     </style>
+    {% block extra_styles %}{% endblock %}
 </head>
 <body>
 {% macro pagination(endpoint, base_qs, pg, page_items) %}

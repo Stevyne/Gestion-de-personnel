@@ -1,64 +1,103 @@
 {% extends "base.html" %}
+{% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='messagerie.css') }}">{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width:760px; margin:0 auto;">
-    <div class="card-header">
-        <h1>
-            {% if conv.type == 'annonce' %}📢 {{ conv.titre or 'Annonce RH' }}
-            {% elif conv.type == 'groupe' %}👥 {{ conv.titre or (membres | join(', ')) }}
-            {% else %}💬 {{ membres | join(', ') }}
-            {% endif %}
-        </h1>
-        <div style="display:flex; gap:8px;">
-            {% if conv.type == 'groupe' %}
-            <form method="post" action="{{ url_for('messagerie.messagerie_quitter', id=conv.id) }}"
-                  onsubmit="return confirm('Quitter cette discussion ?');">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-secondary">Quitter</button>
-            </form>
-            {% endif %}
-            <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="btn btn-secondary">← Retour</a>
-        </div>
-    </div>
+<div class="msg-shell msg-shell--thread">
+  {% include "_messagerie_sidebar.html" %}
 
-    <div style="display:flex; flex-direction:column; gap:12px; max-height:60vh; overflow-y:auto; padding:8px 4px;">
-        {% for m in messages %}
-        <div style="align-self:{% if m.sender_id == user_id %}flex-end{% else %}flex-start{% endif %}; max-width:78%;">
-            <div style="font-size:0.75rem; color:#94a3b8; margin-bottom:2px; text-align:{% if m.sender_id == user_id %}right{% else %}left{% endif %};">
-                {{ m.sender_username }} · {{ m.date_envoi.strftime('%d/%m/%Y %H:%M') }}
-            </div>
-            <div style="padding:10px 14px; border-radius:14px; white-space:pre-wrap; word-break:break-word;
-                        background:{% if m.sender_id == user_id %}#2563eb{% else %}#f1f5f9{% endif %};
-                        color:{% if m.sender_id == user_id %}white{% else %}#1e293b{% endif %};">
-                {{ m.contenu }}
-                {% if m.piece_jointe_nom %}
-                <div style="margin-top:6px;">
-                    <a href="{{ url_for('messagerie.messagerie_piece_jointe', message_id=m.id) }}"
-                       style="color:inherit; text-decoration:underline; font-size:0.85rem;">
-                        📎 {{ m.piece_jointe_nom }}
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
+  <main class="msg-main msg-thread" aria-label="Conversation {{ active_conversation.libelle }}">
+    <header class="msg-thread-head">
+      <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="msg-mobile-back" aria-label="Retour aux discussions">‹</a>
+      <span class="msg-avatar msg-avatar--{{ active_conversation.type }} msg-avatar--header">
+        {% if active_conversation.type == 'prive' and active_conversation.avatar_photo %}
+        <img src="{{ url_for('auth.avatar_image', filename=active_conversation.avatar_photo) }}" alt="">
         {% else %}
-        <div style="text-align:center; color:#94a3b8; padding:30px 0;">Aucun message pour l'instant.</div>
-        {% endfor %}
-    </div>
+        <span>{{ active_conversation.avatar_initiale }}</span>
+        {% endif %}
+      </span>
+      <div class="msg-thread-identity">
+        <h1>{{ active_conversation.libelle }}</h1>
+        <p>
+          {% if conv.type == 'annonce' %}
+            Annonce{% if conv.cible_role %} · {{ conv.cible_role }}{% else %} · Tous les utilisateurs{% endif %}
+          {% elif conv.type == 'groupe' %}
+            {{ membres|length }} participant(s)
+          {% else %}
+            Conversation privée
+          {% endif %}
+        </p>
+      </div>
+      {% if conv.type == 'groupe' %}
+      <form method="post" action="{{ url_for('messagerie.messagerie_quitter', id=conv.id) }}"
+            class="msg-thread-action confirm-form"
+            data-confirm-title="Quitter cette discussion ?"
+            data-confirm-message="Vous ne pourrez plus consulter les messages de ce groupe.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" aria-label="Quitter le groupe" title="Quitter le groupe">⋯</button>
+      </form>
+      {% endif %}
+    </header>
+
+    <section class="msg-stream" id="messageStream" aria-live="polite">
+      <div class="msg-conversation-intro">
+        <span class="msg-avatar msg-avatar--{{ active_conversation.type }} msg-avatar--intro">
+          {% if active_conversation.type == 'prive' and active_conversation.avatar_photo %}
+          <img src="{{ url_for('auth.avatar_image', filename=active_conversation.avatar_photo) }}" alt="">
+          {% else %}<span>{{ active_conversation.avatar_initiale }}</span>{% endif %}
+        </span>
+        <h2>{{ active_conversation.libelle }}</h2>
+        <p>{% if conv.type == 'annonce' %}Début de l’annonce{% else %}Début de votre conversation{% endif %}</p>
+      </div>
+
+      {% for m in messages %}
+      {% set own = (m.sender_id == user_id) %}
+      <article class="msg-row {% if own %}is-own{% endif %}">
+        {% if not own %}
+        <span class="msg-avatar msg-avatar--message" title="{{ m.sender_username }}">
+          {% if m.sender_photo %}<img src="{{ url_for('auth.avatar_image', filename=m.sender_photo) }}" alt="">
+          {% else %}<span>{{ m.sender_username[:1]|upper }}</span>{% endif %}
+        </span>
+        {% endif %}
+        <div class="msg-message-wrap">
+          {% if not own %}<span class="msg-sender-name">{{ m.sender_username }}</span>{% endif %}
+          <div class="msg-bubble">
+            {% if m.contenu %}<div class="msg-text">{{ m.contenu }}</div>{% endif %}
+            {% if m.piece_jointe_nom %}
+            <a href="{{ url_for('messagerie.messagerie_piece_jointe', message_id=m.id) }}"
+               class="msg-attachment">
+              <span class="msg-attachment-icon">📄</span>
+              <span><strong>{{ m.piece_jointe_nom }}</strong><small>{{ ((m.piece_jointe_taille or 0) / 1024)|round(1) }} Ko</small></span>
+              <span aria-hidden="true">↓</span>
+            </a>
+            {% endif %}
+          </div>
+          <time class="msg-time">{{ m.date_envoi.strftime('%d/%m/%Y à %H:%M') }}</time>
+        </div>
+      </article>
+      {% else %}
+      <div class="msg-stream-empty">Envoyez le premier message.</div>
+      {% endfor %}
+    </section>
 
     {% if conv.type != 'annonce' or current_role in ['admin', 'rh'] %}
     <form method="post" action="{{ url_for('messagerie.messagerie_repondre', id=conv.id) }}"
-          enctype="multipart/form-data" style="display:flex; gap:8px; margin-top:16px; align-items:flex-end;">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div style="flex:1;">
-            <textarea name="contenu" class="form-control" rows="2" maxlength="20000"
-                      placeholder="Votre message..."></textarea>
-        </div>
-        <input type="file" name="piece_jointe" style="max-width:140px;">
-        <button type="submit" class="btn btn-primary">Envoyer</button>
+          enctype="multipart/form-data" class="msg-composer" id="messageComposer">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="msg-file-btn" aria-label="Ajouter une pièce jointe" title="Ajouter une pièce jointe">
+        <input type="file" name="piece_jointe" id="messageFileInput" hidden>
+        <span>＋</span>
+      </label>
+      <div class="msg-composer-center">
+        <textarea name="contenu" id="messageComposerText" rows="1" maxlength="20000"
+                  placeholder="Aa" aria-label="Votre message"></textarea>
+        <span class="msg-file-name" id="messageFileName" hidden></span>
+      </div>
+      <button type="submit" class="msg-send-btn" aria-label="Envoyer" title="Envoyer">➤</button>
     </form>
     {% else %}
-    <p style="color:#94a3b8; text-align:center; margin-top:16px;">Seuls RH/admin peuvent répondre à une annonce.</p>
+    <div class="msg-readonly-note">Cette annonce est en lecture seule.</div>
     {% endif %}
+  </main>
 </div>
+<script src="{{ url_for('static', filename='messagerie.js') }}"></script>
 {% endblock %}
