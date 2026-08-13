@@ -232,10 +232,10 @@ cp .env.example .env
 | `DATABASE_URL`            | Chaîne de connexion PostgreSQL |
 | `AUTO_INIT_DB`, `REQUIRE_ALEMBIC_CURRENT` | Bootstrap historique local et exigence de révision Alembic en production |
 | `REDIS_URL`               | Stockage Redis partagé du rate limiting multi-worker |
-| `OBJECT_STORAGE_ENABLED`, `OBJECT_STORAGE_REQUIRED` | Active S3 et interdit le repli BYTEA en cas de panne si requis |
+| `OBJECT_STORAGE_ENABLED`, `OBJECT_STORAGE_REQUIRED` | Laisser `false` sans S3 ; activer après création d'un bucket privé |
 | `OBJECT_STORAGE_THRESHOLD_BYTES` | Seuil d'externalisation progressive (1 Mio par défaut) |
-| `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT_URL` | Bucket et endpoint AWS S3/R2/B2/MinIO |
-| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Identifiants du bucket privé |
+| `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT_URL` | Variables optionnelles tant que S3 est désactivé |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Identifiants optionnels du futur bucket privé |
 | `SCHEDULER_MODE`          | `embedded` en local, `disabled` sur le web, `worker` sur le service dédié |
 | `SENTRY_DSN`, `LOG_FORMAT` | Monitoring d'erreurs et logs structurés JSON |
 | `EMAIL_ENABLED`           | Active explicitement l'outbox et SMTP (`false` par défaut) |
@@ -255,11 +255,11 @@ cp .env.example .env
 > ✅ **Bonnes nouvelles** : `SECRET_KEY` et `FLASK_DEBUG` sont **déjà lus depuis l'environnement** (aucune valeur sensible codée en dur dans `app.py`). En production, l'absence de `SECRET_KEY` lève une erreur (`RuntimeError`), et `FLASK_DEBUG=true` combiné à `FLASK_ENV=production` est bloqué. En production, l'absence de `DATABASE_URL` est également bloquante ; en développement, un fallback local (`postgres/postgres`) est utilisé avec un avertissement dans les logs.
 >
 > ⚠️ **Points à vérifier avant mise en production** :
-> - Le Blueprint Render configure Redis, HTTPS, un worker scheduler et exige la révision Alembic courante. Renseignez toutes les variables marquées `sync: false`.
-> - Le bucket S3 doit rester **privé**. Les téléchargements passent toujours par les routes Flask et leurs contrôles d'accès.
+> - Le Blueprint Render configure Redis, HTTPS, un worker scheduler et exige la révision Alembic courante. Renseignez les secrets d'administration et Sentry marqués `sync: false`.
+> - **Aucun S3 n'est requis actuellement** : le Blueprint fixe `OBJECT_STORAGE_ENABLED=false` et conserve tous les fichiers en PostgreSQL `BYTEA`.
 > - Configurez SMTP puis passez `EMAIL_ENABLED=true`; sans cette activation explicite, aucun e-mail ne quitte l'application.
-> - Les avatars redimensionnés restent en `BYTEA`; documents, contrats, justificatifs et pièces jointes utilisent le stockage hybride. `static/uploads/` n'est qu'un repli pour d'anciens fichiers.
-> - Le plan PostgreSQL de production doit conserver les sauvegardes/PITR Render en plus du dump logique quotidien envoyé dans un bucket S3 distinct.
+> - `static/uploads/` n'est qu'un repli pour d'anciens fichiers ; les nouveaux fichiers restent persistants dans PostgreSQL.
+> - Sans bucket S3, les sauvegardes/PITR gérées du plan PostgreSQL Render constituent la protection active.
 
 ---
 
@@ -299,11 +299,14 @@ La première révision est `20260813_phase4`. Le downgrade refuse de supprimer l
 colonnes tant qu'une clé S3 existe, afin de ne jamais rendre un fichier
 inaccessible.
 
-### Bascule progressive vers S3
+### Bascule progressive vers S3 — prête mais désactivée
 
-Les fichiers antérieurs restent lisibles depuis `BYTEA`. Les nouveaux fichiers
-qui dépassent `OBJECT_STORAGE_THRESHOLD_BYTES` sont envoyés vers S3 avec un
-checksum SHA-256. La commande est idempotente et travaille par lots :
+Le déploiement actuel ne nécessite aucun compte S3 : `OBJECT_STORAGE_ENABLED`
+et `OBJECT_STORAGE_REQUIRED` valent `false` dans `render.yaml`. Tous les
+fichiers restent donc en PostgreSQL `BYTEA`, comme avant la Phase 4.
+
+Après création d'un bucket privé, renseignez les variables `S3_*`, activez
+`OBJECT_STORAGE_ENABLED=true`, puis contrôlez la migration progressive :
 
 ```bash
 flask storage status
@@ -312,30 +315,36 @@ flask storage migrate --batch-size 100
 # Option de transition : --keep-source ; pour tout migrer : --all-files
 ```
 
-Le bucket ne doit accorder aucun accès public. AWS S3, Cloudflare R2, Backblaze
-B2 et MinIO sont supportés via `S3_ENDPOINT_URL`.
+Les nouveaux fichiers dépassant le seuil seront alors envoyés vers S3 avec un
+checksum SHA-256. AWS S3, Cloudflare R2, Backblaze B2 et MinIO sont supportés.
 
 ### Services Render
 
-`render.yaml` décrit quatre composants séparés :
+`render.yaml` décrit trois composants actifs, sans dépendance S3 :
 
 1. le web Gunicorn (aucun scheduler embarqué) ;
 2. le worker `scheduler_worker.py` avec heartbeat PostgreSQL ;
-3. Redis/Key Value pour les quotas partagés ;
-4. le cron de sauvegarde logique, construit avec `Dockerfile.backup` pour garantir
-   la présence de `pg_dump`.
+3. Redis/Key Value pour les quotas partagés.
+
+Le cron S3 n'est volontairement pas déclaré. `Dockerfile.backup` et les scripts
+restent disponibles pour l'ajouter après création d'un bucket.
 
 Les sondes sont publiques mais ne divulguent aucune donnée métier :
 
 - `GET /health/live` : processus Flask vivant ;
-- `GET /health/ready` : PostgreSQL, Redis, révision Alembic, état S3 optionnel,
-  fraîcheur du scheduler et du dernier backup réussi.
+- `GET /health/ready` : PostgreSQL, Redis, révision Alembic, état S3 optionnel et
+  fraîcheur du scheduler. Le backup applicatif indique `managed_by_render` tant
+  que le cron S3 est désactivé.
 
 ### Sauvegardes et restauration
 
-Le cron crée chaque nuit un dump PostgreSQL au format custom, l'envoie chiffré
-côté serveur (`AES256` ou KMS), vérifie taille + SHA-256 puis applique la
-rétention. Conserver parallèlement les sauvegardes/PITR du PostgreSQL Render.
+Sans S3, utilisez les sauvegardes et le PITR gérés par le plan PostgreSQL Render
+`basic-256mb`. Vérifiez leur activation et la politique de rétention dans le
+Dashboard Render.
+
+Les scripts de copie logique indépendante restent prêts pour plus tard. Après
+création d'un bucket, ils produiront un dump custom, chiffré côté S3 et vérifié
+par taille + SHA-256 :
 
 ```bash
 python scripts/backup_postgres.py
@@ -355,8 +364,8 @@ lance les tests PostgreSQL/Redis et construit l'image de backup. Après succès
 sur `master`, `.github/workflows/deploy-render.yml` déclenche les deploy hooks.
 Configurer l'environnement GitHub `production` avec :
 
-- secrets `RENDER_WEB_DEPLOY_HOOK_URL`, `RENDER_SCHEDULER_DEPLOY_HOOK_URL` et,
-  facultativement, `RENDER_BACKUP_DEPLOY_HOOK_URL` ;
+- secrets `RENDER_WEB_DEPLOY_HOOK_URL` et `RENDER_SCHEDULER_DEPLOY_HOOK_URL` ;
+- ne créez `RENDER_BACKUP_DEPLOY_HOOK_URL` qu'après ajout du futur cron S3 ;
 - variable `RENDER_HEALTHCHECK_URL` pointant vers
   `https://<service>/health/ready` ;
 - une protection/approbation de l'environnement selon votre politique.

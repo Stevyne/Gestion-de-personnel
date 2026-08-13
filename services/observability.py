@@ -237,29 +237,33 @@ def register_observability(app, get_db, object_storage, *, alembic_revision: str
             if require_scheduler:
                 failures.append("scheduler")
 
+        monitor_backup = _bool_env("BACKUP_MONITORING_ENABLED", False)
         require_backup = _bool_env("REQUIRE_BACKUP_FRESHNESS", False)
-        try:
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MAX(completed_at)))
-                  FROM backup_runs
-            """)
-            row = cur.fetchone()
-            cur.close()
-            conn.close()
-            age = float(row[0]) if row and row[0] is not None else None
-            max_age = int(os.environ.get("BACKUP_MAX_AGE_SECONDS", "129600"))
-            checks["backup"] = {
-                "status": "ok" if age is not None and age <= max_age else "stale",
-                "age_seconds": round(age, 1) if age is not None else None,
-            }
-            if require_backup and (age is None or age > max_age):
-                failures.append("backup")
-        except Exception as exc:
-            checks["backup"] = f"error:{type(exc).__name__}"
-            if require_backup:
-                failures.append("backup")
+        if monitor_backup:
+            try:
+                conn = get_db()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MAX(completed_at)))
+                      FROM backup_runs
+                """)
+                row = cur.fetchone()
+                cur.close()
+                conn.close()
+                age = float(row[0]) if row and row[0] is not None else None
+                max_age = int(os.environ.get("BACKUP_MAX_AGE_SECONDS", "129600"))
+                checks["backup"] = {
+                    "status": "ok" if age is not None and age <= max_age else "stale",
+                    "age_seconds": round(age, 1) if age is not None else None,
+                }
+                if require_backup and (age is None or age > max_age):
+                    failures.append("backup")
+            except Exception as exc:
+                checks["backup"] = f"error:{type(exc).__name__}"
+                if require_backup:
+                    failures.append("backup")
+        else:
+            checks["backup"] = "managed_by_render"
 
         status = "ready" if not failures else "not_ready"
         return jsonify(status=status, checks=checks, failures=failures), (

@@ -177,7 +177,9 @@ def test_configuration_production_versionnee():
     assert 'type: keyvalue' in render
     assert 'python scheduler_worker.py' in render
     assert 'flask bootstrap-db && flask db upgrade' in render
-    assert 'scripts/backup_postgres.py' in render
+    assert 'OBJECT_STORAGE_ENABLED\n        value: "false"' in render
+    assert 'type: cron' not in render
+    assert (ROOT / 'scripts/backup_postgres.py').exists()
     assert 'redis:8-alpine' in workflow
     assert 'flask db upgrade' in workflow
     assert 'RENDER_WEB_DEPLOY_HOOK_URL' in deploy

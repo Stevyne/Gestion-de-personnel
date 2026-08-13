@@ -29,26 +29,14 @@ envVarGroups:
         value: "true"
       - key: REQUIRE_REDIS_RATE_LIMIT
         value: "true"
+      # S3 est prêt dans le code, mais reste désactivé tant qu'aucun bucket
+      # privé n'a été créé. Les fichiers continuent donc à vivre en BYTEA.
       - key: OBJECT_STORAGE_ENABLED
-        value: "true"
+        value: "false"
       - key: OBJECT_STORAGE_REQUIRED
-        value: "true"
+        value: "false"
       - key: OBJECT_STORAGE_THRESHOLD_BYTES
         value: "1048576"
-      - key: S3_BUCKET
-        sync: false
-      - key: S3_REGION
-        sync: false
-      - key: S3_ENDPOINT_URL
-        sync: false
-      - key: S3_ACCESS_KEY_ID
-        sync: false
-      - key: S3_SECRET_ACCESS_KEY
-        sync: false
-      - key: S3_PREFIX
-        value: gestion-personnel
-      - key: S3_SERVER_SIDE_ENCRYPTION
-        value: AES256
       - key: SENTRY_DSN
         sync: false
       - key: SENTRY_ENVIRONMENT
@@ -83,10 +71,10 @@ services:
         value: "true"
       - key: REQUIRE_SCHEDULER_HEARTBEAT
         value: "false"
+      - key: BACKUP_MONITORING_ENABLED
+        value: "false"
       - key: REQUIRE_BACKUP_FRESHNESS
         value: "false"
-      - key: BACKUP_MAX_AGE_SECONDS
-        value: "129600"
       - key: DATABASE_URL
         fromDatabase:
           name: gestion-personnel-db
@@ -123,38 +111,15 @@ services:
           name: gestion-personnel-redis
           property: connectionString
 
-  - type: cron
-    name: gestion-personnel-backup
-    runtime: docker
-    plan: starter
-    schedule: "15 0 * * *"
-    dockerfilePath: ./Dockerfile.backup
-    dockerCommand: python scripts/backup_postgres.py
-    autoDeployTrigger: 'off'
-    envVars:
-      - fromGroup: gestion-personnel-production
-      - key: SERVICE_NAME
-        value: gestion-personnel-backup
-      - key: DATABASE_URL
-        fromDatabase:
-          name: gestion-personnel-db
-          property: connectionString
-      - key: BACKUP_S3_BUCKET
-        sync: false
-      - key: BACKUP_S3_PREFIX
-        value: backups/postgresql
-      - key: BACKUP_RETENTION_DAYS
-        value: "30"
-
   - type: keyvalue
     name: gestion-personnel-redis
     plan: starter
     ipAllowList: []
     maxmemoryPolicy: allkeys-lru
 
-# Le plan PostgreSQL de production apporte les sauvegardes/PITR gérées par
-# Render en première ligne de défense. Le cron S3 fournit une copie logique
-# indépendante et testable avec scripts/restore_postgres.py.
+# Sans S3, les sauvegardes/PITR gérées du plan PostgreSQL Render sont la
+# protection active. Dockerfile.backup et les scripts restent prêts pour ajouter
+# ultérieurement une copie logique indépendante dans un bucket privé.
 databases:
   - name: gestion-personnel-db
     plan: basic-256mb
