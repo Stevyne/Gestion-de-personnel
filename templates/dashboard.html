@@ -1,321 +1,211 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header">
-        <h1>📊 Tableau de Bord</h1>
-        <div>
-            <a href="{{ url_for('presences') }}" class="btn btn-secondary">🕒 Présences</a>
-            <a href="{{ url_for('historique') }}" class="btn btn-secondary">📋 Historique</a>
-        </div>
+<div class="card dashboard-card">
+  <div class="card-header dashboard-head">
+    <div>
+      <h1>📊 Tableau de bord</h1>
+      <div class="scope-badge {{ 'scope-global' if dashboard_scope.is_global else 'scope-dept' }}">
+        {{ '🌍 Vue globale' if dashboard_scope.is_global else '🏢 Vue départementale' }} — {{ dashboard_scope.label }}
+      </div>
     </div>
-
-    <!-- KPI -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-value">{{ total_employes }}</div>
-            <div class="stat-label">👥 Employés</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ total_departements }}</div>
-            <div class="stat-label">🏢 Départements</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ "%.0f"|format(salaire_moyen) }} Ar</div>
-            <div class="stat-label">💰 Salaire moyen</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ total_presences_aujourdhui }}</div>
-            <div class="stat-label">📅 Présences aujourd'hui</div>
-        </div>
+    <div>
+      {% if current_role in ['admin','rh','manager'] %}
+      <a href="{{ url_for('presences') }}" class="btn btn-secondary">🕒 Présences</a>
+      {% else %}
+      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">👤 Mon espace</a>
+      {% endif %}
+      <a href="{{ url_for('rapports') }}" class="btn btn-secondary">📋 Rapports</a>
     </div>
+  </div>
 
-    <!-- ALERTES RETARDS -->
-    {% if nb_retards > 0 %}
-    <div style="margin: 20px 0; background: #fee2e2; border: 2px solid #f87171; border-radius: 14px; padding: 18px;">
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-            <span style="font-size: 1.8rem;">⚠️</span>
-            <h3 style="margin: 0; color: #991b1b;">Alertes Retards — Aujourd'hui ({{ today }})</h3>
-            <span style="background: #991b1b; color: white; padding: 3px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 700;">
-                {{ nb_retards }} retard(s)
-            </span>
-        </div>
+  {% if dashboard_scope.is_empty %}
+  <div class="dashboard-warning">
+    <strong>Aucune statistique accessible.</strong> Votre compte n'est rattaché à aucun département. Demandez aux RH de lier votre compte à une fiche employé correctement renseignée.
+  </div>
+  {% endif %}
 
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
-            {% for r in retards_aujourdhui[:5] %}
-            <div style="background: white; padding: 6px 11px; border-radius: 8px; border: 1px solid #fecaca; font-size: 0.9rem;">
-                <strong>{{ r.prenom }} {{ r.nom }}</strong>
-                <span style="color: #991b1b; font-weight: 700; margin-left: 6px;">+{{ r.retard_minutes }} min</span>
-                <span style="color: #64748b; font-size: 0.8rem;"> ({{ r.heure_arrivee }})</span>
-            </div>
-            {% endfor %}
-            {% if nb_retards > 5 %}
-                <div style="align-self: center; font-size: 0.85rem; color: #7f1d1d;">+ {{ nb_retards - 5 }} autres...</div>
-            {% endif %}
-        </div>
+  <div class="coverage-line">
+    <span><strong>{{ modules_couverts }}/{{ modules_couverts }}</strong> modules statistiques disponibles sont représentés.</span>
+    <small>{{ "Personnel, temps, workflows RH, documents, parc et exploitation système." if dashboard_scope.is_global else "Personnel, temps, workflows RH, documents, parc, maintenance et inventaires de votre département." }}</small>
+  </div>
 
-        <div style="font-size: 0.95rem; color: #7f1d1d;">
-            <strong>Total cumulé :</strong> {{ total_retards_minutes }} minutes (≈ {{ "%.1f"|format(total_retards_minutes / 60) }} heures)
-        </div>
-
-        <div style="margin-top: 10px;">
-            <a href="{{ url_for('presences') }}" class="btn" style="background:#991b1b; color:white; padding: 8px 16px; font-size:0.9rem;">
-                Voir les présences du jour →
-            </a>
-        </div>
+  <!-- Indicateurs principaux -->
+  <div class="stats-grid dashboard-kpis">
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="employees">{{ total_employes }}</div>
+      <div class="stat-label">👥 Employés {{ 'de l’entreprise' if dashboard_scope.is_global else 'du département' }}</div>
     </div>
-    {% else %}
-    <div style="margin: 16px 0; background:#dcfce7; border:1px solid #86efac; padding:12px 16px; border-radius:10px; color:#166534; font-weight:500;">
-        ✅ Aucun retard enregistré aujourd'hui (arrivée standard à 09:00)
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="departments">{{ total_departements }}</div>
+      <div class="stat-label">🏢 {{ 'Départements' if dashboard_scope.is_global else 'Département couvert' }}</div>
+    </div>
+    {% if peut_voir_salaires %}
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="salary">{{ "%.0f"|format(salaire_moyen) }} Ar</div>
+      <div class="stat-label">💰 Salaire moyen</div>
     </div>
     {% endif %}
-
-    <!-- Présences du jour -->
-    <div style="margin: 20px 0;">
-        <h3 style="margin-bottom:10px;">🕒 Présences du jour</h3>
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap:10px;">
-            <div style="background:#dcfce7; padding:12px; border-radius:10px; text-align:center;">
-                <div style="font-size:1.6rem; font-weight:700; color:#166534;">{{ presences_stat.present }}</div>
-                <div style="font-size:0.8rem;">Présent</div>
-            </div>
-            <div style="background:#fee2e2; padding:12px; border-radius:10px; text-align:center;">
-                <div style="font-size:1.6rem; font-weight:700; color:#991b1b;">{{ presences_stat.absent }}</div>
-                <div style="font-size:0.8rem;">Absent</div>
-            </div>
-            <div style="background:#fef9c3; padding:12px; border-radius:10px; text-align:center;">
-                <div style="font-size:1.6rem; font-weight:700; color:#854d0e;">{{ presences_stat.teletravail }}</div>
-                <div style="font-size:0.8rem;">Télétravail</div>
-            </div>
-        </div>
-        <p style="margin-top:8px; font-size:0.9rem; color:#475569;">
-            Taux de présence : <strong>{{ taux_presence }}%</strong>
-        </p>
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="attendance-rate">{{ taux_presence }}%</div>
+      <div class="stat-label">📅 Présence aujourd’hui</div>
     </div>
-
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
-        <!-- Congés -->
-        <div class="card" style="padding:16px; margin:0;">
-            <h3 style="margin:0 0 10px 0;">🏖️ Congés</h3>
-            <div style="display:flex; gap:8px;">
-                <div style="flex:1; text-align:center; background:#fef9c3; padding:8px; border-radius:6px;">
-                    <div style="font-size:1.4rem; font-weight:700;">{{ conges_stat.en_attente }}</div>
-                    <div style="font-size:0.75rem;">En attente</div>
-                </div>
-                <div style="flex:1; text-align:center; background:#dcfce7; padding:8px; border-radius:6px;">
-                    <div style="font-size:1.4rem; font-weight:700;">{{ conges_stat.approuve }}</div>
-                    <div style="font-size:0.75rem;">Approuvés</div>
-                </div>
-                <div style="flex:1; text-align:center; background:#fee2e2; padding:8px; border-radius:6px;">
-                    <div style="font-size:1.4rem; font-weight:700;">{{ conges_stat.refuse }}</div>
-                    <div style="font-size:0.75rem;">Refusés</div>
-                </div>
-            </div>
-        </div>
-
-
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="monthly-hours">{{ "%.1f"|format(heures_totales) }} h</div>
+      <div class="stat-label">⏱️ Heures pointées ce mois</div>
     </div>
-
-    <!-- Analyses graphiques -->
-    <div class="card" style="margin-top:18px; padding:16px;">
-        <h3 style="margin-bottom:14px;">📈 Tendance des présences (30 derniers jours)</h3>
-        <div class="chart-box">
-            <canvas id="chartTendance"></canvas>
-        </div>
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="seniority">{{ anciennete_moyenne }} an(s)</div>
+      <div class="stat-label">📆 Ancienneté moyenne</div>
     </div>
+  </div>
 
-    <div class="charts-grid">
-        <div class="card">
-            <h3 style="margin-bottom:10px;">🕒 Présences du jour</h3>
-            <div class="chart-box chart-box--donut">
-                <canvas id="chartPresencesJour"></canvas>
-            </div>
-        </div>
-        <div class="card">
-            <h3 style="margin-bottom:10px;">🏖️ Répartition des congés</h3>
-            <div class="chart-box chart-box--donut">
-                <canvas id="chartConges"></canvas>
-            </div>
-        </div>
+  <!-- Retards -->
+  {% if nb_retards > 0 %}
+  <div class="delay-alert">
+    <div class="delay-title"><span>⚠️</span><strong>Retards aujourd’hui</strong><b>{{ nb_retards }}</b></div>
+    <div class="delay-list">
+      {% for r in retards_aujourdhui[:5] %}
+      <span><strong>{{ r.prenom }} {{ r.nom }}</strong> +{{ r.retard_minutes }} min</span>
+      {% endfor %}
+      {% if nb_retards > 5 %}<span>+ {{ nb_retards - 5 }} autre(s)</span>{% endif %}
     </div>
+    <small>Total : {{ total_retards_minutes }} min ({{ "%.1f"|format(total_retards_minutes / 60) }} h)</small>
+  </div>
+  {% else %}
+  <div class="dashboard-success">✅ Aucun retard enregistré aujourd’hui dans ce périmètre.</div>
+  {% endif %}
 
-    <!-- Répartition départements -->
-    <div class="card" style="margin-top:18px; padding:16px;">
-        <h3 style="margin-bottom:10px;">🏢 Répartition par département</h3>
-        <div class="chart-box" style="margin-bottom:18px;">
-            <canvas id="chartDepartements"></canvas>
-        </div>
-        <div class="table-container">
-        <table>
-            <thead>
-                <tr><th>Département</th><th>Employés</th><th>%</th></tr>
-            </thead>
-            <tbody>
-                {% for dept in dept_stats %}
-                <tr>
-                    <td data-label="Département"><strong>{{ dept.nom }}</strong></td>
-                    <td data-label="Employés">{{ dept.nb_employes }}</td>
-                    <td data-label="%">
-                        <div style="display:flex; align-items:center; gap:6px;">
-                            <div style="flex:1; background:#e2e8f0; height:6px; border-radius:999px;">
-                                <div style="width:{{ dept.pourcentage }}%; height:100%; background:#2563eb;"></div>
-                            </div>
-                            <span style="font-size:0.8rem;">{{ dept.pourcentage }}%</span>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
+  <!-- Présences du jour -->
+  <section class="dashboard-section">
+    <div class="section-title"><h2>🕒 Présences du jour</h2><span>{{ total_presences_aujourdhui }}/{{ total_employes }} personne(s) couverte(s)</span></div>
+    <div class="mini-stats">
+      <div class="mini green"><strong data-stat="present">{{ presences_stat.present }}</strong><span>Présent</span></div>
+      <div class="mini red"><strong data-stat="absent">{{ presences_stat.absent }}</strong><span>Absent / non pointé</span></div>
+      <div class="mini yellow"><strong data-stat="remote">{{ presences_stat.teletravail }}</strong><span>Télétravail</span></div>
     </div>
+  </section>
 
-    <!-- Activité récente -->
-    <div class="card" style="margin-top:18px; padding:16px;">
-        <h3 style="margin-bottom:10px;">📅 Activité récente</h3>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-            <div>
-                <strong style="font-size:0.85rem;">Derniers pointages</strong>
-                {% for p in recent_presences %}
-                <div style="padding:4px 0; font-size:0.85rem; border-bottom:1px solid #f1f5f9;">
-                    {{ p.prenom }} {{ p.nom }} — {{ p.date }}
-                </div>
-                {% else %}
-                <div style="color:#94a3b8; font-size:0.85rem;">Aucun</div>
-                {% endfor %}
-            </div>
-            <div>
-                <strong style="font-size:0.85rem;">Dernières demandes de congés</strong>
-                {% for c in recent_conges %}
-                <div style="padding:4px 0; font-size:0.85rem; border-bottom:1px solid #f1f5f9;">
-                    {{ c.prenom }} {{ c.nom }} — {{ c.date_debut }} ({{ c.statut }})
-                </div>
-                {% else %}
-                <div style="color:#94a3b8; font-size:0.85rem;">Aucune</div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+  <!-- Tous les modules métier exploitables -->
+  <div class="module-grid">
+    <section class="module-card">
+      <h2>🏖️ Congés et soldes</h2>
+      <div class="metric-row"><span>À traiter</span><strong data-stat="leave-pending">{{ conges_stat.en_attente }}</strong></div>
+      <div class="metric-row"><span>Approuvés en {{ today.year }}</span><strong>{{ conges_stat.approuve }}</strong></div>
+      <div class="metric-row"><span>Jours approuvés</span><strong>{{ conges_stat.jours_approuves }} j</strong></div>
+      <div class="metric-row"><span>Solde restant cumulé</span><strong>{{ solde_conges_restant }} j</strong></div>
+    </section>
 
-    <div style="text-align:center; margin-top:25px;">
-        <a href="{{ url_for('presences') }}" class="btn btn-primary">Gérer les présences</a>
+    <section class="module-card">
+      <h2>🧾 Permissions</h2>
+      <div class="metric-row"><span>À traiter</span><strong data-stat="permission-pending">{{ permissions_stat.en_attente }}</strong></div>
+      <div class="metric-row"><span>Approuvées en {{ today.year }}</span><strong>{{ permissions_stat.approuve }}</strong></div>
+      <div class="metric-row"><span>Refusées en {{ today.year }}</span><strong>{{ permissions_stat.refuse }}</strong></div>
+    </section>
+
+    <section class="module-card {{ 'module-alert' if absences_stat.a_regulariser or absences_stat.justificatifs_attente }}">
+      <h2>🚫 Absences</h2>
+      <div class="metric-row"><span>Total {{ today.year }}</span><strong>{{ absences_stat.total }}</strong></div>
+      <div class="metric-row"><span>À régulariser</span><strong data-stat="absence-open">{{ absences_stat.a_regulariser }}</strong></div>
+      <div class="metric-row"><span>Justificatifs à décider</span><strong data-stat="absence-proof-pending">{{ absences_stat.justificatifs_attente }}</strong></div>
+      <div class="metric-row"><span>Requalifiées maladie</span><strong>{{ absences_stat.acceptees }}</strong></div>
+    </section>
+
+    <section class="module-card {{ 'module-alert' if documents_stat.expires }}">
+      <h2>📁 Documents</h2>
+      <div class="metric-row"><span>Documents</span><strong>{{ documents_stat.total }}</strong></div>
+      <div class="metric-row"><span>Expirés</span><strong data-stat="documents-expired">{{ documents_stat.expires }}</strong></div>
+      <div class="metric-row"><span>Échéance ≤ 30 jours</span><strong>{{ documents_stat.expirent_bientot }}</strong></div>
+    </section>
+
+    <section class="module-card {{ 'module-alert' if materiels_stat.alertes_stock }}">
+      <h2>📦 Matériels et parc</h2>
+      <div class="metric-row"><span>Articles / stock</span><strong data-stat="material-articles">{{ materiels_stat.articles }} / {{ materiels_stat.stock_total }}</strong></div>
+      <div class="metric-row"><span>Stocks bas</span><strong>{{ materiels_stat.alertes_stock }}</strong></div>
+      <div class="metric-row"><span>Attributions actives</span><strong>{{ materiels_stat.attributions_actives }}</strong></div>
+      {% if dashboard_scope.is_global %}<div class="metric-row"><span>Valeur estimée du parc</span><strong>{{ "%.0f"|format(materiels_stat.valeur_parc) }} Ar</strong></div>{% endif %}
+    </section>
+
+    <section class="module-card {{ 'module-alert' if maintenances_stat.ouvertes }}">
+      <h2>🔧 Maintenance</h2>
+      <div class="metric-row"><span>Interventions ouvertes</span><strong data-stat="maintenance-open">{{ maintenances_stat.ouvertes }}</strong></div>
+      <div class="metric-row"><span>Retours à valider</span><strong>{{ maintenances_stat.a_valider }}</strong></div>
+      {% if dashboard_scope.is_global %}<div class="metric-row"><span>Coût {{ today.year }}</span><strong>{{ "%.0f"|format(maintenances_stat.cout_annee) }} Ar</strong></div>{% endif %}
+    </section>
+
+    <section class="module-card {{ 'module-alert' if inventaires_stat.ecarts }}">
+      <h2>📋 Inventaires</h2>
+      <div class="metric-row"><span>Campagnes en cours</span><strong data-stat="inventory-open">{{ inventaires_stat.en_cours }}</strong></div>
+      <div class="metric-row"><span>Écarts constatés</span><strong>{{ inventaires_stat.ecarts }}</strong></div>
+    </section>
+
+    {% if systeme_stat %}
+    <section class="module-card">
+      <h2>🔐 Accès et exploitation</h2>
+      <div class="metric-row"><span>Comptes / sessions actives</span><strong>{{ systeme_stat.utilisateurs }} / {{ systeme_stat.sessions_actives }}</strong></div>
+      <div class="metric-row"><span>Actions d’audit aujourd’hui</span><strong>{{ systeme_stat.actions_audit }}</strong></div>
+      <div class="metric-row"><span>Notifications non lues</span><strong>{{ systeme_stat.notifications_non_lues }}</strong></div>
+      <div class="metric-row"><span>E-mails attente / échec</span><strong>{{ systeme_stat.emails_attente }} / {{ systeme_stat.emails_echec }}</strong></div>
+    </section>
+    {% endif %}
+  </div>
+
+  <!-- Graphiques -->
+  <section class="dashboard-section">
+    <div class="section-title"><h2>📈 Tendance des présences — 30 jours</h2><span>{{ dashboard_scope.label }}</span></div>
+    <div class="chart-box"><canvas id="chartTendance"></canvas></div>
+  </section>
+
+  <div class="charts-grid">
+    <section class="card dashboard-chart-card">
+      <h2>🕒 Présences du jour</h2>
+      <div class="chart-box chart-box--donut"><canvas id="chartPresencesJour"></canvas></div>
+    </section>
+    <section class="card dashboard-chart-card">
+      <h2>🏖️ Congés</h2>
+      <div class="chart-box chart-box--donut"><canvas id="chartConges"></canvas></div>
+    </section>
+  </div>
+
+  {% if dashboard_scope.is_global %}
+  <section class="dashboard-section">
+    <div class="section-title"><h2>🏢 Répartition des effectifs</h2><span>{{ total_departements }} département(s)</span></div>
+    <div class="chart-box"><canvas id="chartDepartements"></canvas></div>
+    <div class="table-container">
+      <table>
+        <thead><tr><th>Département</th><th>Employés</th><th>Part</th></tr></thead>
+        <tbody>{% for dept in dept_stats %}<tr><td><strong>{{ dept.nom }}</strong></td><td>{{ dept.nb_employes }}</td><td>{{ dept.pourcentage }}%</td></tr>{% else %}<tr><td colspan="3">Aucune donnée</td></tr>{% endfor %}</tbody>
+      </table>
     </div>
+  </section>
+  {% endif %}
+
+  <!-- Activité récente déjà filtrée au niveau SQL -->
+  <section class="dashboard-section">
+    <div class="section-title"><h2>📅 Activité récente</h2><span>{{ dashboard_scope.label }}</span></div>
+    <div class="recent-grid">
+      <div><h3>Derniers pointages</h3>{% for p in recent_presences %}<p>{{ p.prenom }} {{ p.nom }} — {{ p.date }}</p>{% else %}<p class="muted">Aucun</p>{% endfor %}</div>
+      <div><h3>Dernières demandes de congé</h3>{% for c in recent_conges %}<p>{{ c.prenom }} {{ c.nom }} — {{ c.date_debut }} ({{ c.statut }})</p>{% else %}<p class="muted">Aucune</p>{% endfor %}</div>
+    </div>
+  </section>
 </div>
+
+<style>
+.dashboard-card{padding:20px}.dashboard-head{align-items:flex-start}.scope-badge{display:inline-flex;margin-top:8px;padding:5px 10px;border-radius:999px;font-size:.8rem;font-weight:700}.scope-global{background:#ede9fe;color:#5b21b6}.scope-dept{background:#dbeafe;color:#1e40af}.dashboard-warning{margin:0 0 16px;padding:13px 15px;border:1px solid #fca5a5;border-radius:10px;background:#fef2f2;color:#991b1b}.coverage-line{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:0 0 18px;padding:10px 13px;border:1px solid #dbeafe;border-radius:10px;background:#f8fafc;color:#334155}.coverage-line small{color:#64748b;text-align:right}.dashboard-kpis{margin-bottom:18px}.dashboard-success{margin:15px 0;padding:11px 14px;border:1px solid #86efac;border-radius:10px;background:#dcfce7;color:#166534}.delay-alert{margin:15px 0;padding:14px;border:1px solid #fca5a5;border-radius:12px;background:#fef2f2;color:#7f1d1d}.delay-title{display:flex;gap:9px;align-items:center}.delay-title b{margin-left:auto;padding:3px 9px;border-radius:999px;background:#991b1b;color:white}.delay-list{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}.delay-list span{padding:5px 9px;border:1px solid #fecaca;border-radius:7px;background:#fff;font-size:.82rem}.dashboard-section{margin-top:18px;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.section-title{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}.section-title h2,.module-card h2,.dashboard-chart-card h2{margin:0;font-size:1.02rem}.section-title span{font-size:.8rem;color:#64748b}.mini-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.mini{padding:12px;border-radius:10px;text-align:center}.mini strong{display:block;font-size:1.55rem}.mini span{font-size:.76rem}.mini.green{background:#dcfce7;color:#166534}.mini.red{background:#fee2e2;color:#991b1b}.mini.yellow{background:#fef9c3;color:#854d0e}.module-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:13px;margin-top:18px}.module-card{padding:15px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.module-card h2{margin-bottom:10px}.module-alert{border-color:#fbbf24;background:#fffbeb}.metric-row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:.83rem}.metric-row:last-child{border-bottom:0}.metric-row span{color:#64748b}.metric-row strong{text-align:right;color:#0f172a}.dashboard-chart-card{padding:16px}.recent-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.recent-grid h3{margin:0 0 7px;font-size:.85rem}.recent-grid p{margin:0;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:.82rem}.muted{color:#94a3b8}@media(max-width:700px){.coverage-line,.section-title{align-items:flex-start;flex-direction:column}.coverage-line small{text-align:left}.mini-stats,.recent-grid{grid-template-columns:1fr}.dashboard-head>div:last-child{display:flex;flex-wrap:wrap;gap:6px}}
+</style>
 
 <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    if (typeof Chart === 'undefined') {
-        console.error("Chart.js n'a pas pu être chargé (static/js/chart.umd.min.js).");
-        return;
-    }
-    const couleurPrimaire = '#2563eb';
-    const couleurs = {
-        vert: '#16a34a', rouge: '#dc2626', jaune: '#ca8a04', bleu: '#2563eb', gris: '#94a3b8'
-    };
-    Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
-    Chart.defaults.color = '#475569';
-
-    // Tendance des présences (30 derniers jours)
-    new Chart(document.getElementById('chartTendance'), {
-        type: 'line',
-        data: {
-            labels: {{ chart_tendance.labels | tojson }},
-            datasets: [{
-                label: 'Présences enregistrées',
-                data: {{ chart_tendance.valeurs | tojson }},
-                borderColor: couleurPrimaire,
-                backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                fill: true,
-                tension: 0.3,
-                pointRadius: 2,
-            }]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-        }
-    });
-
-    // Options communes aux graphiques circulaires (donuts)
-    const optionsDonut = {
-        responsive: true,
-        maintainAspectRatio: false,
-        resizeDelay: 100,           // évite les recalculs en rafale pendant le redimensionnement
-        cutout: '58%',
-        layout: { padding: 4 },
-        plugins: {
-            legend: {
-                position: 'bottom',
-                labels: {
-                    boxWidth: 12,
-                    boxHeight: 12,
-                    padding: 12,
-                    usePointStyle: true,
-                    pointStyle: 'circle',
-                    font: { size: 12 },
-                }
-            },
-            tooltip: {
-                callbacks: {
-                    label: function (ctx) {
-                        const data = ctx.chart.data.datasets[0].data;
-                        const total = data.reduce((a, b) => a + (Number(b) || 0), 0);
-                        const val = Number(ctx.parsed) || 0;
-                        const pct = total ? Math.round((val / total) * 100) : 0;
-                        return ` ${ctx.label} : ${val} (${pct}%)`;
-                    }
-                }
-            }
-        }
-    };
-
-    // Présences du jour
-    new Chart(document.getElementById('chartPresencesJour'), {
-        type: 'doughnut',
-        data: {
-            labels: {{ chart_presences_jour.labels | tojson }},
-            datasets: [{
-                data: {{ chart_presences_jour.valeurs | tojson }},
-                backgroundColor: [couleurs.vert, couleurs.rouge, couleurs.jaune],
-                borderWidth: 0,
-            }]
-        },
-        options: optionsDonut
-    });
-
-    // Répartition des congés
-    new Chart(document.getElementById('chartConges'), {
-        type: 'doughnut',
-        data: {
-            labels: {{ chart_conges.labels | tojson }},
-            datasets: [{
-                data: {{ chart_conges.valeurs | tojson }},
-                backgroundColor: [couleurs.jaune, couleurs.vert, couleurs.rouge],
-                borderWidth: 0,
-            }]
-        },
-        options: optionsDonut
-    });
-
-    // Répartition par département
-    new Chart(document.getElementById('chartDepartements'), {
-        type: 'bar',
-        data: {
-            labels: {{ chart_departements.labels | tojson }},
-            datasets: [{
-                label: 'Employés',
-                data: {{ chart_departements.valeurs | tojson }},
-                backgroundColor: couleurPrimaire,
-                borderRadius: 6,
-            }]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-        }
-    });
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.font.family = "'Inter',system-ui,sans-serif"; Chart.defaults.color='#475569';
+  const colors={green:'#16a34a',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb'};
+  const donut={responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:12,usePointStyle:true}}}};
+  function chart(id, config){const el=document.getElementById(id);if(el)new Chart(el,config);}
+  chart('chartTendance',{type:'line',data:{labels:{{ chart_tendance.labels|tojson }},datasets:[{data:{{ chart_tendance.valeurs|tojson }},borderColor:colors.blue,backgroundColor:'rgba(37,99,235,.1)',fill:true,tension:.3,pointRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+  chart('chartPresencesJour',{type:'doughnut',data:{labels:{{ chart_presences_jour.labels|tojson }},datasets:[{data:{{ chart_presences_jour.valeurs|tojson }},backgroundColor:[colors.green,colors.red,colors.yellow],borderWidth:0}]},options:donut});
+  chart('chartConges',{type:'doughnut',data:{labels:{{ chart_conges.labels|tojson }},datasets:[{data:{{ chart_conges.valeurs|tojson }},backgroundColor:[colors.yellow,colors.green,colors.red],borderWidth:0}]},options:donut});
+  chart('chartDepartements',{type:'bar',data:{labels:{{ chart_departements.labels|tojson }},datasets:[{data:{{ chart_departements.valeurs|tojson }},backgroundColor:colors.blue,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
 });
 </script>
 {% endblock %}

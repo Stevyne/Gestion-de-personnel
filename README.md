@@ -108,6 +108,14 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Un **administrateur peut forcer la déconnexion** d'un compte connecté ; la révocation prend effet à la requête suivante et l'action est tracée dans l'audit (`FORCE_LOGOUT`)
 - Purge automatique des sessions de plus de 30 jours (tâche planifiée à 03h00)
 
+### 📊 Tableau de bord cloisonné
+- **Admin et RH** : vue globale de l'entreprise ; **manager, technicien et employé** : uniquement le département de leur fiche employé
+- Un compte non privilégié sans département obtient une vue vide avec avertissement — jamais de repli implicite vers les données globales
+- Le filtre départemental est appliqué côté SQL à chaque indicateur, activité récente et série graphique
+- Couverture des modules exploitables : personnel, présences/temps, congés/soldes, permissions, absences/justificatifs, documents, matériels/parc, maintenance et inventaires
+- La vue globale ajoute les statistiques d'accès, sessions, audit, notifications et outbox e-mail
+- Les données salariales et les coûts consolidés restent réservés aux vues admin/RH
+
 ### 🪟 Interface
 - **Navigation compacte** : une seule ligne (~63 px), 5 groupes déroulants, icônes SVG, menu du compte avec avatar. Paliers responsive : complet ≥ 1151 px, compressé 1071–1150 px, icônes seules 769–1070 px, tiroir latéral ≤ 768 px
 - **Formulaires en popup** : créations et modifications s'ouvrent dans une fenêtre modale sans quitter la page courante (avec repli sur la page classique si JavaScript est absent)

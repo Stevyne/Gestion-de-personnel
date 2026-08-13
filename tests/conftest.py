@@ -63,13 +63,16 @@ def _clean_tables():
         cur.execute("DELETE FROM employes WHERE id > 4")
         # Certains tests d'absences déplacent les dates d'embauche. Sans remise
         # à zéro, leur ordre modifiait le résultat des tests de soldes.
-        dates_seed = {
-            1: '2023-01-15', 2: '2022-06-01',
-            3: '2021-09-10', 4: '2022-01-01',
+        employes_seed = {
+            1: ('2023-01-15', 'Informatique'),
+            2: ('2022-06-01', 'Ressources Humaines'),
+            3: ('2021-09-10', 'Informatique'),
+            4: ('2022-01-01', 'Administration'),
         }
-        for employe_id, date_embauche in dates_seed.items():
-            cur.execute("UPDATE employes SET date_embauche = %s WHERE id = %s",
-                        (date_embauche, employe_id))
+        for employe_id, (date_embauche, departement) in employes_seed.items():
+            cur.execute("""UPDATE employes SET date_embauche = %s, departement = %s
+                           WHERE id = %s""",
+                        (date_embauche, departement, employe_id))
     yield
 
 
