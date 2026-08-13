@@ -100,6 +100,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 
 ### 🔔 Notifications et e-mails
 - Notifications persistantes en base, filtrées par `user_id`; badge et page `/notifications`
+- Affichage uniforme sur mobile, tablette et ordinateur : titre + message limités à deux lignes au total avec `…`, texte complet conservé dans `title`
 - Événements couverts : absences, présences, documents, arrivée d'un employé, congés, permissions, matériel et maintenance
 - E-mails sur les actions à traiter, décisions, absences et expirations de documents
 - **Outbox PostgreSQL** (`email_outbox`) : envoi asynchrone par lots, verrou `SKIP LOCKED`, reprise après arrêt, jusqu'à cinq tentatives avec délai exponentiel et clés anti-doublon

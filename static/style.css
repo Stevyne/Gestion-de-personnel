@@ -790,29 +790,34 @@ body.drawer-open #navToggle {
 
 .notification-content {
     max-width: 100%;
+    overflow: hidden;
+}
+
+.notification-line {
+    display: -webkit-box;
+    max-width: 100%;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
+    line-height: 1.4;
 }
 
 .notification-title,
 .notification-text {
-    display: block;
-    max-width: 100%;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    display: inline;
 }
 
 .notification-title {
     color: #0f172a;
-    line-height: 1.35;
 }
 
 .notification-text {
-    margin-top: 4px;
     color: #64748b;
-    line-height: 1.4;
 }
 
 /* ===== TABLES - RESPONSIVE ===== */
@@ -1267,10 +1272,8 @@ footer {
         padding-right: 12px;
     }
 
-    /* Les notifications longues ne provoquent plus de défilement horizontal.
-       Le titre tient sur une ligne et le détail sur deux lignes, puis une
-       ellipse masque proprement la suite sur mobile. Le texte complet reste
-       disponible dans l'attribut title du bloc. */
+    /* La troncature à deux lignes est globale. Ici, on adapte seulement la
+       largeur de la cellule au format empilé mobile. */
     .notifications-table td.notification-message-cell {
         align-items: flex-start;
         overflow: hidden;
@@ -1280,24 +1283,6 @@ footer {
         flex: 1 1 52%;
         width: 0;
         text-align: left;
-    }
-
-    .notifications-table .notification-title,
-    .notifications-table .notification-text {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .notifications-table .notification-title {
-        -webkit-line-clamp: 1;
-        line-clamp: 1;
-    }
-
-    .notifications-table .notification-text {
-        -webkit-line-clamp: 2;
-        line-clamp: 2;
     }
     
     .actions {

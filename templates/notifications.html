@@ -35,8 +35,9 @@
                     <td data-label="Message" class="notification-message-cell">
                         <div class="notification-content"
                              title="{{ n.title }}{% if n.message %} — {{ n.message }}{% endif %}">
-                            <strong class="notification-title">{{ n.title }}</strong>
-                            {% if n.message %}<small class="notification-text">{{ n.message }}</small>{% endif %}
+                            <span class="notification-line">
+                                <strong class="notification-title">{{ n.title }}</strong>{% if n.message %}<span class="notification-text"> — {{ n.message }}</span>{% endif %}
+                            </span>
                         </div>
                     </td>
                     <td data-label="Statut">

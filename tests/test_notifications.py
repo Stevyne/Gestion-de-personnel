@@ -48,14 +48,18 @@ def test_notification_longue_reste_complete_et_recoit_classes_responsives(admin_
     assert message.encode() in response.data
     assert b'notification-message-cell' in response.data
     assert b'notification-content' in response.data
+    assert b'notification-line' in response.data
     assert b'notification-title' in response.data
     assert b'notification-text' in response.data
 
 
-def test_css_notifications_mobile_tronque_sans_debordement():
+def test_css_notifications_toutes_plateformes_limite_deux_lignes():
     from pathlib import Path
     css = (Path(__file__).resolve().parents[1] / 'static' / 'style.css').read_text(encoding='utf-8')
-    assert '.notifications-table .notification-content' in css
+    clamp_position = css.index('-webkit-line-clamp: 2')
+    mobile_position = css.index('La troncature à deux lignes est globale')
+    assert '.notification-line' in css
     assert 'overflow-wrap: anywhere' in css
-    assert '-webkit-line-clamp: 2' in css
     assert 'text-overflow: ellipsis' in css
+    assert clamp_position < mobile_position  # règle globale, hors media mobile
+    assert '-webkit-line-clamp: 1' not in css
