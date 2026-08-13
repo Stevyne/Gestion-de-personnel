@@ -47,7 +47,7 @@ services:
     name: gestion-personnel
     runtime: python
     plan: starter
-    buildCommand: pip install -r requirements-production.txt
+    buildCommand: pip install -r requirements.txt
     preDeployCommand: flask bootstrap-db && flask db upgrade
     startCommand: >-
       gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4
@@ -89,7 +89,7 @@ services:
     name: gestion-personnel-scheduler
     runtime: python
     plan: starter
-    buildCommand: pip install -r requirements-production.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: python scheduler_worker.py
     autoDeployTrigger: checksPass
     envVars:

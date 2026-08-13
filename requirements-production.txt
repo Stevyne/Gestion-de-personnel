@@ -1,10 +1,5 @@
-# Dépendances supplémentaires requises par la Phase 4 en production.
-# requirements.txt reste inchangé (historique UTF-16) pour éviter un diff binaire.
+# Alias explicite pour les plateformes qui utilisent ce nom.
+# requirements.txt contient désormais toutes les dépendances runtime, y compris
+# Flask-Migrate, Redis, S3 et Sentry, afin que les anciens services Render dont
+# la commande est `pip install -r requirements.txt` démarrent correctement.
 -r requirements.txt
-
-alembic==1.19.1
-boto3==1.43.70
-Flask-Migrate==4.1.0
-Flask-SQLAlchemy==3.1.1
-redis==8.1.0
-sentry-sdk[flask]==2.68.0

@@ -200,7 +200,7 @@ sudo apt install postgresql postgresql-contrib
 ```bash
 git clone https://github.com/Stevyne/Gestion-de-personnel.git
 cd Gestion-de-personnel
-pip install -r requirements-production.txt
+pip install -r requirements.txt
 ```
 
 ### 3. Configuration de la base de données
@@ -256,6 +256,7 @@ cp .env.example .env
 >
 > ⚠️ **Points à vérifier avant mise en production** :
 > - Le seul secret demandé par le Blueprint est `BOOTSTRAP_ADMIN_PASSWORD` sur le service web (12 caractères minimum pour une base neuve). Aucun secret GitHub ni DSN Sentry n'est obligatoire.
+> - La commande Build peut rester `pip install -r requirements.txt` : ce fichier UTF-8 contient maintenant Flask-Migrate et toutes les dépendances Phase 4 nécessaires au démarrage.
 > - Le Blueprint Render configure Redis, HTTPS, le worker scheduler et les migrations Alembic ; les déploiements partent automatiquement après une CI réussie.
 > - **Aucun S3 n'est requis actuellement** : le Blueprint fixe `OBJECT_STORAGE_ENABLED=false` et conserve tous les fichiers en PostgreSQL `BYTEA`.
 > - Configurez SMTP puis passez `EMAIL_ENABLED=true`; sans cette activation explicite, aucun e-mail ne quitte l'application.

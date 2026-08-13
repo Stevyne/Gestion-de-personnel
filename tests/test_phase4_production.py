@@ -173,9 +173,14 @@ def test_healthchecks_publics(client):
 def test_configuration_production_versionnee_sans_blocage_cd():
     render = (ROOT / 'render.yaml').read_text(encoding='utf-8')
     workflow = (ROOT / '.github/workflows/tests.yml').read_text(encoding='utf-8')
+    requirements = (ROOT / 'requirements.txt').read_text(encoding='utf-8')
     env_group = render.split('services:', 1)[0]
     assert 'type: keyvalue' in render
     assert 'python scheduler_worker.py' in render
+    assert render.count('buildCommand: pip install -r requirements.txt') == 2
+    assert 'Flask-Migrate==4.1.0' in requirements
+    assert 'Flask-SQLAlchemy==3.1.1' in requirements
+    assert '\x00' not in requirements
     assert 'flask bootstrap-db && flask db upgrade' in render
     assert render.count('autoDeployTrigger: checksPass') == 2
     assert "autoDeployTrigger: 'off'" not in render
