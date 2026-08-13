@@ -122,7 +122,7 @@
                 <label>Confier à</label>
                 <select name="cible" class="form-control" id="cibleAssign">
                     <option value="interne">Un collaborateur interne</option>
-                    <option value="externe">Un prestataire externe</option>
+                    {% if current_role in ['admin','rh'] %}<option value="externe">Un prestataire externe</option>{% endif %}
                 </select>
             </div>
             <div class="filtre-champ" id="champInterne">
@@ -134,6 +134,7 @@
                     {% endfor %}
                 </select>
             </div>
+            {% if current_role in ['admin','rh'] %}
             <div class="filtre-champ" id="champExterne" style="display:none;">
                 <label>Prestataire</label>
                 <select name="prestataire_id" class="form-control">
@@ -144,6 +145,7 @@
                 </select>
                 <a href="{{ url_for('prestataires_page') }}" style="font-size:0.8rem;">Gérer les prestataires</a>
             </div>
+            {% endif %}
             <button type="submit" class="btn btn-primary">
                 {{ '↻ Réassigner' if intervention.statut == 'assigne' else '👤 Assigner' }}
             </button>

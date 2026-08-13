@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, send_file, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, send_file, jsonify, g
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
@@ -391,6 +391,224 @@ def role_required(*allowed_roles):
             return redirect(url_for('dashboard'))
         return decorated
     return decorator
+
+# ==================== CLOISONNEMENT DES DONNÉES PAR DÉPARTEMENT =============
+# Admin et RH ont une portée globale. Tous les autres rôles sont limités au
+# département de leur fiche employé. Une absence de rattachement produit une
+# portée vide — jamais un accès global implicite.
+GLOBAL_DATA_ROLES = ('admin', 'rh')
+
+
+def get_department_scope(cur=None):
+    """Portée courante, calculée depuis la base et mise en cache par requête.
+
+    Le rôle n'est pas seulement lu dans le cookie de session : une promotion ou
+    rétrogradation administrative prend ainsi effet dès la requête suivante.
+    """
+    if hasattr(g, 'department_scope'):
+        return g.department_scope
+
+    def charger(cursor):
+        cursor.execute("""
+            SELECT u.role, e.id AS employe_id, e.departement
+              FROM users u LEFT JOIN employes e ON e.id = u.employe_id
+             WHERE u.id = %s
+        """, (session.get('user_id'),))
+        return cursor.fetchone() or {}
+
+    if cur is not None:
+        row = charger(cur)
+    else:
+        with db_cursor() as (conn, cursor):
+            row = charger(cursor)
+    role = row.get('role') or 'employe'
+    session['role'] = role
+    session['role_label'] = get_role_label(role)
+    if role in GLOBAL_DATA_ROLES:
+        scope = {'is_global': True, 'department': None,
+                 'employee_id': row.get('employe_id'), 'is_empty': False}
+    else:
+        departement = (row.get('departement') or '').strip() or None
+        scope = {
+            'is_global': False,
+            'department': departement,
+            'employee_id': row.get('employe_id'),
+            'is_empty': not bool(departement),
+        }
+    g.department_scope = scope
+    return scope
+
+
+def department_scope_sql(alias='e', field='departement', cur=None):
+    """Renvoie une condition SQL sûre et ses paramètres pour la portée courante."""
+    scope = get_department_scope(cur)
+    if scope['is_global']:
+        return 'TRUE', []
+    if scope['is_empty']:
+        return 'FALSE', []
+    return f"{alias}.{field} = %s", [scope['department']]
+
+
+def employee_in_scope(cur, employe_id):
+    """Vrai si la fiche employé appartient à la portée autorisée."""
+    scope = get_department_scope(cur)
+    if scope['is_global']:
+        return True
+    if not employe_id or scope['is_empty']:
+        return False
+    try:
+        employe_id = int(employe_id)
+    except (TypeError, ValueError):
+        return False
+    cur.execute("SELECT departement FROM employes WHERE id = %s", (employe_id,))
+    row = cur.fetchone()
+    return bool(row and row.get('departement') == scope['department'])
+
+
+def department_id_in_scope(cur, departement_id):
+    scope = get_department_scope(cur)
+    if scope['is_global']:
+        return True
+    if not departement_id or scope['is_empty']:
+        return False
+    try:
+        departement_id = int(departement_id)
+    except (TypeError, ValueError):
+        return False
+    cur.execute("SELECT nom FROM departements WHERE id = %s", (departement_id,))
+    row = cur.fetchone()
+    return bool(row and row.get('nom') == scope['department'])
+
+
+def _department_access_denied():
+    logger.warning("Accès inter-département refusé: user=%s endpoint=%s",
+                   session.get('username'), request.endpoint)
+    if request.endpoint == 'api_recherche':
+        return jsonify({'erreur': True, 'message': 'Accès refusé'}), 403
+    flash("Accès refusé : cette donnée n'appartient pas à votre département.", "danger")
+    return redirect(url_for('dashboard'))
+
+
+# Ressources identifiées par l'URL. Le SELECT renvoie toujours une colonne
+# `departement`; le garde s'applique aux GET comme aux écritures.
+DEPARTMENT_RESOURCE_GUARDS = {
+    'view_employee': ("SELECT departement FROM employes WHERE id = %s", 'id'),
+    'edit_employee': ("SELECT departement FROM employes WHERE id = %s", 'id'),
+    'delete_employee': ("SELECT departement FROM employes WHERE id = %s", 'id'),
+    'add_employee_document': ("SELECT departement FROM employes WHERE id = %s", 'id'),
+    'clock_in': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
+    'clock_out': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
+    'update_solde_conges': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
+    'delete_presence': ("SELECT e.departement FROM presences p JOIN employes e ON e.id=p.employe_id WHERE p.id=%s", 'id'),
+    'avis_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'update_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'annuler_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'delete_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'avis_permission': ("SELECT e.departement FROM permissions x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'update_permission': ("SELECT e.departement FROM permissions x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'annuler_permission': ("SELECT e.departement FROM permissions x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'delete_permission': ("SELECT e.departement FROM permissions x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'delete_absence': ("SELECT e.departement FROM absences x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'download_document': ("SELECT e.departement FROM documents x LEFT JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'doc_id'),
+    'delete_document': ("SELECT e.departement FROM documents x LEFT JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'doc_id'),
+    'edit_materiel': ("SELECT d.nom AS departement FROM materiels x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'view_materiel': ("SELECT d.nom AS departement FROM materiels x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'add_mouvement_materiel': ("SELECT d.nom AS departement FROM materiels x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'attribuer_materiel': ("SELECT d.nom AS departement FROM materiels x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'delete_materiel': ("SELECT d.nom AS departement FROM materiels x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'add_exemplaire': ("SELECT d.nom AS departement FROM materiels x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'etiquettes_materiel': ("SELECT d.nom AS departement FROM materiels x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'retour_materiel': ("SELECT d.nom AS departement FROM materiels_attributions a JOIN materiels m ON m.id=a.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE a.id=%s", 'attribution_id'),
+    'accuser_attribution': ("SELECT d.nom AS departement FROM materiels_attributions a JOIN materiels m ON m.id=a.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE a.id=%s", 'attribution_id'),
+    'relancer_accuse': ("SELECT d.nom AS departement FROM materiels_attributions a JOIN materiels m ON m.id=a.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE a.id=%s", 'attribution_id'),
+    'view_inventaire': ("SELECT d.nom AS departement FROM inventaires x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'compter_inventaire': ("SELECT d.nom AS departement FROM inventaires x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'cloturer_inventaire': ("SELECT d.nom AS departement FROM inventaires x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'annuler_inventaire': ("SELECT d.nom AS departement FROM inventaires x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
+    'view_exemplaire': ("SELECT d.nom AS departement FROM materiel_exemplaires ex JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE ex.id=%s", 'id'),
+    'edit_exemplaire': ("SELECT d.nom AS departement FROM materiel_exemplaires ex JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE ex.id=%s", 'id'),
+    'delete_exemplaire': ("SELECT d.nom AS departement FROM materiel_exemplaires ex JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE ex.id=%s", 'id'),
+    'signaler_panne': ("SELECT d.nom AS departement FROM materiel_exemplaires ex JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE ex.id=%s", 'id'),
+    'assigner_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
+    'envoyer_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
+    'cloturer_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
+    'valider_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
+    'annuler_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
+    'etiquettes_departement': ("SELECT nom AS departement FROM departements WHERE id=%s", 'id'),
+    'materiels_departement': ("SELECT nom AS departement FROM departements WHERE id=%s", 'id'),
+    'avatar_image': ("SELECT e.departement FROM users u LEFT JOIN employes e ON e.id=u.employe_id WHERE u.photo=%s", 'filename'),
+    # Le Blueprint des justificatifs applique une règle plus stricte que le
+    # département (propriétaire ou RH) et conserve ses réponses 404/403.
+}
+
+FORM_EMPLOYEE_SCOPE_FIELDS = {
+    'presences': 'quick_employe_id', 'add_presence': 'employe_id',
+    'add_conge': 'employe_id', 'add_permission': 'employe_id',
+    'add_absence': 'employe_id', 'documents': 'employe_id',
+    'attribuer_materiel': 'employe_id', 'add_mouvement_materiel': 'employe_id',
+    'edit_exemplaire': 'employe_id',
+}
+FORM_DEPARTMENT_SCOPE_FIELDS = {
+    'add_materiel': 'departement_id', 'edit_materiel': 'departement_id',
+    'add_inventaire': 'departement_id',
+}
+FORM_USER_SCOPE_FIELDS = {'assigner_maintenance': 'assigne_user_id'}
+
+
+@app.before_request
+def enforce_department_resource_scope():
+    """Garde central anti-contournement pour URL et formulaires forgés."""
+    if not session.get('user_id'):
+        return None
+    scope = get_department_scope()
+    if scope['is_global']:
+        return None
+
+    # Les prestataires sont un référentiel global sans département : seuls
+    # admin/RH peuvent le consulter ou le modifier.
+    if request.endpoint in ('prestataires_page', 'basculer_prestataire'):
+        return _department_access_denied()
+
+    guard = DEPARTMENT_RESOURCE_GUARDS.get(request.endpoint)
+    if guard and request.view_args:
+        query, key = guard
+        value = request.view_args.get(key)
+        if value is not None:
+            with db_cursor() as (conn, cur):
+                cur.execute(query, (value,))
+                row = cur.fetchone()
+            if row and (scope['is_empty'] or row.get('departement') != scope['department']):
+                return _department_access_denied()
+
+    if request.method == 'POST':
+        employee_field = FORM_EMPLOYEE_SCOPE_FIELDS.get(request.endpoint)
+        raw_employee = request.form.get(employee_field) if employee_field else None
+        if raw_employee:
+            with db_cursor() as (conn, cur):
+                if not employee_in_scope(cur, raw_employee):
+                    return _department_access_denied()
+        department_field = FORM_DEPARTMENT_SCOPE_FIELDS.get(request.endpoint)
+        raw_department = request.form.get(department_field) if department_field else None
+        if raw_department:
+            with db_cursor() as (conn, cur):
+                if not department_id_in_scope(cur, raw_department):
+                    return _department_access_denied()
+        user_field = FORM_USER_SCOPE_FIELDS.get(request.endpoint)
+        raw_user = request.form.get(user_field) if user_field else None
+        if raw_user:
+            try:
+                raw_user = int(raw_user)
+            except (TypeError, ValueError):
+                return _department_access_denied()
+            with db_cursor() as (conn, cur):
+                user_scope, user_params = department_scope_sql('e', 'departement', cur)
+                cur.execute(f"""SELECT 1 FROM users u JOIN employes e ON e.id=u.employe_id
+                                WHERE u.id=%s AND {user_scope}""",
+                            [raw_user] + user_params)
+                if not cur.fetchone():
+                    return _department_access_denied()
+    return None
+
 
 # ==================== NOTIFICATIONS (Base de données - support multi-utilisateur réel) ====================
 def create_notification(user_id, title, message, type_="info", cur=None):
@@ -1627,9 +1845,11 @@ def recherche_globale(terme, role, limite_par_categorie=5):
             })
 
     with db_cursor() as (conn, cur):
+        employee_scope, employee_scope_params = department_scope_sql('e', cur=cur)
+        department_scope, department_scope_params = department_scope_sql('d', 'nom', cur)
         # ---- Employés ----
         if _recherche_autorise('employe', role):
-            cur.execute("""
+            cur.execute(f"""
                 SELECT COUNT(*) OVER() AS _total,
                        e.id, e.nom, e.prenom, e.poste, e.departement, e.email, (
                     SELECT u.photo FROM users u
@@ -1637,14 +1857,15 @@ def recherche_globale(terme, role, limite_par_categorie=5):
                      ORDER BY u.id LIMIT 1
                 ) AS photo
                   FROM employes e
-                 WHERE LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s
+                 WHERE (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s
                     OR LOWER(e.nom || ' ' || e.prenom) LIKE %s
                     OR LOWER(e.prenom || ' ' || e.nom) LIKE %s
                     OR LOWER(COALESCE(e.poste, '')) LIKE %s
                     OR LOWER(COALESCE(e.email, '')) LIKE %s
-                    OR LOWER(COALESCE(e.telephone, '')) LIKE %s
+                    OR LOWER(COALESCE(e.telephone, '')) LIKE %s)
+                   AND {employee_scope}
                  ORDER BY e.nom, e.prenom LIMIT %s
-            """, [motif] * 7 + [limite_par_categorie + 1])
+            """, [motif] * 7 + employee_scope_params + [limite_par_categorie + 1])
             lignes = cur.fetchall()
             total = _total_exact(lignes)
             ajouter('employe', 'Employés', 'users', [{
@@ -1656,13 +1877,16 @@ def recherche_globale(terme, role, limite_par_categorie=5):
 
         # ---- Départements ----
         if _recherche_autorise('departement', role):
-            cur.execute("""
-                SELECT COUNT(*) OVER() AS _total, id, nom, description, responsable FROM departements
-                 WHERE LOWER(COALESCE(nom, '')) LIKE %s
-                    OR LOWER(COALESCE(description, '')) LIKE %s
-                    OR LOWER(COALESCE(responsable, '')) LIKE %s
-                 ORDER BY nom LIMIT %s
-            """, [motif, motif, motif, limite_par_categorie + 1])
+            cur.execute(f"""
+                SELECT COUNT(*) OVER() AS _total, d.id, d.nom, d.description, d.responsable
+                  FROM departements d
+                 WHERE (LOWER(COALESCE(d.nom, '')) LIKE %s
+                    OR LOWER(COALESCE(d.description, '')) LIKE %s
+                    OR LOWER(COALESCE(d.responsable, '')) LIKE %s)
+                   AND {department_scope}
+                 ORDER BY d.nom LIMIT %s
+            """, [motif, motif, motif] + department_scope_params +
+                  [limite_par_categorie + 1])
             lignes = cur.fetchall()
             ajouter('departement', 'Départements', 'building', [{
                 'titre': r['nom'],
@@ -1672,15 +1896,17 @@ def recherche_globale(terme, role, limite_par_categorie=5):
 
         # ---- Matériels ----
         if _recherche_autorise('materiel', role):
-            cur.execute("""
+            cur.execute(f"""
                 SELECT COUNT(*) OVER() AS _total,
                        m.id, m.nom, m.categorie, m.quantite, m.unite, m.departement_id, d.nom AS dept
                   FROM materiels m LEFT JOIN departements d ON d.id = m.departement_id
-                 WHERE LOWER(m.nom) LIKE %s
+                 WHERE (LOWER(m.nom) LIKE %s
                     OR LOWER(COALESCE(m.description, '')) LIKE %s
-                    OR LOWER(COALESCE(m.categorie, '')) LIKE %s
+                    OR LOWER(COALESCE(m.categorie, '')) LIKE %s)
+                   AND {department_scope}
                  ORDER BY m.nom LIMIT %s
-            """, [motif, motif, motif, limite_par_categorie + 1])
+            """, [motif, motif, motif] + department_scope_params +
+                  [limite_par_categorie + 1])
             lignes = cur.fetchall()
             ajouter('materiel', 'Matériels', 'box', [{
                 'titre': r['nom'],
@@ -1692,17 +1918,18 @@ def recherche_globale(terme, role, limite_par_categorie=5):
 
         # ---- Congés ----
         if _recherche_autorise('conge', role):
-            cur.execute("""
+            cur.execute(f"""
                 SELECT COUNT(*) OVER() AS _total,
                        c.id, c.type_conge, c.statut, c.date_debut, c.date_fin, c.motif,
                        e.nom, e.prenom
                   FROM conges c JOIN employes e ON c.employe_id = e.id
-                 WHERE LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s
+                 WHERE (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s
                     OR LOWER(COALESCE(c.motif, '')) LIKE %s
                     OR LOWER(COALESCE(c.type_conge, '')) LIKE %s
-                    OR LOWER(COALESCE(c.statut, '')) LIKE %s
+                    OR LOWER(COALESCE(c.statut, '')) LIKE %s)
+                   AND {employee_scope}
                  ORDER BY c.date_debut DESC LIMIT %s
-            """, [motif] * 5 + [limite_par_categorie + 1])
+            """, [motif] * 5 + employee_scope_params + [limite_par_categorie + 1])
             lignes = cur.fetchall()
             ajouter('conge', 'Congés', 'palm', [{
                 'titre': f"{r['prenom']} {r['nom']} — {r.get('type_conge') or 'congé'}",
@@ -1712,13 +1939,15 @@ def recherche_globale(terme, role, limite_par_categorie=5):
 
         # ---- Absences ----
         if _recherche_autorise('absence', role):
-            cur.execute("""
+            cur.execute(f"""
                 SELECT COUNT(*) OVER() AS _total, a.id, a.date, a.motif, e.nom, e.prenom
                   FROM absences a JOIN employes e ON a.employe_id = e.id
-                 WHERE LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s
-                    OR LOWER(COALESCE(a.motif, '')) LIKE %s
+                 WHERE (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s
+                    OR LOWER(COALESCE(a.motif, '')) LIKE %s)
+                   AND {employee_scope}
                  ORDER BY a.date DESC LIMIT %s
-            """, [motif, motif, motif, limite_par_categorie + 1])
+            """, [motif, motif, motif] + employee_scope_params +
+                  [limite_par_categorie + 1])
             lignes = cur.fetchall()
             ajouter('absence', 'Absences', 'user-x', [{
                 'titre': f"{r['prenom']} {r['nom']}",
@@ -1728,14 +1957,16 @@ def recherche_globale(terme, role, limite_par_categorie=5):
 
         # ---- Documents ----
         if _recherche_autorise('document', role):
-            cur.execute("""
+            cur.execute(f"""
                 SELECT COUNT(*) OVER() AS _total, d.id, d.titre, d.nom_fichier, d.description, e.nom, e.prenom
                   FROM documents d LEFT JOIN employes e ON d.employe_id = e.id
-                 WHERE LOWER(d.titre) LIKE %s
+                 WHERE (LOWER(d.titre) LIKE %s
                     OR LOWER(COALESCE(d.description, '')) LIKE %s
-                    OR LOWER(COALESCE(d.nom_fichier, '')) LIKE %s
+                    OR LOWER(COALESCE(d.nom_fichier, '')) LIKE %s)
+                   AND {employee_scope}
                  ORDER BY d.date_upload DESC LIMIT %s
-            """, [motif, motif, motif, limite_par_categorie + 1])
+            """, [motif, motif, motif] + employee_scope_params +
+                  [limite_par_categorie + 1])
             lignes = cur.fetchall()
             ajouter('document', 'Documents', 'file', [{
                 'titre': r['titre'],
@@ -2183,9 +2414,16 @@ def export_presences_pdf():
     cur = get_cursor(conn)
     q = "SELECT p.*, e.nom, e.prenom FROM presences p JOIN employes e ON p.employe_id = e.id "
     params = []
-    if my_only and emp:
-        q += "WHERE p.employe_id = %s "
-        params.append(emp['id'])
+    if my_only:
+        if emp:
+            q += "WHERE p.employe_id = %s "
+            params.append(emp['id'])
+        else:
+            q += "WHERE FALSE "
+    else:
+        scope_where, scope_params = department_scope_sql('e')
+        q += f"WHERE {scope_where} "
+        params.extend(scope_params)
     q += "ORDER BY p.date DESC LIMIT 500"
     cur.execute(q, params)
     data = cur.fetchall()
@@ -2205,9 +2443,16 @@ def export_presences_excel():
     cur = get_cursor(conn)
     q = "SELECT p.*, e.nom, e.prenom FROM presences p JOIN employes e ON p.employe_id = e.id "
     params = []
-    if my_only and emp:
-        q += "WHERE p.employe_id = %s "
-        params.append(emp['id'])
+    if my_only:
+        if emp:
+            q += "WHERE p.employe_id = %s "
+            params.append(emp['id'])
+        else:
+            q += "WHERE FALSE "
+    else:
+        scope_where, scope_params = department_scope_sql('e')
+        q += f"WHERE {scope_where} "
+        params.extend(scope_params)
     q += "ORDER BY p.date DESC LIMIT 800"
     cur.execute(q, params)
     data = cur.fetchall()
@@ -2227,9 +2472,16 @@ def export_conges_pdf():
     cur = get_cursor(conn)
     q = "SELECT c.*, e.nom, e.prenom FROM conges c JOIN employes e ON c.employe_id = e.id "
     params = []
-    if my_only and emp:
-        q += "WHERE c.employe_id = %s "
-        params.append(emp['id'])
+    if my_only:
+        if emp:
+            q += "WHERE c.employe_id = %s "
+            params.append(emp['id'])
+        else:
+            q += "WHERE FALSE "
+    else:
+        scope_where, scope_params = department_scope_sql('e')
+        q += f"WHERE {scope_where} "
+        params.extend(scope_params)
     q += "ORDER BY c.date_demande DESC LIMIT 500"
     cur.execute(q, params)
     data = cur.fetchall()
@@ -2249,9 +2501,16 @@ def export_conges_excel():
     cur = get_cursor(conn)
     q = "SELECT c.*, e.nom, e.prenom FROM conges c JOIN employes e ON c.employe_id = e.id "
     params = []
-    if my_only and emp:
-        q += "WHERE c.employe_id = %s "
-        params.append(emp['id'])
+    if my_only:
+        if emp:
+            q += "WHERE c.employe_id = %s "
+            params.append(emp['id'])
+        else:
+            q += "WHERE FALSE "
+    else:
+        scope_where, scope_params = department_scope_sql('e')
+        q += f"WHERE {scope_where} "
+        params.extend(scope_params)
     q += "ORDER BY c.date_demande DESC"
     cur.execute(q, params)
     data = cur.fetchall()
@@ -2274,36 +2533,21 @@ def dashboard():
     globale.
     """
     with db_cursor() as (conn, cur):
-        role = session.get('role', 'employe')
-        vue_globale = role in ('admin', 'rh')
-        cur.execute("""
-            SELECT e.departement, e.nom, e.prenom
-              FROM users u LEFT JOIN employes e ON e.id = u.employe_id
-             WHERE u.id = %s
-        """, (session.get('user_id'),))
-        rattachement = cur.fetchone() or {}
-        departement = None if vue_globale else (rattachement.get('departement') or '').strip() or None
-        scope_vide = not vue_globale and not departement
+        data_scope = get_department_scope(cur)
+        vue_globale = data_scope['is_global']
+        departement = data_scope.get('department')
+        scope_vide = data_scope['is_empty']
         dashboard_scope = {
-            'is_global': vue_globale,
-            'department': departement,
-            'is_empty': scope_vide,
-            'label': "Toute l'entreprise" if vue_globale else (departement or 'Aucun département rattaché'),
+            **data_scope,
+            'label': "Toute l'entreprise" if vue_globale else
+                     (departement or 'Aucun département rattaché'),
         }
 
         def scope_employe(alias='e'):
-            if vue_globale:
-                return 'TRUE', []
-            if scope_vide:
-                return 'FALSE', []
-            return f"{alias}.departement = %s", [departement]
+            return department_scope_sql(alias, 'departement', cur)
 
         def scope_departement(alias='d'):
-            if vue_globale:
-                return 'TRUE', []
-            if scope_vide:
-                return 'FALSE', []
-            return f"{alias}.nom = %s", [departement]
+            return department_scope_sql(alias, 'nom', cur)
 
         today = date.today()
         annee = today.year
@@ -2634,8 +2878,7 @@ def dashboard():
 def presences():
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute("SELECT p.*, e.nom, e.prenom FROM presences p JOIN employes e ON p.employe_id = e.id ORDER BY p.date DESC LIMIT 60")
-    presences_list = cur.fetchall()
+    scope_where, scope_params = department_scope_sql('e', cur=cur)
 
     today = date.today().strftime('%Y-%m-%d')
     
@@ -2644,8 +2887,8 @@ def presences():
         SELECT p.*, e.nom, e.prenom 
         FROM presences p 
         JOIN employes e ON p.employe_id = e.id 
-        WHERE p.date = %s
-    """, (today,))
+        WHERE p.date = %s AND """ + scope_where,
+        [today] + scope_params)
     presences_today = cur.fetchall()
 
     retards_aujourdhui = []
@@ -2698,8 +2941,8 @@ def presences():
     page = max(1, request.args.get('page', 1, type=int))
     per_page = 10
 
-    where = ""
-    params = []
+    where = f" AND {scope_where}"
+    params = list(scope_params)
     if search:
         where += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
         params += [f"%{search}%", f"%{search}%"]
@@ -2722,7 +2965,8 @@ def presences():
         p['retard_minutes'] = calculer_retard(p['heure_arrivee'])
         p['retard'] = p['retard_minutes'] > 0
 
-    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
+                scope_params)
     employees = cur.fetchall()
     cur.close()
     conn.close()
@@ -2800,8 +3044,10 @@ def add_presence():
             cur.close(); conn.close()
             return redirect(url_for('presences'))
 
-    # GET → formulaire
-    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+    # GET → formulaire limité au département courant
+    scope_where, scope_params = department_scope_sql('e', cur=cur)
+    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
+                scope_params)
     employees = cur.fetchall()
     cur.close(); conn.close()
     return render_template('presence_form.html', employees=employees)
@@ -2824,6 +3070,7 @@ def delete_presence(id):
 def conges():
     conn = get_db()
     cur = get_cursor(conn)
+    scope_where, scope_params = department_scope_sql('e', cur=cur)
 
     search = request.args.get('search', '').strip()
     statut = request.args.get('statut', '').strip()
@@ -2833,8 +3080,8 @@ def conges():
     page = max(1, request.args.get('page', 1, type=int))
     per_page = 10
 
-    where = ""
-    params = []
+    where = f" AND {scope_where}"
+    params = list(scope_params)
     if search:
         where += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
         params += [f"%{search.lower()}%", f"%{search.lower()}%"]
@@ -2855,7 +3102,8 @@ def conges():
     cur.execute(f"SELECT c.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY c.date_demande DESC LIMIT %s OFFSET %s", params + [per_page, offset])
     conges_list = cur.fetchall()
 
-    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
+                scope_params)
     employees = cur.fetchall()
 
     soldes = {}
@@ -2866,7 +3114,10 @@ def conges():
             s['nom'] = f"{emp['prenom']} {emp['nom']}"
             soldes[emp['id']] = s
 
-    cur.execute("SELECT DISTINCT type_conge FROM conges WHERE type_conge IS NOT NULL ORDER BY type_conge")
+    cur.execute(f"""SELECT DISTINCT c.type_conge FROM conges c
+                    JOIN employes e ON e.id = c.employe_id
+                    WHERE c.type_conge IS NOT NULL AND {scope_where}
+                    ORDER BY c.type_conge""", scope_params)
     types = [r['type_conge'] for r in cur.fetchall()]
 
     cur.close()
@@ -2891,6 +3142,7 @@ def add_conge():
     gestionnaire = session.get('role') in ('admin', 'rh', 'manager')
 
     with db_cursor(commit=True) as (conn, cur):
+        scope_where, scope_params = department_scope_sql('e', cur=cur)
         if request.method == 'POST':
             employe_id = request.form.get('employe_id', type=int)
             type_conge = request.form.get('type_conge')
@@ -2912,7 +3164,7 @@ def add_conge():
                 d2 = datetime.strptime(date_fin, '%Y-%m-%d')
                 if d2 < d1:
                     flash("La date de fin ne peut pas être avant la date de début", "danger")
-                    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+                    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
                     return render_template('conge_form.html', employees=cur.fetchall(),
                                            moi=moi, gestionnaire=gestionnaire)
                 nombre_jours = (d2 - d1).days + 1
@@ -2928,7 +3180,7 @@ def add_conge():
                     if nombre_jours > restant:
                         flash("Solde insuffisant : %s jour(s) demandé(s) pour %.1f restant(s) en %s."
                               % (nombre_jours, restant, annee), "danger")
-                        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+                        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
                         return render_template('conge_form.html', employees=cur.fetchall(),
                                                moi=moi, gestionnaire=gestionnaire)
 
@@ -2966,7 +3218,7 @@ def add_conge():
             else:
                 flash("Veuillez remplir tous les champs obligatoires", "danger")
 
-        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
         employees = cur.fetchall()
     return render_template('conge_form.html', employees=employees,
                            moi=moi, gestionnaire=gestionnaire)
@@ -3183,7 +3435,8 @@ def _dates_couvertes(cur, employe_id):
     return couverts
 
 
-def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None):
+def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None,
+                                  departement=None):
     """Enregistre automatiquement dans `absences` chaque jour ouvré passé SANS
     présence (et non couvert par un congé/permission approuvé) = « tout jour où
     l'employé n'a pas de présence ».
@@ -3209,7 +3462,11 @@ def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None):
     fin_globale = _to_date(date_jusqua)
     debut_global = _to_date(date_depuis)
 
-    cur.execute("SELECT id, date_embauche FROM employes ORDER BY id")
+    if departement is None:
+        cur.execute("SELECT id, date_embauche FROM employes ORDER BY id")
+    else:
+        cur.execute("""SELECT id, date_embauche FROM employes
+                       WHERE departement = %s ORDER BY id""", (departement,))
     employes = cur.fetchall()
 
     nb_creees = 0
@@ -3640,6 +3897,9 @@ def absences():
         where += " AND a.statut = %s"; params.append(statut)
 
     with db_cursor() as (conn, cur):
+        scope_where, scope_params = department_scope_sql('e', cur=cur)
+        where += f" AND {scope_where}"
+        params += scope_params
         from_ = "absences a JOIN employes e ON a.employe_id = e.id"
         cur.execute(f"SELECT COUNT(*) AS nb FROM {from_} WHERE 1=1{where}", params)
         total = cur.fetchone()['nb']
@@ -3647,7 +3907,8 @@ def absences():
         offset = (pg['page'] - 1) * per_page
         cur.execute(f"SELECT a.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY a.date DESC LIMIT %s OFFSET %s", params + [per_page, offset])
         absences_list = cur.fetchall()
-        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
+                    scope_params)
         employees = cur.fetchall()
     filters = {'search': search, 'employe_id': employe_id, 'date_debut': date_debut,
                'date_fin': date_fin, 'statut': statut}
@@ -3685,7 +3946,9 @@ def add_absence():
             return redirect(url_for('absences'))
         flash("Employé et date requis", "danger")
     with db_cursor() as (conn, cur):
-        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        scope_where, scope_params = department_scope_sql('e', cur=cur)
+        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
+                    scope_params)
         employees = cur.fetchall()
     return render_template('absence_form.html', employees=employees)
 
@@ -3720,7 +3983,14 @@ def synchroniser_absences():
     """Recalcule explicitement toutes les absences (depuis la date d'embauche
     jusqu'à la veille) et renvoie le nombre d'absences nouvellement créées."""
     with db_cursor(commit=True) as (conn, cur):
-        nb = generer_absences_automatiques(cur)
+        scope = get_department_scope(cur)
+        if scope['is_global']:
+            nb = generer_absences_automatiques(cur)
+        elif scope['is_empty']:
+            nb = 0
+        else:
+            nb = generer_absences_automatiques(cur,
+                                               departement=scope['department'])
     if nb > 0:
         flash(f"{nb} absence(s) générée(s) automatiquement.", "success")
     else:
@@ -3755,6 +4025,9 @@ def permissions():
         where += " AND p.date_fin <= %s"; params.append(date_fin)
 
     with db_cursor() as (conn, cur):
+        scope_where, scope_params = department_scope_sql('e', cur=cur)
+        where += f" AND {scope_where}"
+        params += scope_params
         from_ = "permissions p JOIN employes e ON p.employe_id = e.id"
         cur.execute(f"SELECT COUNT(*) AS nb FROM {from_} WHERE 1=1{where}", params)
         total = cur.fetchone()['nb']
@@ -3762,7 +4035,8 @@ def permissions():
         offset = (pg['page'] - 1) * per_page
         cur.execute(f"SELECT p.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY p.date_demande DESC LIMIT %s OFFSET %s", params + [per_page, offset])
         permissions_list = cur.fetchall()
-        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
+                    scope_params)
         employees = cur.fetchall()
     filters = {'search': search, 'statut': statut, 'date_debut': date_debut, 'date_fin': date_fin}
     return render_template('permissions.html', permissions=permissions_list, employees=employees, filters=filters,
@@ -3780,6 +4054,7 @@ def add_permission():
     gestionnaire = session.get('role') in ('admin', 'rh', 'manager')
 
     with db_cursor(commit=True) as (conn, cur):
+        scope_where, scope_params = department_scope_sql('e', cur=cur)
         if request.method == 'POST':
             employe_id = request.form.get('employe_id', type=int)
             date_debut = request.form.get('date_debut')
@@ -3798,7 +4073,7 @@ def add_permission():
                 d2 = datetime.strptime(date_fin, '%Y-%m-%d')
                 if d2 < d1:
                     flash("La date de fin ne peut pas être avant la date de début", "danger")
-                    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+                    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
                     return render_template('permission_form.html', employees=cur.fetchall(),
                                            moi=moi, gestionnaire=gestionnaire)
                 nombre_jours = (d2 - d1).days + 1
@@ -3833,7 +4108,7 @@ def add_permission():
                 return redirect(url_for('self_service_conges') if not gestionnaire
                                 else url_for('permissions'))
             flash("Veuillez remplir tous les champs obligatoires", "danger")
-        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom")
+        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
         employees = cur.fetchall()
     return render_template('permission_form.html', employees=employees,
                            moi=moi, gestionnaire=gestionnaire)
@@ -4001,7 +4276,9 @@ def soldes_conges_page():
     annee = request.args.get('annee', type=int) or datetime.now().year
 
     with db_cursor(commit=True) as (conn, cur):
-        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
+        scope_where, scope_params = department_scope_sql('e', cur=cur)
+        cur.execute(f"""SELECT id, nom, prenom FROM employes e
+                        WHERE {scope_where} ORDER BY nom, prenom""", scope_params)
         employees = cur.fetchall()
         for emp in employees:
             recalculer_solde(emp['id'], annee, cur=cur)
@@ -4080,6 +4357,7 @@ def mark_notifications_read():
 def index():
     conn = get_db()
     cur = get_cursor(conn)
+    scope_where, scope_params = department_scope_sql('e', cur=cur)
 
     search = request.args.get('search', '').strip()
     selected_dept = request.args.get('departement', '').strip()
@@ -4088,21 +4366,21 @@ def index():
     page = max(1, request.args.get('page', 1, type=int))
     per_page = 10
 
-    where = ""
-    params = []
+    where = f" AND {scope_where}"
+    params = list(scope_params)
     if search:
-        where += " AND (LOWER(nom) LIKE %s OR LOWER(prenom) LIKE %s OR LOWER(poste) LIKE %s OR LOWER(email) LIKE %s)"
+        where += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s OR LOWER(e.poste) LIKE %s OR LOWER(e.email) LIKE %s)"
         s = f"%{search.lower()}%"
         params += [s, s, s, s]
     if selected_dept:
-        where += " AND departement = %s"; params.append(selected_dept)
+        where += " AND e.departement = %s"; params.append(selected_dept)
 
-    sort_map = {'nom': 'nom, prenom', 'salaire': 'COALESCE(salaire, 0)', 'date_embauche': 'date_embauche', 'poste': 'poste'}
+    sort_map = {'nom': 'e.nom, e.prenom', 'salaire': 'COALESCE(e.salaire, 0)', 'date_embauche': 'e.date_embauche', 'poste': 'e.poste'}
     sort_col = sort_map.get(sort, 'nom, prenom')
     direction = 'DESC' if order.lower() == 'desc' else 'ASC'
     order_clause = f" ORDER BY {sort_col} {direction}"
 
-    cur.execute(f"SELECT COUNT(*) AS nb FROM employes WHERE 1=1{where}", params)
+    cur.execute(f"SELECT COUNT(*) AS nb FROM employes e WHERE 1=1{where}", params)
     total = cur.fetchone()['nb']
     pg = pagination_info(total, page, per_page)
     offset = (pg['page'] - 1) * per_page
@@ -4135,16 +4413,16 @@ def index():
         else:
             emp['last_presence'] = None
 
-    cur.execute("SELECT DISTINCT nom FROM departements ORDER BY nom")
+    dept_where, dept_params = department_scope_sql('d', 'nom', cur)
+    cur.execute(f"SELECT DISTINCT d.nom FROM departements d WHERE {dept_where} ORDER BY d.nom",
+                dept_params)
     depts = cur.fetchall()
 
-    cur.execute("""
-        SELECT
-            COUNT(*) as total,
-            COALESCE(AVG(salaire), 0) as salaire_moyen,
-            (SELECT COUNT(*) FROM departements) as nb_departements
-        FROM employes
-    """)
+    cur.execute(f"""
+        SELECT COUNT(*) as total, COALESCE(AVG(e.salaire), 0) as salaire_moyen,
+               COUNT(DISTINCT e.departement) as nb_departements
+        FROM employes e WHERE {scope_where}
+    """, scope_params)
     stats = cur.fetchone()
     stats = dict(stats) if stats else {'total': 0, 'salaire_moyen': 0, 'nb_departements': 0}
 
@@ -4326,6 +4604,7 @@ def delete_employee(id):
 def rapports():
     conn = get_db()
     cur = get_cursor(conn)
+    scope_where, scope_params = department_scope_sql('e', cur=cur)
     
     # Filters
     date_debut = request.args.get('date_debut', '')
@@ -4334,7 +4613,8 @@ def rapports():
     type_rapport = request.args.get('type', 'presences')
     statut = request.args.get('statut', '')
     
-    cur.execute("SELECT id, prenom, nom FROM employes ORDER BY nom, prenom")
+    cur.execute(f"SELECT id, prenom, nom FROM employes e WHERE {scope_where} ORDER BY nom, prenom",
+                scope_params)
     employees = cur.fetchall()
     
     presences_data = []
@@ -4342,9 +4622,9 @@ def rapports():
     total_jours = 0
     
     if type_rapport == 'presences':
-        q = """SELECT p.*, e.nom, e.prenom FROM presences p 
-               JOIN employes e ON p.employe_id = e.id WHERE 1=1 """
-        params = []
+        q = f"""SELECT p.*, e.nom, e.prenom FROM presences p
+               JOIN employes e ON p.employe_id = e.id WHERE {scope_where} """
+        params = list(scope_params)
         if date_debut:
             q += " AND p.date >= %s"
             params.append(date_debut)
@@ -4360,9 +4640,9 @@ def rapports():
         for p in presences_data:
             p['retard_minutes'] = calculer_retard(p['heure_arrivee'])
     else:
-        q = """SELECT c.*, e.nom, e.prenom FROM conges c 
-               JOIN employes e ON c.employe_id = e.id WHERE 1=1 """
-        params = []
+        q = f"""SELECT c.*, e.nom, e.prenom FROM conges c
+               JOIN employes e ON c.employe_id = e.id WHERE {scope_where} """
+        params = list(scope_params)
         if date_debut:
             q += " AND c.date_debut >= %s"
             params.append(date_debut)
@@ -4449,6 +4729,15 @@ def documents():
     emp = get_current_employee()
     conn = get_db()
     cur = get_cursor(conn)
+    employee_scope, employee_scope_params = department_scope_sql('e', cur=cur)
+    if session.get('role') in GLOBAL_DATA_ROLES:
+        document_scope, document_scope_params = 'TRUE', []
+    elif session.get('role') == 'manager':
+        document_scope, document_scope_params = employee_scope, employee_scope_params
+    elif emp:
+        document_scope, document_scope_params = 'd.employe_id = %s', [emp['id']]
+    else:
+        document_scope, document_scope_params = 'FALSE', []
     
     if request.method == 'POST':
         titre = request.form.get('titre', '').strip()
@@ -4459,16 +4748,18 @@ def documents():
         ok, message = _traiter_upload_document(conn, cur, employe_id, titre, description, date_expiration)
         flash(message, 'success' if ok else 'danger')
     
-    # List documents
-    cur.execute("SELECT id, prenom, nom FROM employes ORDER BY nom")
+    # Liste des employés et documents dans la portée autorisée.
+    cur.execute(f"SELECT id, prenom, nom FROM employes e WHERE {employee_scope} ORDER BY nom",
+                employee_scope_params)
     employees = cur.fetchall()
     
-    cur.execute("""
-        SELECT d.*, e.prenom, e.nom 
-        FROM documents d 
-        LEFT JOIN employes e ON d.employe_id = e.id 
+    cur.execute(f"""
+        SELECT d.*, e.prenom, e.nom
+        FROM documents d
+        LEFT JOIN employes e ON d.employe_id = e.id
+        WHERE {document_scope}
         ORDER BY d.date_upload DESC LIMIT 80
-    """)
+    """, document_scope_params)
     docs = cur.fetchall()
     
     cur.close(); conn.close()
@@ -4571,6 +4862,7 @@ def download_document(doc_id):
 def historique():
     conn = get_db()
     cur = get_cursor(conn)
+    scope_where, scope_params = department_scope_sql('e', cur=cur)
 
     selected_employe = request.args.get('employe_id', '').strip()
     date_debut = request.args.get('date_debut', '').strip()
@@ -4579,8 +4871,8 @@ def historique():
     page = max(1, request.args.get('page', 1, type=int))
     per_page = 10
 
-    where = ""
-    params = []
+    where = f" AND {scope_where}"
+    params = list(scope_params)
     if selected_employe and selected_employe.isdigit():
         where += " AND p.employe_id = %s"; params.append(int(selected_employe))
     if date_debut:
@@ -4628,7 +4920,8 @@ def historique():
     offset = (pg['page'] - 1) * per_page
     presences_list = all_presences[offset:offset + per_page]
 
-    cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
+    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom, prenom",
+                scope_params)
     employees = cur.fetchall()
     cur.close()
     conn.close()
@@ -4645,27 +4938,31 @@ def historique():
 def departements():
     conn = get_db()
     cur = get_cursor(conn)
+    dept_scope, dept_params = department_scope_sql('d', 'nom', cur)
+    emp_scope, emp_params = department_scope_sql('e', 'departement', cur)
     
     # Get departments with employee count
-    cur.execute("""
+    cur.execute(f"""
         SELECT 
             d.id, 
             d.nom, 
             COALESCE(d.description, '') as description, 
             COALESCE(d.responsable, '') as responsable, 
             COUNT(e.id) as nb_employes 
-        FROM departements d 
-        LEFT JOIN employes e ON e.departement = d.nom 
-        GROUP BY d.id, d.nom, d.description, d.responsable 
+        FROM departements d
+        LEFT JOIN employes e ON e.departement = d.nom
+        WHERE {dept_scope}
+        GROUP BY d.id, d.nom, d.description, d.responsable
         ORDER BY d.nom
-    """)
+    """, dept_params)
     departements = cur.fetchall()
     
-    # Get totals
-    cur.execute("SELECT COUNT(*) as total FROM departements")
+    # Get totals dans la même portée
+    cur.execute(f"SELECT COUNT(*) as total FROM departements d WHERE {dept_scope}",
+                dept_params)
     total_depts = cur.fetchone()['total'] or 0
     
-    cur.execute("SELECT COUNT(*) as total FROM employes")
+    cur.execute(f"SELECT COUNT(*) as total FROM employes e WHERE {emp_scope}", emp_params)
     total_employes = cur.fetchone()['total'] or 0
     
     cur.close()
@@ -5150,15 +5447,17 @@ def calendrier_conges():
 
     conn = get_db()
     cur = get_cursor(conn)
-    cur.execute("""
+    scope_where, scope_params = department_scope_sql('e', cur=cur)
+    cur.execute(f"""
         SELECT c.date_debut, c.date_fin, c.nombre_jours, c.statut,
                e.prenom, e.nom
         FROM conges c
         JOIN employes e ON c.employe_id = e.id
         WHERE c.statut = 'approuvé'
           AND EXTRACT(YEAR FROM c.date_debut) = %s
+          AND {scope_where}
         ORDER BY c.date_debut
-    """, (annee,))
+    """, [annee] + scope_params)
     conges = cur.fetchall()
     cur.close(); conn.close()
 
@@ -5360,14 +5659,14 @@ def _est_pilote_maintenance():
     return session.get('role') in MAINTENANCE_PILOTES
 
 
-def _notifier_pilotes(cur, titre, message, type_='warning', sauf=None):
-    """Prévient les gestionnaires du parc (admin/rh/manager).
-
-    Les notifications ne doivent jamais faire échouer l'action métier : on
-    récupère les destinataires dans la transaction courante, mais l'insertion
-    passe par create_notification, qui avale ses propres erreurs.
-    """
-    cur.execute("SELECT id FROM users WHERE role IN %s", (MAINTENANCE_PILOTES,))
+def _notifier_pilotes(cur, titre, message, type_='warning', sauf=None,
+                     departement=None):
+    """Prévient admin/RH et uniquement les managers du département concerné."""
+    cur.execute("""
+        SELECT u.id FROM users u LEFT JOIN employes e ON e.id=u.employe_id
+         WHERE u.role IN ('admin','rh')
+            OR (u.role='manager' AND e.departement=%s)
+    """, (departement,))
     for row in cur.fetchall():
         if sauf and row['id'] == sauf:
             continue
@@ -5426,7 +5725,11 @@ def _notifier_stock_bas(cur, materiel_id):
         en_alerte = m['quantite'] <= m['seuil_alerte']
 
         if en_alerte and not m['alerte_envoyee']:
-            cur.execute("SELECT id FROM users WHERE role IN ('admin', 'rh', 'manager')")
+            cur.execute("""SELECT u.id FROM users u
+                           LEFT JOIN employes e ON e.id=u.employe_id
+                           WHERE u.role IN ('admin','rh')
+                              OR (u.role='manager' AND e.departement=%s)""",
+                        (m['dept'],))
             for u in cur.fetchall():
                 create_notification(
                     u['id'],
@@ -5499,10 +5802,14 @@ def materiels():
         where.append("m.seuil_alerte > 0 AND m.quantite <= m.seuil_alerte")
     elif etat == 'rupture':
         where.append("m.quantite = 0")
-    clause = ("WHERE " + " AND ".join(where)) if where else ""
-
     with db_cursor() as (conn, cur):
-        cur.execute(f"SELECT COUNT(*) AS total FROM materiels m {clause}", params)
+        dept_scope, dept_params = department_scope_sql('d', 'nom', cur)
+        where.append(dept_scope)
+        params.extend(dept_params)
+        clause = "WHERE " + " AND ".join(where)
+        cur.execute(f"""SELECT COUNT(*) AS total FROM materiels m
+                        LEFT JOIN departements d ON d.id = m.departement_id
+                        {clause}""", params)
         total = cur.fetchone()['total'] or 0
         pag = pagination_info(total, page, per_page)
 
@@ -5521,16 +5828,18 @@ def materiels():
         """, params + [per_page, (pag['page'] - 1) * per_page])
         liste = cur.fetchall()
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT COUNT(*) AS nb_articles,
-                   COALESCE(SUM(quantite), 0) AS stock_total,
-                   COUNT(*) FILTER (WHERE seuil_alerte > 0 AND quantite <= seuil_alerte) AS nb_alertes,
-                   COUNT(*) FILTER (WHERE quantite = 0) AS nb_ruptures
-            FROM materiels
-        """)
+                   COALESCE(SUM(m.quantite), 0) AS stock_total,
+                   COUNT(*) FILTER (WHERE m.seuil_alerte > 0 AND m.quantite <= m.seuil_alerte) AS nb_alertes,
+                   COUNT(*) FILTER (WHERE m.quantite = 0) AS nb_ruptures
+            FROM materiels m LEFT JOIN departements d ON d.id = m.departement_id
+            WHERE {dept_scope}
+        """, dept_params)
         stats = cur.fetchone()
 
-        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        cur.execute(f"SELECT d.id, d.nom FROM departements d WHERE {dept_scope} ORDER BY d.nom",
+                    dept_params)
         depts = cur.fetchall()
 
     filters = {'search': search, 'departement': dept_id or '',
@@ -5607,7 +5916,9 @@ def add_materiel():
                 flash(f"Erreur : {e}", "danger")
 
     with db_cursor() as (conn, cur):
-        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        dept_scope, dept_params = department_scope_sql('d', 'nom', cur)
+        cur.execute(f"SELECT d.id, d.nom FROM departements d WHERE {dept_scope} ORDER BY d.nom",
+                    dept_params)
         depts = cur.fetchall()
     return render_template('materiel_form.html', materiel=None, departements=depts,
                            categories=MATERIEL_CATEGORIES, title="Nouveau matériel")
@@ -5620,7 +5931,9 @@ def edit_materiel(id):
     with db_cursor() as (conn, cur):
         cur.execute("SELECT * FROM materiels WHERE id = %s", (id,))
         materiel = cur.fetchone()
-        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        dept_scope, dept_params = department_scope_sql('d', 'nom', cur)
+        cur.execute(f"SELECT d.id, d.nom FROM departements d WHERE {dept_scope} ORDER BY d.nom",
+                    dept_params)
         depts = cur.fetchall()
 
     if not materiel:
@@ -5684,41 +5997,44 @@ def view_materiel(id):
         if not materiel:
             flash("Matériel introuvable", "danger")
             return redirect(url_for('materiels'))
+        emp_scope, emp_params = department_scope_sql('e', 'departement', cur)
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT mv.*, e.nom AS emp_nom, e.prenom AS emp_prenom
             FROM materiels_mouvements mv
-            LEFT JOIN employes e ON e.id = mv.employe_id
+            LEFT JOIN employes e ON e.id = mv.employe_id AND {emp_scope}
             WHERE mv.materiel_id = %s
             ORDER BY mv.date_mouvement DESC, mv.id DESC
             LIMIT 50
-        """, (id,))
+        """, emp_params + [id])
         mouvements = cur.fetchall()
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT a.*, e.nom AS emp_nom, e.prenom AS emp_prenom
             FROM materiels_attributions a
             JOIN employes e ON e.id = a.employe_id
-            WHERE a.materiel_id = %s
+            WHERE a.materiel_id = %s AND {emp_scope}
             ORDER BY a.date_retour NULLS FIRST, a.date_attribution DESC
-        """, (id,))
+        """, [id] + emp_params)
         attributions = cur.fetchall()
 
-        # Employés du même département en priorité pour l'attribution.
-        cur.execute("""
+        # Employés visibles dans la portée courante.
+        cur.execute(f"""
             SELECT e.id, e.nom, e.prenom
             FROM employes e
             LEFT JOIN departements d ON d.nom = e.departement
+            WHERE {emp_scope}
             ORDER BY (d.id = %s) DESC NULLS LAST, e.nom, e.prenom
-        """, (materiel['departement_id'],))
+        """, emp_params + [materiel['departement_id']])
         employes = cur.fetchall()
 
         # Exemplaires numérotés (gestion de parc) et leur intervention en cours.
-        cur.execute("""
+        cur.execute(f"""
             SELECT ex.*, emp.nom AS emp_nom, emp.prenom AS emp_prenom,
                    mt.id AS maintenance_id, mt.statut AS maintenance_statut
             FROM materiel_exemplaires ex
-            LEFT JOIN employes emp ON emp.id = ex.employe_id
+            LEFT JOIN employes emp ON emp.id = ex.employe_id AND
+                 {emp_scope.replace('e.', 'emp.')}
             LEFT JOIN LATERAL (
                 SELECT id, statut FROM materiel_maintenances
                 WHERE exemplaire_id = ex.id AND statut IN %s
@@ -5726,7 +6042,7 @@ def view_materiel(id):
             ) mt ON TRUE
             WHERE ex.materiel_id = %s
             ORDER BY ex.numero_inventaire
-        """, (MAINTENANCE_OUVERTS, id))
+        """, emp_params + [MAINTENANCE_OUVERTS, id])
         exemplaires = cur.fetchall()
 
         cur.execute("""
@@ -6048,10 +6364,14 @@ def inventaires():
     if dept_id:
         where.append("i.departement_id = %s")
         params.append(dept_id)
-    clause = ("WHERE " + " AND ".join(where)) if where else ""
-
     with db_cursor() as (conn, cur):
-        cur.execute(f"SELECT COUNT(*) AS n FROM inventaires i {clause}", params)
+        dept_scope, dept_params = department_scope_sql('d', 'nom', cur)
+        where.append(dept_scope)
+        params.extend(dept_params)
+        clause = "WHERE " + " AND ".join(where)
+        cur.execute(f"""SELECT COUNT(*) AS n FROM inventaires i
+                        LEFT JOIN departements d ON d.id = i.departement_id
+                        {clause}""", params)
         total = cur.fetchone()['n']
         cur.execute(f"""
             SELECT i.*, d.nom AS departement_nom,
@@ -6069,14 +6389,16 @@ def inventaires():
         """, params + [per_page, (page - 1) * per_page])
         campagnes = cur.fetchall()
 
-        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        cur.execute(f"SELECT d.id, d.nom FROM departements d WHERE {dept_scope} ORDER BY d.nom",
+                    dept_params)
         departements = cur.fetchall()
-        cur.execute("""
-            SELECT COUNT(*) FILTER (WHERE statut = 'en_cours') AS en_cours,
-                   COUNT(*) FILTER (WHERE statut = 'cloture')  AS clotures,
-                   COUNT(*)                                    AS total
-            FROM inventaires
-        """)
+        cur.execute(f"""
+            SELECT COUNT(*) FILTER (WHERE i.statut = 'en_cours') AS en_cours,
+                   COUNT(*) FILTER (WHERE i.statut = 'cloture')  AS clotures,
+                   COUNT(*)                                      AS total
+            FROM inventaires i LEFT JOIN departements d ON d.id = i.departement_id
+            WHERE {dept_scope}
+        """, dept_params)
         stats = cur.fetchone()
 
     pg = pagination_info(total, page, per_page)
@@ -6097,7 +6419,9 @@ def add_inventaire():
     """Ouvre une campagne : fige la liste des articles du département et leur
     stock théorique à cet instant."""
     with db_cursor() as (conn, cur):
-        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        dept_scope, dept_params = department_scope_sql('d', 'nom', cur)
+        cur.execute(f"SELECT d.id, d.nom FROM departements d WHERE {dept_scope} ORDER BY d.nom",
+                    dept_params)
         departements = cur.fetchall()
 
     if request.method == 'POST':
@@ -6351,17 +6675,18 @@ def annuler_inventaire(id):
 # =============================================================================
 
 def _exemplaire_complet(cur, exemplaire_id):
-    """Exemplaire enrichi de son article, département et détenteur."""
-    cur.execute("""
+    """Exemplaire enrichi sans révéler un détenteur hors département."""
+    emp_scope, emp_params = department_scope_sql('emp', 'departement', cur)
+    cur.execute(f"""
         SELECT e.*, m.nom AS materiel_nom, m.categorie, m.marque, m.modele,
                m.id AS materiel_id, d.nom AS departement_nom,
                emp.nom AS emp_nom, emp.prenom AS emp_prenom
         FROM materiel_exemplaires e
         JOIN materiels m ON m.id = e.materiel_id
         LEFT JOIN departements d ON d.id = m.departement_id
-        LEFT JOIN employes emp ON emp.id = e.employe_id
+        LEFT JOIN employes emp ON emp.id = e.employe_id AND {emp_scope}
         WHERE e.id = %s
-    """, (exemplaire_id,))
+    """, emp_params + [exemplaire_id])
     return cur.fetchone()
 
 
@@ -6447,22 +6772,27 @@ def view_exemplaire(id):
         """, (id,))
         stats = cur.fetchone()
 
-        cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
+        emp_scope, emp_params = department_scope_sql('e', 'departement', cur)
+        cur.execute(f"""SELECT id, nom, prenom FROM employes e
+                        WHERE {emp_scope} ORDER BY nom, prenom""", emp_params)
         employes = cur.fetchall()
 
-        # Cibles d'assignation : les techniciens d'abord, puis les autres
-        # comptes susceptibles de dépanner (informaticiens sans rôle dédié).
-        cur.execute("""
+        # Cibles d'assignation limitées au même département.
+        cur.execute(f"""
             SELECT u.id, u.username, u.role,
                    TRIM(COALESCE(e.prenom,'') || ' ' || COALESCE(e.nom,'')) AS nom_complet
               FROM users u
               LEFT JOIN employes e ON e.id = u.employe_id
+             WHERE {emp_scope}
              ORDER BY CASE u.role WHEN 'technicien' THEN 0 ELSE 1 END, u.username
-        """)
+        """, emp_params)
         assignables = cur.fetchall()
-        cur.execute("""SELECT id, nom, specialite FROM prestataires
-                       WHERE actif ORDER BY nom""")
-        prestataires = cur.fetchall()
+        if get_department_scope(cur)['is_global']:
+            cur.execute("""SELECT id, nom, specialite FROM prestataires
+                           WHERE actif ORDER BY nom""")
+            prestataires = cur.fetchall()
+        else:
+            prestataires = []
 
         # Droits sur l'intervention en cours, s'il y en a une.
         ouverte = next((m for m in maintenances if m['statut'] in MAINTENANCE_OUVERTS), None)
@@ -6592,16 +6922,19 @@ def signaler_panne(id):
 
             # Étape 1 du workflow : prévenir les gestionnaires qu'il y a une
             # intervention à assigner.
-            cur.execute("""SELECT ex.numero_inventaire, m.nom
+            cur.execute("""SELECT ex.numero_inventaire, m.nom,
+                                  d.nom AS departement_nom
                            FROM materiel_exemplaires ex
                            JOIN materiels m ON m.id = ex.materiel_id
+                           LEFT JOIN departements d ON d.id=m.departement_id
                            WHERE ex.id = %s""", (id,))
             info = cur.fetchone()
             _notifier_pilotes(
                 cur, "Panne signalée : %s" % info['numero_inventaire'],
                 "%s — %s (signalé par %s). À assigner."
                 % (info['nom'], panne[:120], session.get('username')),
-                'warning', sauf=session.get('user_id'))
+                'warning', sauf=session.get('user_id'),
+                departement=info.get('departement_nom'))
 
         log_action(session.get('user_id'), session.get('username'),
                    "Signalement panne", "exemplaire", id, panne[:120])
@@ -6625,6 +6958,8 @@ def assigner_maintenance(id):
     cible = (request.form.get('cible') or '').strip()   # 'interne' | 'externe'
     user_id = request.form.get('assigne_user_id', type=int)
     prestataire_id = request.form.get('prestataire_id', type=int)
+    if cible == 'externe' and session.get('role') not in GLOBAL_DATA_ROLES:
+        return _department_access_denied()
 
     try:
         with db_cursor(commit=True) as (conn, cur):
@@ -6670,9 +7005,11 @@ def assigner_maintenance(id):
                         (technicien, user_id, prestataire_id,
                          session.get('username'), id))
 
-            cur.execute("""SELECT ex.numero_inventaire, m.nom
+            cur.execute("""SELECT ex.numero_inventaire, m.nom,
+                                  d.nom AS departement_nom
                            FROM materiel_exemplaires ex
                            JOIN materiels m ON m.id = ex.materiel_id
+                           LEFT JOIN departements d ON d.id=m.departement_id
                            WHERE ex.id = %s""", (mt['exemplaire_id'],))
             info = cur.fetchone()
             if user_id:
@@ -6805,9 +7142,11 @@ def cloturer_maintenance(id):
             cur.execute("UPDATE materiel_exemplaires SET etat = %s WHERE id = %s",
                         (etat, mt['exemplaire_id']))
 
-            cur.execute("""SELECT ex.numero_inventaire, m.nom
+            cur.execute("""SELECT ex.numero_inventaire, m.nom,
+                                  d.nom AS departement_nom
                            FROM materiel_exemplaires ex
                            JOIN materiels m ON m.id = ex.materiel_id
+                           LEFT JOIN departements d ON d.id=m.departement_id
                            WHERE ex.id = %s""", (mt['exemplaire_id'],))
             info = cur.fetchone()
             if resultat == 'repare' and mt.get('signale_par_id'):
@@ -6828,7 +7167,8 @@ def cloturer_maintenance(id):
                 _notifier_pilotes(
                     cur, "Mise au rebut : %s" % info['numero_inventaire'],
                     "%s déclaré irréparable par %s." % (info['nom'], session.get('username')),
-                    'danger', sauf=session.get('user_id'))
+                    'danger', sauf=session.get('user_id'),
+                    departement=info.get('departement_nom'))
 
         log_action(session.get('user_id'), session.get('username'),
                    "Retour d'intervention", "maintenance", id,
@@ -6879,9 +7219,11 @@ def valider_maintenance(id):
                     flash("Seul le demandeur peut valider ce retour.", "danger")
                     return redirect(url_for('view_exemplaire', id=mt['exemplaire_id']))
 
-            cur.execute("""SELECT ex.numero_inventaire, m.nom
+            cur.execute("""SELECT ex.numero_inventaire, m.nom,
+                                  d.nom AS departement_nom
                            FROM materiel_exemplaires ex
                            JOIN materiels m ON m.id = ex.materiel_id
+                           LEFT JOIN departements d ON d.id=m.departement_id
                            WHERE ex.id = %s""", (mt['exemplaire_id'],))
             info = cur.fetchone()
 
@@ -6898,7 +7240,8 @@ def valider_maintenance(id):
                     "%s — retour validé par %s%s."
                     % (info['nom'], session.get('username'),
                        " (clôture forcée)" if forcee else ""),
-                    'success', sauf=session.get('user_id'))
+                    'success', sauf=session.get('user_id'),
+                    departement=info.get('departement_nom'))
                 log_action(session.get('user_id'), session.get('username'),
                            "Validation retour", "maintenance", id,
                            "forcée" if forcee else None)
@@ -6924,7 +7267,8 @@ def valider_maintenance(id):
                     cur, "Retour refusé : %s" % info['numero_inventaire'],
                     "%s — panne non résolue selon %s : %s"
                     % (info['nom'], session.get('username'), motif[:150]),
-                    'danger', sauf=session.get('user_id'))
+                    'danger', sauf=session.get('user_id'),
+                    departement=info.get('departement_nom'))
                 log_action(session.get('user_id'), session.get('username'),
                            "Refus de retour", "maintenance", id, motif[:120])
                 flash("Retour refusé : l'intervention repart en réparation.", "warning")
@@ -6992,13 +7336,16 @@ def maintenances():
     if portee == 'moi':
         where.append("(mt.assigne_user_id = %s OR mt.signale_par_id = %s)")
         params.extend([session.get('user_id'), session.get('user_id')])
-    clause = ("WHERE " + " AND ".join(where)) if where else ""
-
     with db_cursor() as (conn, cur):
+        dept_scope, dept_params = department_scope_sql('d', 'nom', cur)
+        where.append(dept_scope)
+        params.extend(dept_params)
+        clause = "WHERE " + " AND ".join(where)
         cur.execute(f"""
             SELECT COUNT(*) AS n FROM materiel_maintenances mt
             JOIN materiel_exemplaires e ON e.id = mt.exemplaire_id
-            JOIN materiels m ON m.id = e.materiel_id {clause}
+            JOIN materiels m ON m.id = e.materiel_id
+            LEFT JOIN departements d ON d.id = m.departement_id {clause}
         """, params)
         total = cur.fetchone()['n']
 
@@ -7017,28 +7364,37 @@ def maintenances():
         """, params + [per_page, (page - 1) * per_page])
         interventions = cur.fetchall()
 
-        cur.execute("""
-            SELECT COUNT(*) FILTER (WHERE statut = 'signale')     AS signalees,
-                   COUNT(*) FILTER (WHERE statut = 'assigne')     AS assignees,
-                   COUNT(*) FILTER (WHERE statut = 'envoye')      AS en_cours,
-                   COUNT(*) FILTER (WHERE statut = 'a_valider')   AS a_valider,
-                   COUNT(*) FILTER (WHERE statut = 'repare')      AS reparees,
-                   COUNT(*) FILTER (WHERE statut = 'irreparable') AS rebuts,
-                   COALESCE(SUM(cout), 0)                         AS cout_total
-            FROM materiel_maintenances
-        """)
+        cur.execute(f"""
+            SELECT COUNT(*) FILTER (WHERE mt.statut = 'signale')     AS signalees,
+                   COUNT(*) FILTER (WHERE mt.statut = 'assigne')     AS assignees,
+                   COUNT(*) FILTER (WHERE mt.statut = 'envoye')      AS en_cours,
+                   COUNT(*) FILTER (WHERE mt.statut = 'a_valider')   AS a_valider,
+                   COUNT(*) FILTER (WHERE mt.statut = 'repare')      AS reparees,
+                   COUNT(*) FILTER (WHERE mt.statut = 'irreparable') AS rebuts,
+                   COALESCE(SUM(mt.cout), 0)                         AS cout_total
+            FROM materiel_maintenances mt
+            JOIN materiel_exemplaires e ON e.id=mt.exemplaire_id
+            JOIN materiels m ON m.id=e.materiel_id
+            LEFT JOIN departements d ON d.id=m.departement_id
+            WHERE {dept_scope}
+        """, dept_params)
         stats = cur.fetchone()
-        cur.execute("SELECT id, nom FROM departements ORDER BY nom")
+        cur.execute(f"SELECT d.id, d.nom FROM departements d WHERE {dept_scope} ORDER BY d.nom",
+                    dept_params)
         departements = cur.fetchall()
 
-        # Ce que l'utilisateur courant doit traiter personnellement.
-        cur.execute("""
-            SELECT COUNT(*) FILTER (WHERE assigne_user_id = %s
-                                      AND statut IN ('assigne','envoye')) AS a_traiter,
-                   COUNT(*) FILTER (WHERE signale_par_id = %s
-                                      AND statut = 'a_valider')           AS a_valider_moi
-              FROM materiel_maintenances
-        """, (session.get('user_id'), session.get('user_id')))
+        # Ce que l'utilisateur courant doit traiter personnellement, dans sa portée.
+        cur.execute(f"""
+            SELECT COUNT(*) FILTER (WHERE mt.assigne_user_id = %s
+                                      AND mt.statut IN ('assigne','envoye')) AS a_traiter,
+                   COUNT(*) FILTER (WHERE mt.signale_par_id = %s
+                                      AND mt.statut = 'a_valider')           AS a_valider_moi
+              FROM materiel_maintenances mt
+              JOIN materiel_exemplaires e ON e.id=mt.exemplaire_id
+              JOIN materiels m ON m.id=e.materiel_id
+              LEFT JOIN departements d ON d.id=m.departement_id
+             WHERE {dept_scope}
+        """, [session.get('user_id'), session.get('user_id')] + dept_params)
         mes_taches = cur.fetchone()
 
     pg = pagination_info(total, page, per_page)
@@ -7056,7 +7412,7 @@ def maintenances():
 
 @app.route('/prestataires', methods=['GET', 'POST'])
 @login_required
-@role_required('rh', 'manager')
+@role_required('rh')
 def prestataires_page():
     """Annuaire des prestataires externes de réparation."""
     if request.method == 'POST':
@@ -7099,7 +7455,7 @@ def prestataires_page():
 
 @app.route('/prestataires/<int:id>/basculer', methods=['POST'])
 @login_required
-@role_required('rh', 'manager')
+@role_required('rh')
 def basculer_prestataire(id):
     """Active / désactive un prestataire (on ne supprime pas : historique)."""
     try:

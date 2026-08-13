@@ -343,7 +343,7 @@
                         <a href="{{ url_for('maintenances') }}" class="nav-dropdown-link {% if request.endpoint in ['maintenances', 'view_exemplaire'] %}active{% endif %}">
                             {{ icon('wrench', 17) }}<span>Maintenance</span>
                         </a>
-                        {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+                        {% if session.get('role') in ['admin', 'rh'] %}
                         <a href="{{ url_for('prestataires_page') }}" class="nav-dropdown-link {% if request.endpoint == 'prestataires_page' %}active{% endif %}">
                             {{ icon('building', 17) }}<span>Prestataires</span>
                         </a>

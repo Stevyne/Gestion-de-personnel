@@ -61,6 +61,13 @@ def _clean_tables():
         # scénarios de création ne doivent pas polluer les tests suivants.
         cur.execute("DELETE FROM users WHERE id > 4")
         cur.execute("DELETE FROM employes WHERE id > 4")
+        comptes_seed = {
+            1: ('admin', 4), 2: ('rh', 2),
+            3: ('manager', 3), 4: ('employe', 1),
+        }
+        for user_id, (role, employe_id) in comptes_seed.items():
+            cur.execute("UPDATE users SET role=%s, employe_id=%s WHERE id=%s",
+                        (role, employe_id, user_id))
         # Certains tests d'absences déplacent les dates d'embauche. Sans remise
         # à zéro, leur ordre modifiait le résultat des tests de soldes.
         employes_seed = {

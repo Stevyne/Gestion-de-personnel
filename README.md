@@ -108,10 +108,17 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Un **administrateur peut forcer la déconnexion** d'un compte connecté ; la révocation prend effet à la requête suivante et l'action est tracée dans l'audit (`FORCE_LOGOUT`)
 - Purge automatique des sessions de plus de 30 jours (tâche planifiée à 03h00)
 
-### 📊 Tableau de bord cloisonné
-- **Admin et RH** : vue globale de l'entreprise ; **manager, technicien et employé** : uniquement le département de leur fiche employé
-- Un compte non privilégié sans département obtient une vue vide avec avertissement — jamais de repli implicite vers les données globales
-- Le filtre départemental est appliqué côté SQL à chaque indicateur, activité récente et série graphique
+### 🛡️ Cloisonnement départemental de toute l'application
+- **Admin et RH** : portée globale ; **manager, technicien et employé** : uniquement le département de leur fiche employé
+- Politique centrale « refus par défaut » : un compte non privilégié sans département obtient des listes vides et ne peut ouvrir ni modifier aucune ressource départementale
+- Filtrage SQL des listes, tableaux de bord, rapports, calendriers, recherche globale/API, activités récentes et exports PDF/Excel
+- Garde anti-contournement sur les URL de détail et les formulaires forgés : employés, pointages, congés, permissions, absences, documents, matériels, attributions, inventaires, exemplaires, maintenances, QR et avatars
+- Les sélecteurs ne proposent que les employés, comptes et départements autorisés ; les notifications de stock et maintenance ne sont envoyées qu'aux managers concernés, plus admin/RH
+- Les documents conservent une règle plus stricte : employé/technicien = ses propres documents, manager = son département, admin/RH = tous
+- Les prestataires constituent un référentiel global sans département : leur gestion est donc réservée à admin/RH
+- Le rôle est relu en base à chaque requête : une rétrogradation prend effet immédiatement, sans attendre une reconnexion
+
+### 📊 Tableau de bord complet
 - Couverture des modules exploitables : personnel, présences/temps, congés/soldes, permissions, absences/justificatifs, documents, matériels/parc, maintenance et inventaires
 - La vue globale ajoute les statistiques d'accès, sessions, audit, notifications et outbox e-mail
 - Les données salariales et les coûts consolidés restent réservés aux vues admin/RH
