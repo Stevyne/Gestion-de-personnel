@@ -279,9 +279,11 @@
                         <a href="{{ url_for('index') }}" class="nav-dropdown-link {% if request.endpoint == 'index' %}active{% endif %}">
                             {{ icon('users', 17) }}<span>Employés</span>
                         </a>
+                        {% if session.get('role') in ['admin', 'rh', 'manager'] %}
                         <a href="{{ url_for('departements') }}" class="nav-dropdown-link {% if request.endpoint == 'departements' %}active{% endif %}">
                             {{ icon('building', 17) }}<span>Départements</span>
                         </a>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -481,7 +483,9 @@
 
                 <p class="drawer-section">Personnel</p>
                 <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">{{ icon('users') }}<span>Employés</span></a>
+                {%  if session.get('role') in ['admin', 'rh', 'manager'] %}
                 <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">{{ icon('building') }}<span>Départements</span></a>
+                {% endif %}
 
                 <p class="drawer-section">Temps</p>
                 <a href="{{ url_for('presences') }}" class="nav-link {% if request.endpoint == 'presences' %}active{% endif %}">{{ icon('clock') }}<span>Présences</span></a>
