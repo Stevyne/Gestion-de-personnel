@@ -87,6 +87,15 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Rapports avancés avec filtres (`/rapports`)
 - Exports PDF (ReportLab) et Excel (Openpyxl) pour présences et congés
 
+### 💬 Messagerie interne
+- Conversations privées et groupes avec suivi lu/non-lu et badge dans la navigation
+- Pour manager/technicien/employé, le sélecteur et les identifiants forgés sont limités au département courant ; admin/RH peuvent contacter tous les comptes
+- Conversations privées strictement réservées à leurs membres, y compris pour admin/RH ; contrôle identique sur les réponses et les pièces jointes
+- Annonces globales ou ciblées par rôle (`admin`, `rh`, `manager`, `technicien`, `employe`) réservées à admin/RH
+- Pièces jointes validées par extension, taille et magic-bytes, puis stockées en PostgreSQL (`BYTEA`)
+- Notifications internes et e-mails via l'outbox pour les nouveaux messages et les mises à jour d'annonces
+- Limites : 20 000 caractères par message, 200 pour le titre, 8 Mo par pièce jointe
+
 ### 🔔 Notifications et e-mails
 - Notifications persistantes en base, filtrées par `user_id`; badge et page `/notifications`
 - Événements couverts : absences, présences, documents, arrivée d'un employé, congés, permissions, matériel et maintenance
@@ -96,7 +105,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 
 ### 🔐 Sécurité & Rôles
 - Authentification par session (Werkzeug pour le hash des mots de passe)
-- 4 rôles : `admin`, `rh`, `manager`, `employe`
+- 5 rôles : `admin`, `rh`, `manager`, `technicien`, `employe`
 - Self-service pour les employés (`/self-service` ou `/mon-espace`)
 - Logs d'audit (`/audit`, réservé à `admin`/`rh`)
 - Protection CSRF (Flask-WTF), rate limiting (Flask-Limiter), headers de sécurité (Flask-Talisman)
@@ -272,6 +281,7 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 | `/calendrier-conges`               | Calendrier des congés            | Tous                   |
 | `/rapports`                        | Rapports avancés + filtres       | Tous                   |
 | `/documents`                       | Documents                        | Tous                   |
+| `/messages`, `/messages/nouveau`   | Messagerie privée, groupes et annonces | Connecté, portée départementale |
 | `/historique`                      | Historique salaires / embauches  | Tous                   |
 | `/notifications`                   | Centre de notifications          | Tous                   |
 | `/mon-profil`                      | Espace personnel (infos, photo, mot de passe) | Connecté  |

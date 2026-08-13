@@ -21,8 +21,11 @@ from werkzeug.utils import secure_filename
 
 PIECE_JOINTE_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx', 'xls', 'xlsx', 'txt'}
 PIECE_JOINTE_MAX_BYTES = 8 * 1024 * 1024  # 8 Mo, cohérent avec les autres pièces jointes de l'app
+MESSAGE_MAX_CHARS = 20_000
+TITRE_MAX_CHARS = 200
 
-ROLES_VALIDES = ('admin', 'rh', 'manager', 'employe')
+ROLES_VALIDES = ('admin', 'rh', 'manager', 'technicien', 'employe')
+ROLES_GLOBAUX = ('admin', 'rh')
 
 
 def _lire_piece_jointe(fichier, detect_file_type):
@@ -60,6 +63,7 @@ def creer_blueprint_messagerie(deps):
     create_notification = deps['create_notification']
     queue_email = deps['queue_email']
     log_action = deps['log_action']
+    department_scope_sql = deps['department_scope_sql']
 
     # ---------------------------------------------------------------- utils
     def _est_membre(cur, conversation_id, user_id):
@@ -69,13 +73,40 @@ def creer_blueprint_messagerie(deps):
         """, (conversation_id, user_id))
         return cur.fetchone() is not None
 
-    def _peut_voir_annonce(conv, role):
-        return conv['cible_role'] is None or conv['cible_role'] == role
+    def _peut_voir_annonce(conv, role, user_id):
+        # Admin/RH administrent toutes les annonces, y compris celles destinées
+        # à un autre rôle. Le créateur conserve également toujours l'accès.
+        return (role in ROLES_GLOBAUX or conv.get('cree_par') == user_id
+                or conv['cible_role'] is None or conv['cible_role'] == role)
 
     def _peut_acceder(cur, conv, user_id, role):
         if conv['type'] == 'annonce':
-            return _peut_voir_annonce(conv, role)
+            return _peut_voir_annonce(conv, role, user_id)
         return _est_membre(cur, conv['id'], user_id)
+
+    def _ids_destinataires_autorises(cur, valeurs, sender_id):
+        """Valide tous les destinataires, sans ignorer silencieusement les ID
+        invalides ou hors département."""
+        demandes = set()
+        for valeur in valeurs:
+            try:
+                uid = int(valeur)
+            except (TypeError, ValueError):
+                return None
+            if uid == sender_id:
+                return None
+            demandes.add(uid)
+        if not demandes:
+            return []
+
+        scope_sql, scope_params = department_scope_sql('e', 'departement', cur)
+        cur.execute(f"""
+            SELECT u.id FROM users u
+            LEFT JOIN employes e ON e.id = u.employe_id
+            WHERE u.id = ANY(%s) AND u.id != %s AND {scope_sql}
+        """, [list(demandes), sender_id] + scope_params)
+        autorises = {row['id'] for row in cur.fetchall()}
+        return sorted(autorises) if autorises == demandes else None
 
     def _nb_non_lus(cur, user_id, role):
         """Nombre total de conversations (privé/groupe + annonces) avec au
@@ -88,20 +119,22 @@ def creer_blueprint_messagerie(deps):
                 WHERE EXISTS (
                     SELECT 1 FROM messages m
                     WHERE m.conversation_id = c.id
-                      AND m.sender_id != %s
+                      AND m.sender_id IS DISTINCT FROM %s
                       AND (cm.dernier_message_lu_id IS NULL OR m.id > cm.dernier_message_lu_id)
                 )
                 UNION
                 SELECT c.id
                 FROM conversations c
-                WHERE c.type = 'annonce' AND (c.cible_role IS NULL OR c.cible_role = %s)
+                WHERE c.type = 'annonce'
+                  AND (%s IN ('admin','rh') OR c.cree_par = %s
+                       OR c.cible_role IS NULL OR c.cible_role = %s)
                   AND NOT EXISTS (
                       SELECT 1 FROM annonce_lues al
                       WHERE al.conversation_id = c.id AND al.user_id = %s
                   )
                   AND EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id)
             ) t
-        """, (user_id, user_id, role, user_id))
+        """, (user_id, user_id, role, user_id, role, user_id))
         return cur.fetchone()['nb']
 
     # ------------------------------------------------------------- routes
@@ -135,9 +168,11 @@ def creer_blueprint_messagerie(deps):
                        (SELECT MAX(id) FROM messages WHERE conversation_id = c.id) AS dernier_message_id,
                        NULL AS autres_membres
                 FROM conversations c
-                WHERE c.type = 'annonce' AND (c.cible_role IS NULL OR c.cible_role = %s)
+                WHERE c.type = 'annonce'
+                  AND (%s IN ('admin','rh') OR c.cree_par = %s
+                       OR c.cible_role IS NULL OR c.cible_role = %s)
                 ORDER BY date_dernier_message DESC NULLS LAST
-            """, (user_id, user_id, role))
+            """, (user_id, user_id, role, user_id, role))
             conversations = cur.fetchall()
 
             # Lu/non-lu par conversation (annonces : table dédiée, pas de pointeur)
@@ -173,26 +208,42 @@ def creer_blueprint_messagerie(deps):
             contenu = request.form.get('contenu', '').strip()
             destinataires = request.form.getlist('destinataires')  # user_id (str) pour prive/groupe
             cible_role = request.form.get('cible_role', '').strip() or None
+            if len(titre) > TITRE_MAX_CHARS:
+                flash(f"Le titre ne peut pas dépasser {TITRE_MAX_CHARS} caractères.", "danger")
+                return redirect(url_for('messagerie.messagerie_nouveau'))
+            if len(contenu) > MESSAGE_MAX_CHARS:
+                flash(f"Le message ne peut pas dépasser {MESSAGE_MAX_CHARS} caractères.", "danger")
+                return redirect(url_for('messagerie.messagerie_nouveau'))
             if cible_role and cible_role not in ROLES_VALIDES:
-                cible_role = None
+                flash("Rôle destinataire invalide.", "danger")
+                return redirect(url_for('messagerie.messagerie_nouveau'))
 
-            if not contenu:
-                flash("Le message ne peut pas être vide.", "danger")
+            piece, erreur = _lire_piece_jointe(request.files.get('piece_jointe'), detect_file_type)
+            if erreur:
+                flash(erreur, "danger")
+                return redirect(url_for('messagerie.messagerie_nouveau'))
+            if not contenu and not piece:
+                flash("Ajoutez un message ou une pièce jointe.", "danger")
                 return redirect(url_for('messagerie.messagerie_nouveau'))
 
             if type_conv in ('prive', 'groupe') and not destinataires:
                 flash("Choisissez au moins un destinataire.", "danger")
                 return redirect(url_for('messagerie.messagerie_nouveau'))
 
-            if type_conv == 'prive' and len(destinataires) > 1:
-                type_conv = 'groupe'  # plusieurs destinataires = groupe, même sans le demander explicitement
-
-            piece, erreur = _lire_piece_jointe(request.files.get('piece_jointe'), detect_file_type)
-            if erreur:
-                flash(erreur, "danger")
-                return redirect(url_for('messagerie.messagerie_nouveau'))
-
             with db_cursor(commit=True) as (conn, cur):
+                membres_ids = [session['user_id']]
+                if type_conv in ('prive', 'groupe'):
+                    autorises = _ids_destinataires_autorises(
+                        cur, destinataires, session['user_id'])
+                    if autorises is None:
+                        abort(403)
+                    if not autorises:
+                        flash("Choisissez au moins un destinataire autorisé.", "danger")
+                        return redirect(url_for('messagerie.messagerie_nouveau'))
+                    if type_conv == 'prive' and len(autorises) > 1:
+                        type_conv = 'groupe'
+                    membres_ids.extend(autorises)
+
                 cur.execute("""
                     INSERT INTO conversations (type, titre, cible_role, cree_par)
                     VALUES (%s, %s, %s, %s) RETURNING id
@@ -200,15 +251,7 @@ def creer_blueprint_messagerie(deps):
                       session['user_id']))
                 conv_id = cur.fetchone()['id']
 
-                membres_ids = [session['user_id']]
                 if type_conv in ('prive', 'groupe'):
-                    for uid in destinataires:
-                        try:
-                            uid = int(uid)
-                        except (TypeError, ValueError):
-                            continue
-                        if uid not in membres_ids:
-                            membres_ids.append(uid)
                     for uid in membres_ids:
                         cur.execute("""
                             INSERT INTO conversation_membres (conversation_id, user_id)
@@ -247,6 +290,12 @@ def creer_blueprint_messagerie(deps):
                             queue_email(r['email'], f"Nouveau message de {session.get('username')}",
                                        contenu, cur=cur)
                 else:  # annonce
+                    # Le créateur vient de lire son propre message : ne pas lui
+                    # afficher un badge non-lu juste après l'envoi.
+                    cur.execute("""
+                        INSERT INTO annonce_lues (conversation_id, user_id)
+                        VALUES (%s, %s) ON CONFLICT DO NOTHING
+                    """, (conv_id, session['user_id']))
                     query = "SELECT u.id, e.email FROM users u LEFT JOIN employes e ON e.id = u.employe_id"
                     params = ()
                     if cible_role:
@@ -271,11 +320,13 @@ def creer_blueprint_messagerie(deps):
             return redirect(url_for('messagerie.messagerie_voir', id=conv_id))
 
         with db_cursor() as (conn, cur):
-            cur.execute("""
-                SELECT u.id, u.username, u.role, e.nom, e.prenom
+            scope_sql, scope_params = department_scope_sql('e', 'departement', cur)
+            cur.execute(f"""
+                SELECT u.id, u.username, u.role, e.nom, e.prenom, e.departement
                 FROM users u LEFT JOIN employes e ON e.id = u.employe_id
-                WHERE u.id != %s ORDER BY u.username
-            """, (session['user_id'],))
+                WHERE u.id != %s AND {scope_sql}
+                ORDER BY u.username
+            """, [session['user_id']] + scope_params)
             utilisateurs = cur.fetchall()
 
         return render_template('messagerie_nouveau.html', utilisateurs=utilisateurs,
@@ -298,8 +349,8 @@ def creer_blueprint_messagerie(deps):
             cur.execute("""
                 SELECT m.id, m.contenu, m.date_envoi, m.sender_id,
                        m.piece_jointe_nom, m.piece_jointe_taille,
-                       u.username AS sender_username
-                FROM messages m JOIN users u ON u.id = m.sender_id
+                       COALESCE(u.username, 'Utilisateur supprimé') AS sender_username
+                FROM messages m LEFT JOIN users u ON u.id = m.sender_id
                 WHERE m.conversation_id = %s ORDER BY m.id ASC
             """, (id,))
             messages = cur.fetchall()
@@ -336,6 +387,9 @@ def creer_blueprint_messagerie(deps):
         user_id = session['user_id']
         role = session.get('role', 'employe')
         contenu = request.form.get('contenu', '').strip()
+        if len(contenu) > MESSAGE_MAX_CHARS:
+            flash(f"Le message ne peut pas dépasser {MESSAGE_MAX_CHARS} caractères.", "danger")
+            return redirect(url_for('messagerie.messagerie_voir', id=id))
 
         piece, erreur = _lire_piece_jointe(request.files.get('piece_jointe'), detect_file_type)
         if erreur:
@@ -382,11 +436,31 @@ def creer_blueprint_messagerie(deps):
                     if r.get('email'):
                         queue_email(r['email'], f"Nouveau message de {session.get('username')}",
                                    contenu or 'Pièce jointe envoyée.', cur=cur)
-            else:  # réponse d'admin/rh à une annonce : on retire tout le monde du "lu"
-                # pour que la cible voie qu'il y a une mise à jour à consulter.
-                cur.execute("""
-                    DELETE FROM annonce_lues WHERE conversation_id = %s AND user_id != %s
-                """, (id, user_id))
+            else:  # réponse admin/RH à une annonce
+                # La mise à jour redevient non lue pour la cible ; son auteur
+                # reste marqué comme lecteur et les destinataires sont notifiés.
+                cur.execute("DELETE FROM annonce_lues WHERE conversation_id = %s", (id,))
+                cur.execute("""INSERT INTO annonce_lues (conversation_id, user_id)
+                               VALUES (%s,%s) ON CONFLICT DO NOTHING""", (id, user_id))
+                query = """SELECT u.id, e.email FROM users u
+                           LEFT JOIN employes e ON e.id=u.employe_id
+                           WHERE u.id != %s"""
+                params = [user_id]
+                if conv.get('cible_role'):
+                    query += " AND u.role = %s"
+                    params.append(conv['cible_role'])
+                cur.execute(query, params)
+                for destinataire in cur.fetchall():
+                    create_notification(
+                        destinataire['id'],
+                        f"📢 Annonce mise à jour : {conv.get('titre') or 'Annonce'}",
+                        (contenu or '📎 Nouvelle pièce jointe')[:120], 'info', cur=cur)
+                    if destinataire.get('email'):
+                        queue_email(
+                            destinataire['email'],
+                            f"📢 {conv.get('titre') or 'Annonce'} — mise à jour",
+                            contenu or 'Une nouvelle pièce jointe est disponible.', cur=cur)
+
 
             log_action(session.get('user_id'), session.get('username'),
                       "REPLY_MESSAGE", "conversation", id, contenu[:60] if contenu else "Pièce jointe")
@@ -415,6 +489,7 @@ def creer_blueprint_messagerie(deps):
         resp = send_file(io.BytesIO(bytes(msg['piece_jointe_contenu'])),
                          as_attachment=True, download_name=filename)
         resp.headers['X-Content-Type-Options'] = 'nosniff'
+        resp.headers['Cache-Control'] = 'private, no-store'
         return resp
 
     @bp.route('/messages/<int:id>/quitter', methods=['POST'])
@@ -425,6 +500,8 @@ def creer_blueprint_messagerie(deps):
             conv = cur.fetchone()
             if not conv or conv['type'] != 'groupe':
                 abort(404)
+            if not _est_membre(cur, id, session['user_id']):
+                abort(403)
             cur.execute("""
                 DELETE FROM conversation_membres WHERE conversation_id = %s AND user_id = %s
             """, (id, session['user_id']))

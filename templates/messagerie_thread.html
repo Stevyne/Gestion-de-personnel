@@ -51,7 +51,8 @@
           enctype="multipart/form-data" style="display:flex; gap:8px; margin-top:16px; align-items:flex-end;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div style="flex:1;">
-            <textarea name="contenu" class="form-control" rows="2" placeholder="Votre message..."></textarea>
+            <textarea name="contenu" class="form-control" rows="2" maxlength="20000"
+                      placeholder="Votre message..."></textarea>
         </div>
         <input type="file" name="piece_jointe" style="max-width:140px;">
         <button type="submit" class="btn btn-primary">Envoyer</button>

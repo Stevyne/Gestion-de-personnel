@@ -31,7 +31,7 @@
             <label>Destinataire(s)</label>
             <select name="destinataires" class="form-control" multiple size="6">
                 {% for u in utilisateurs %}
-                <option value="{{ u.id }}">{{ u.prenom or '' }} {{ u.nom or '' }} ({{ u.username }})</option>
+                <option value="{{ u.id }}">{{ u.prenom or '' }} {{ u.nom or '' }} ({{ u.username }}){% if u.departement %} — {{ u.departement }}{% endif %}</option>
                 {% endfor %}
             </select>
             <small style="color:#64748b;">Ctrl/Cmd + clic pour sélectionner plusieurs destinataires (= discussion de groupe).</small>
@@ -49,12 +49,14 @@
 
         <div class="form-group" id="champTitre" style="display:none;">
             <label>Titre</label>
-            <input type="text" name="titre" class="form-control" placeholder="Ex: Fermeture exceptionnelle, Projet X...">
+            <input type="text" name="titre" class="form-control" maxlength="200"
+                   placeholder="Ex: Fermeture exceptionnelle, Projet X...">
         </div>
 
         <div class="form-group">
             <label>Message</label>
-            <textarea name="contenu" class="form-control" rows="5" required></textarea>
+            <textarea name="contenu" class="form-control" rows="5" maxlength="20000"></textarea>
+            <small style="color:#64748b;">Le texte peut être vide si une pièce jointe est fournie.</small>
         </div>
 
         <div class="form-group">

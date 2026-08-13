@@ -1693,6 +1693,30 @@ def init_db():
         date_envoi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, id)")
+    # La suppression d'un compte ne doit pas casser toute la gestion des
+    # utilisateurs dès qu'il a écrit un message. On conserve l'historique en
+    # anonymisant l'auteur (SET NULL) ; membres et lectures, eux, sont supprimés
+    # par leurs clés étrangères CASCADE.
+    cur.execute("""
+        DO $$ BEGIN
+          IF EXISTS (
+              SELECT 1 FROM pg_constraint
+               WHERE conname='conversations_cree_par_fkey' AND confdeltype <> 'n'
+          ) THEN
+            ALTER TABLE conversations DROP CONSTRAINT conversations_cree_par_fkey;
+            ALTER TABLE conversations ADD CONSTRAINT conversations_cree_par_fkey
+              FOREIGN KEY (cree_par) REFERENCES users(id) ON DELETE SET NULL;
+          END IF;
+          IF EXISTS (
+              SELECT 1 FROM pg_constraint
+               WHERE conname='messages_sender_id_fkey' AND confdeltype <> 'n'
+          ) THEN
+            ALTER TABLE messages DROP CONSTRAINT messages_sender_id_fkey;
+            ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey
+              FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL;
+          END IF;
+        END $$;
+    """)
     # Suivi de lecture des annonces : pas de ligne de membre par destinataire
     # potentiel (pourrait être tous les employés), juste une marque de lecture.
     cur.execute('''CREATE TABLE IF NOT EXISTS annonce_lues (
@@ -4525,6 +4549,7 @@ app.register_blueprint(creer_blueprint_messagerie({
     'create_notification': create_notification,
     'queue_email': queue_email,
     'log_action': log_action,
+    'department_scope_sql': department_scope_sql,
 }))
 
 # Doit s'exécuter que l'app soit lancée directement (python app.py) OU importée
