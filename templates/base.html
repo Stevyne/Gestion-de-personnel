@@ -513,6 +513,13 @@
                     <a href="{{ url_for('self_service') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('self_service') %}active{% endif %}">
                         {{ icon('calendar') }}<span>Mes demandes</span>
                     </a>
+                    <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="nav-notif {% if request.endpoint and request.endpoint.startswith('messagerie.') %}active{% endif %}"
+                       aria-label="Messages" title="Messages">
+                        {{ icon('message', 19) }}
+                        {% if messages_non_lus and messages_non_lus > 0 %}
+                        <span class="notif-badge">{{ messages_non_lus if messages_non_lus < 100 else '99+' }}</span>
+                        {% endif %}
+                    </a>
                     <a href="{{ url_for('notifications') }}" class="nav-link {% if request.endpoint == 'notifications' %}active{% endif %}">
                         {{ icon('bell') }}<span>Notifications</span>
                         {% if unread_notifications and unread_notifications > 0 %}
