@@ -1,0 +1,60 @@
+"""Processus APScheduler dédié à la production.
+
+Lancer avec ``python scheduler_worker.py``. Il ne sert aucune requête HTTP et
+ne doit donc pas être ajouté aux workers Gunicorn.
+"""
+
+import logging
+import os
+
+# Évite tout scheduler embarqué pendant l'import de l'application.
+os.environ["SCHEDULER_MODE"] = "worker"
+os.environ.setdefault("SERVICE_NAME", "gestion-personnel-scheduler")
+
+from app import (  # noqa: E402
+    app,
+    db_cursor,
+    job_alertes_contrats,
+    job_alertes_expiration_documents,
+    job_generation_quotidienne_absences,
+    job_purge_sessions,
+    job_recalcul_soldes_conges,
+    job_traiter_file_emails,
+    job_validation_auto_maintenances,
+)
+from services.scheduler_runtime import build_scheduler  # noqa: E402
+
+
+logger = logging.getLogger("gestion_personnel.scheduler.worker")
+
+
+def main() -> None:
+    jobs = {
+        "generation_absences": job_generation_quotidienne_absences,
+        "alertes_documents": job_alertes_expiration_documents,
+        "recalcul_soldes": job_recalcul_soldes_conges,
+        "alertes_contrats": job_alertes_contrats,
+        "purge_sessions": job_purge_sessions,
+        "validation_maintenances": job_validation_auto_maintenances,
+        "email_outbox": job_traiter_file_emails,
+    }
+    scheduler = build_scheduler(
+        jobs=jobs,
+        db_cursor=db_cursor,
+        app_config=app.config,
+        blocking=True,
+    )
+    with app.app_context():
+        scheduler.phase4_heartbeat()
+    logger.info(
+        "worker scheduler prêt",
+        extra={"instance_id": scheduler.phase4_instance_id},
+    )
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("arrêt du worker scheduler")
+
+
+if __name__ == "__main__":
+    main()

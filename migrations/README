@@ -1,0 +1,11 @@
+Configuration Alembic/Flask-Migrate de Gestion Personnel.
+
+Le schéma historique est encore amorcé une fois avec `flask bootstrap-db`.
+Ensuite, toute évolution de production doit être une révision versionnée :
+
+    flask db revision -m "description"
+    flask db upgrade
+
+L'autogénération ignore volontairement les tables historiques gérées en SQL
+brut, afin de ne jamais proposer leur suppression. Les nouvelles révisions
+peuvent utiliser `op.execute(...)` ou des modèles SQLAlchemy ajoutés à l'avenir.

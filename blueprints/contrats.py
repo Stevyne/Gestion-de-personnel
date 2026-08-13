@@ -1,11 +1,12 @@
 """Contrats des employés, renouvellements et alertes d'expiration."""
 
 from datetime import date, timedelta
-import io
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, session, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 import psycopg2
 from werkzeug.utils import secure_filename
+
+from services.object_storage import ObjectStorageError
 
 TYPE_CONTRATS = (
     ('cdi', 'CDI'), ('cdd', 'CDD'), ('stage', 'Stage'),
@@ -25,6 +26,7 @@ def creer_blueprint_contrats(deps):
     create_notification = deps['create_notification']
     queue_email = deps['queue_email']
     log_action = deps['log_action']
+    object_storage = deps['object_storage']
 
     def _lire_fichier(fichier):
         if not fichier or not fichier.filename:
@@ -43,6 +45,17 @@ def creer_blueprint_contrats(deps):
         contenu = fichier.stream.read()
         return {'nom': secure_filename(fichier.filename)[:255], 'type': extension,
                 'taille': len(contenu), 'contenu': contenu}, None
+
+    def _stocker_fichier(fichier):
+        if not fichier:
+            return None, None
+        try:
+            return object_storage.store(
+                'contrats', fichier['contenu'], fichier['nom'],
+                content_type='application/pdf' if fichier['type'] == 'pdf' else None,
+            ), None
+        except ObjectStorageError as exc:
+            return None, str(exc)
 
     def _peut_voir(contrat):
         if session.get('role') in ('admin', 'rh'):
@@ -109,18 +122,33 @@ def creer_blueprint_contrats(deps):
             if erreur:
                 flash(erreur, 'danger')
                 return redirect(request.url)
-            with db_cursor(commit=True) as (conn, cur):
-                cur.execute("""INSERT INTO contrats
-                    (employe_id,type_contrat,reference,date_debut,date_fin,notes,
-                     nom_fichier,type_fichier,taille,contenu,cree_par)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-                            (employe_id, type_contrat, reference, debut, fin, notes or None,
-                             fichier['nom'] if fichier else None,
-                             fichier['type'] if fichier else None,
-                             fichier['taille'] if fichier else None,
-                             psycopg2.Binary(fichier['contenu']) if fichier else None,
-                             session.get('user_id')))
-                contrat_id = cur.fetchone()['id']
+            stored, erreur = _stocker_fichier(fichier)
+            if erreur:
+                flash(erreur, 'danger')
+                return redirect(request.url)
+            try:
+                with db_cursor(commit=True) as (conn, cur):
+                    cur.execute("""INSERT INTO contrats
+                        (employe_id,type_contrat,reference,date_debut,date_fin,notes,
+                         nom_fichier,type_fichier,taille,contenu,storage_key,
+                         storage_etag,storage_sha256,cree_par)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        RETURNING id""",
+                                (employe_id, type_contrat, reference, debut, fin,
+                                 notes or None, fichier['nom'] if fichier else None,
+                                 fichier['type'] if fichier else None,
+                                 fichier['taille'] if fichier else None,
+                                 psycopg2.Binary(stored.content)
+                                 if stored and stored.content is not None else None,
+                                 stored.storage_key if stored else None,
+                                 stored.storage_etag if stored else None,
+                                 stored.storage_sha256 if stored else None,
+                                 session.get('user_id')))
+                    contrat_id = cur.fetchone()['id']
+            except Exception:
+                if stored and stored.external:
+                    object_storage.delete(stored.storage_key)
+                raise
             log_action(session.get('user_id'), session.get('username'), 'CREATE_CONTRAT',
                        'contrat', contrat_id, f"employe={employe_id}, type={type_contrat}")
             flash("Contrat créé.", 'success')
@@ -149,15 +177,18 @@ def creer_blueprint_contrats(deps):
         with db_cursor() as (conn, cur):
             cur.execute("SELECT * FROM contrats WHERE id=%s", (id,))
             contrat = cur.fetchone()
-        if not contrat or contrat.get('contenu') is None:
+        if not contrat or (contrat.get('contenu') is None and not contrat.get('storage_key')):
             abort(404)
         if not _peut_voir(contrat):
             abort(403)
-        response = send_file(io.BytesIO(bytes(contrat['contenu'])), as_attachment=True,
-                             download_name=contrat['nom_fichier'] or 'contrat')
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['Cache-Control'] = 'private, no-store'
-        return response
+        try:
+            return object_storage.download_response(
+                content=contrat.get('contenu'),
+                storage_key=contrat.get('storage_key'),
+                filename=contrat.get('nom_fichier') or 'contrat',
+            )
+        except ObjectStorageError:
+            abort(503)
 
     @bp.route('/contrats/<int:id>/renouveler', methods=['GET', 'POST'])
     @login_required
@@ -179,21 +210,37 @@ def creer_blueprint_contrats(deps):
             if erreur:
                 flash(erreur, 'danger')
                 return redirect(request.url)
-            with db_cursor(commit=True) as (conn, cur):
-                cur.execute("UPDATE contrats SET statut='renouvele',date_modification=CURRENT_TIMESTAMP WHERE id=%s", (id,))
-                cur.execute("""INSERT INTO contrats
-                    (employe_id,type_contrat,reference,date_debut,date_fin,notes,
-                     nom_fichier,type_fichier,taille,contenu,renouvelle_depuis,cree_par)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-                            (ancien['employe_id'], type_contrat,
-                             (request.form.get('reference') or '').strip()[:80] or ancien.get('reference'),
-                             debut, fin, (request.form.get('notes') or '').strip() or None,
-                             fichier['nom'] if fichier else None,
-                             fichier['type'] if fichier else None,
-                             fichier['taille'] if fichier else None,
-                             psycopg2.Binary(fichier['contenu']) if fichier else None,
-                             id, session.get('user_id')))
-                nouveau_id = cur.fetchone()['id']
+            stored, erreur = _stocker_fichier(fichier)
+            if erreur:
+                flash(erreur, 'danger')
+                return redirect(request.url)
+            try:
+                with db_cursor(commit=True) as (conn, cur):
+                    cur.execute("UPDATE contrats SET statut='renouvele',date_modification=CURRENT_TIMESTAMP WHERE id=%s", (id,))
+                    cur.execute("""INSERT INTO contrats
+                        (employe_id,type_contrat,reference,date_debut,date_fin,notes,
+                         nom_fichier,type_fichier,taille,contenu,storage_key,
+                         storage_etag,storage_sha256,renouvelle_depuis,cree_par)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        RETURNING id""",
+                                (ancien['employe_id'], type_contrat,
+                                 (request.form.get('reference') or '').strip()[:80]
+                                 or ancien.get('reference'), debut, fin,
+                                 (request.form.get('notes') or '').strip() or None,
+                                 fichier['nom'] if fichier else None,
+                                 fichier['type'] if fichier else None,
+                                 fichier['taille'] if fichier else None,
+                                 psycopg2.Binary(stored.content)
+                                 if stored and stored.content is not None else None,
+                                 stored.storage_key if stored else None,
+                                 stored.storage_etag if stored else None,
+                                 stored.storage_sha256 if stored else None,
+                                 id, session.get('user_id')))
+                    nouveau_id = cur.fetchone()['id']
+            except Exception:
+                if stored and stored.external:
+                    object_storage.delete(stored.storage_key)
+                raise
             log_action(session.get('user_id'), session.get('username'), 'RENEW_CONTRAT',
                        'contrat', nouveau_id, f"ancien={id}")
             flash("Contrat renouvelé.", 'success')

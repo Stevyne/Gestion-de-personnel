@@ -17,7 +17,7 @@ concurrency:
 jobs:
   pytest:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -33,15 +33,29 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     env:
       SECRET_KEY: ci-secret-key-not-for-production
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gestion_personnel_test
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gestion_personnel_test
+      REDIS_URL: redis://localhost:6379/0
       FLASK_ENV: testing
+      AUTO_INIT_DB: "true"
+      SCHEDULER_MODE: disabled
       RATELIMIT_ENABLED: "false"
+      OBJECT_STORAGE_ENABLED: "false"
       EMAIL_ENABLED: "false"
       MAIL_USERNAME: ""
+      LOG_FORMAT: text
 
     steps:
       - name: Récupérer le dépôt
@@ -54,6 +68,7 @@ jobs:
           cache: pip
           cache-dependency-path: |
             requirements.txt
+            requirements-production.txt
             requirements-dev.txt
 
       - name: Installer les dépendances
@@ -62,7 +77,23 @@ jobs:
           python -m pip install -r requirements-dev.txt
 
       - name: Vérifier la compilation
-        run: python -m compileall -q app.py blueprints services tests
+        run: >-
+          python -m compileall -q app.py extensions.py scheduler_worker.py
+          blueprints services scripts migrations tests
+
+      - name: Vérifier les erreurs Python critiques
+        run: >-
+          ruff check --select F821,F401,F841 app.py extensions.py
+          scheduler_worker.py blueprints services scripts migrations
+          tests/test_phase4_production.py
+
+      - name: Vérifier et appliquer les migrations Alembic
+        run: |
+          flask db upgrade
+          flask db current | grep 20260813_phase4
 
       - name: Exécuter la suite de tests
         run: pytest -q
+
+      - name: Construire l'image de sauvegarde
+        run: docker build -f Dockerfile.backup -t gestion-personnel-backup:test .

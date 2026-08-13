@@ -1,0 +1,29 @@
+FROM python:3.12.7-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Le client pg_dump doit être au moins aussi récent que PostgreSQL Render (17).
+# Debian bookworm fournit 15 par défaut : le dépôt officiel PGDG est nécessaire.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+       | gpg --dearmor -o /usr/share/keyrings/postgresql-pgdg.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql-pgdg.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+       > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-17 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt requirements-production.txt ./
+RUN pip install --upgrade pip \
+    && pip install -r requirements-production.txt
+
+COPY services ./services
+COPY scripts ./scripts
+
+USER 65532:65532
+CMD ["python", "scripts/backup_postgres.py"]

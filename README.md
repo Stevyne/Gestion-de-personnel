@@ -43,7 +43,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - **Tout jour ouvré (lun. → ven.) sans présence enregistrée est automatiquement enregistré comme une absence** dans la table `absences`
 - Sont exclus : congés et permissions approuvés, jours avant l'embauche et jour en cours. Le calcul tourne à 01h00 et reste déclenchable via **🔄 Synchroniser** ; il est idempotent (`UNIQUE(employe_id, date)`)
 - L'employé est informé et consulte ses dossiers sur `/self-service/absences`
-- Dépôt self-service d'un justificatif PDF/PNG/JPEG (8 Mo), validé par magic-bytes et stocké en PostgreSQL (`BYTEA`)
+- Dépôt self-service d'un justificatif PDF/PNG/JPEG (8 Mo), validé par magic-bytes et stocké de façon hybride (PostgreSQL `BYTEA` ou S3 privé selon le seuil)
 - Statuts : `non_justifiee` → `justificatif_depose` → `acceptee` ou `refusee`; un refus RH exige un motif
 - Un justificatif accepté crée automatiquement un **congé maladie approuvé** d'un jour, sans consommer le solde de congés payés
 - Confidentialité : justificatif téléchargeable uniquement par son propriétaire et les rôles `admin`/`rh` (pas par le manager)
@@ -92,14 +92,14 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 
 ### 📁 Documents & Rapports
 - Upload de documents (PDF, Excel, images...) avec **validation du contenu réel** (magic-bytes), pas seulement de l'extension
-- Contenu stocké en PostgreSQL (`BYTEA`) et notification immédiate de l'employé concerné
+- Contenu stocké en PostgreSQL (`BYTEA`) ou dans un Object Storage S3 privé, avec notification immédiate de l'employé concerné
 - Alertes internes et e-mails avant expiration puis après expiration
 - Rapports avancés avec filtres (`/rapports`)
 - Exports PDF (ReportLab) et Excel (Openpyxl) pour présences et congés
 
 ### 📑 Contrats
 - Module versionné pour CDI, CDD, stages, consultants et autres contrats
-- Dates, référence, statut, notes et document signé stocké en PostgreSQL (`BYTEA`)
+- Dates, référence, statut, notes et document signé stocké en mode hybride (`BYTEA` / S3 privé)
 - Renouvellement créant une nouvelle version liée à l'ancien contrat ; résiliation motivée et auditée
 - Accès confidentiel : admin/RH gèrent tous les contrats, chaque employé ne consulte que les siens
 - Alertes idempotentes à J-30, J-7 et après expiration, par notification interne et e-mail via l'outbox
@@ -113,7 +113,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Pour manager/technicien/employé, le sélecteur et les identifiants forgés sont limités au département courant ; admin/RH peuvent contacter tous les comptes
 - Conversations privées strictement réservées à leurs membres, y compris pour admin/RH ; contrôle identique sur les réponses et les pièces jointes
 - Annonces globales ou ciblées par rôle (`admin`, `rh`, `manager`, `technicien`, `employe`) réservées à admin/RH
-- Pièces jointes validées par extension, taille et magic-bytes, puis stockées en PostgreSQL (`BYTEA`)
+- Pièces jointes validées par extension, taille et magic-bytes, puis stockées en mode hybride (`BYTEA` / S3 privé)
 - Notifications internes et e-mails via l'outbox pour les nouveaux messages et les mises à jour d'annonces
 - Limites : 20 000 caractères par message, 200 pour le titre, 8 Mo par pièce jointe
 
@@ -169,12 +169,14 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 | Catégorie       | Choix                                              |
 |-----------------|----------------------------------------------------|
 | Backend         | Flask 3.0.3                                        |
-| Base de données | PostgreSQL (psycopg2-binary, RealDictCursor)       |
-| Sécurité        | Flask-WTF (CSRF), Flask-Limiter, Flask-Talisman, python-dotenv |
+| Base de données | PostgreSQL 17, psycopg2, Alembic/Flask-Migrate    |
+| Sécurité        | Flask-WTF, Flask-Limiter + Redis, Flask-Talisman   |
+| Fichiers        | PostgreSQL `BYTEA` + Object Storage S3 compatible  |
 | Emails          | Flask-Mail + outbox PostgreSQL asynchrone          |
 | Exports         | ReportLab (PDF), Openpyxl (Excel)                  |
 | Images          | Pillow (redimensionnement des photos de profil)    |
-| Planification   | APScheduler (absences, alertes, soldes, sessions, outbox) |
+| Planification   | APScheduler dans un worker séparé du serveur web   |
+| Observabilité   | Logs JSON, Sentry, live/readiness, heartbeat       |
 | Frontend        | HTML + CSS responsive mobile-first (pas de framework JS) |
 | Auth            | Werkzeug (hash des mots de passe)                  |
 
@@ -198,7 +200,7 @@ sudo apt install postgresql postgresql-contrib
 ```bash
 git clone https://github.com/Stevyne/Gestion-de-personnel.git
 cd Gestion-de-personnel
-pip install -r requirements.txt
+pip install -r requirements-production.txt
 ```
 
 ### 3. Configuration de la base de données
@@ -228,6 +230,14 @@ cp .env.example .env
 |---------------------------|-------------|
 | `SECRET_KEY`              | Clé secrète Flask — à générer avec `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `DATABASE_URL`            | Chaîne de connexion PostgreSQL |
+| `AUTO_INIT_DB`, `REQUIRE_ALEMBIC_CURRENT` | Bootstrap historique local et exigence de révision Alembic en production |
+| `REDIS_URL`               | Stockage Redis partagé du rate limiting multi-worker |
+| `OBJECT_STORAGE_ENABLED`, `OBJECT_STORAGE_REQUIRED` | Active S3 et interdit le repli BYTEA en cas de panne si requis |
+| `OBJECT_STORAGE_THRESHOLD_BYTES` | Seuil d'externalisation progressive (1 Mio par défaut) |
+| `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT_URL` | Bucket et endpoint AWS S3/R2/B2/MinIO |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Identifiants du bucket privé |
+| `SCHEDULER_MODE`          | `embedded` en local, `disabled` sur le web, `worker` sur le service dédié |
+| `SENTRY_DSN`, `LOG_FORMAT` | Monitoring d'erreurs et logs structurés JSON |
 | `EMAIL_ENABLED`           | Active explicitement l'outbox et SMTP (`false` par défaut) |
 | `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS` | Config SMTP |
 | `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_DEFAULT_SENDER` | Identifiants et expéditeur SMTP |
@@ -245,11 +255,11 @@ cp .env.example .env
 > ✅ **Bonnes nouvelles** : `SECRET_KEY` et `FLASK_DEBUG` sont **déjà lus depuis l'environnement** (aucune valeur sensible codée en dur dans `app.py`). En production, l'absence de `SECRET_KEY` lève une erreur (`RuntimeError`), et `FLASK_DEBUG=true` combiné à `FLASK_ENV=production` est bloqué. En production, l'absence de `DATABASE_URL` est également bloquante ; en développement, un fallback local (`postgres/postgres`) est utilisé avec un avertissement dans les logs.
 >
 > ⚠️ **Points à vérifier avant mise en production** :
-> - Le rate limiter utilise `storage_uri="memory://"` (compteur **par processus**). Avec `gunicorn -w 4`, les quotas ne sont **pas partagés** entre workers → passez sur Redis/Memcached dès que vous dépassez 1 worker.
-> - `Talisman(force_https=False)` et `SESSION_COOKIE_SECURE` (défaut `false`) : passez-les à `True` en HTTPS.
-> - `.env.example` livre `FLASK_DEBUG=true` / `FLASK_ENV=development` : mettez-les à `false` / `production` pour la prod.
+> - Le Blueprint Render configure Redis, HTTPS, un worker scheduler et exige la révision Alembic courante. Renseignez toutes les variables marquées `sync: false`.
+> - Le bucket S3 doit rester **privé**. Les téléchargements passent toujours par les routes Flask et leurs contrôles d'accès.
 > - Configurez SMTP puis passez `EMAIL_ENABLED=true`; sans cette activation explicite, aucun e-mail ne quitte l'application.
-> - Les avatars, documents RH et justificatifs récents sont persistés en base (`BYTEA`). `static/avatars/` et `static/uploads/` ne servent plus que de cache/repli pour les anciens fichiers.
+> - Les avatars redimensionnés restent en `BYTEA`; documents, contrats, justificatifs et pièces jointes utilisent le stockage hybride. `static/uploads/` n'est qu'un repli pour d'anciens fichiers.
+> - Le plan PostgreSQL de production doit conserver les sauvegardes/PITR Render en plus du dump logique quotidien envoyé dans un bucket S3 distinct.
 
 ---
 
@@ -261,7 +271,7 @@ python app.py
 
 L'application démarre sur **http://0.0.0.0:5000**
 
-> La première exécution crée automatiquement les tables et les utilisateurs par défaut. Les migrations de schéma (ajout de colonnes, nouvelles tables) sont **idempotentes** et s'appliquent au démarrage : aucune commande manuelle n'est nécessaire lors d'une mise à jour.
+> En développement, `AUTO_INIT_DB=true` conserve le bootstrap historique. En production, le serveur web ne modifie plus le schéma au démarrage : Render exécute `flask bootstrap-db && flask db upgrade` dans `preDeployCommand`. Les évolutions futures doivent être ajoutées sous forme de révisions Alembic.
 
 **En production**, ne pas utiliser le serveur de développement Flask :
 
@@ -271,7 +281,89 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 
 ---
 
-## 👤 Utilisateurs par défaut
+## 🏭 Phase 4 — exploitation en production
+
+### Migrations versionnées
+
+```bash
+# Première transition d'une base existante
+flask bootstrap-db
+flask db upgrade
+flask db current
+
+# Nouvelle migration SQL/SQLAlchemy
+flask db revision -m "description"
+```
+
+La première révision est `20260813_phase4`. Le downgrade refuse de supprimer les
+colonnes tant qu'une clé S3 existe, afin de ne jamais rendre un fichier
+inaccessible.
+
+### Bascule progressive vers S3
+
+Les fichiers antérieurs restent lisibles depuis `BYTEA`. Les nouveaux fichiers
+qui dépassent `OBJECT_STORAGE_THRESHOLD_BYTES` sont envoyés vers S3 avec un
+checksum SHA-256. La commande est idempotente et travaille par lots :
+
+```bash
+flask storage status
+flask storage migrate --dry-run
+flask storage migrate --batch-size 100
+# Option de transition : --keep-source ; pour tout migrer : --all-files
+```
+
+Le bucket ne doit accorder aucun accès public. AWS S3, Cloudflare R2, Backblaze
+B2 et MinIO sont supportés via `S3_ENDPOINT_URL`.
+
+### Services Render
+
+`render.yaml` décrit quatre composants séparés :
+
+1. le web Gunicorn (aucun scheduler embarqué) ;
+2. le worker `scheduler_worker.py` avec heartbeat PostgreSQL ;
+3. Redis/Key Value pour les quotas partagés ;
+4. le cron de sauvegarde logique, construit avec `Dockerfile.backup` pour garantir
+   la présence de `pg_dump`.
+
+Les sondes sont publiques mais ne divulguent aucune donnée métier :
+
+- `GET /health/live` : processus Flask vivant ;
+- `GET /health/ready` : PostgreSQL, Redis, révision Alembic, état S3 optionnel,
+  fraîcheur du scheduler et du dernier backup réussi.
+
+### Sauvegardes et restauration
+
+Le cron crée chaque nuit un dump PostgreSQL au format custom, l'envoie chiffré
+côté serveur (`AES256` ou KMS), vérifie taille + SHA-256 puis applique la
+rétention. Conserver parallèlement les sauvegardes/PITR du PostgreSQL Render.
+
+```bash
+python scripts/backup_postgres.py
+
+# Restauration volontaire vers une URL cible séparée
+RESTORE_DATABASE_URL=postgresql://... \
+python scripts/restore_postgres.py --confirm RESTAURER-GESTION-PERSONNEL
+```
+
+Tester périodiquement la restauration sur une base isolée. Ne pointez jamais
+`RESTORE_DATABASE_URL` vers la production pendant un exercice.
+
+### CI/CD
+
+`.github/workflows/tests.yml` vérifie Ruff, compile le code, applique Alembic,
+lance les tests PostgreSQL/Redis et construit l'image de backup. Après succès
+sur `master`, `.github/workflows/deploy-render.yml` déclenche les deploy hooks.
+Configurer l'environnement GitHub `production` avec :
+
+- secrets `RENDER_WEB_DEPLOY_HOOK_URL`, `RENDER_SCHEDULER_DEPLOY_HOOK_URL` et,
+  facultativement, `RENDER_BACKUP_DEPLOY_HOOK_URL` ;
+- variable `RENDER_HEALTHCHECK_URL` pointant vers
+  `https://<service>/health/ready` ;
+- une protection/approbation de l'environnement selon votre politique.
+
+---
+
+## 👤 Utilisateurs de démonstration (développement/tests uniquement)
 
 | Utilisateur | Mot de passe | Rôle     | Description              |
 |-------------|--------------|----------|--------------------------|
@@ -280,7 +372,7 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 | `manager`   | `manager123` | manager  | Chef de projet           |
 | `employe`   | `user123`    | employe  | Employé classique        |
 
-> À changer immédiatement en environnement réel — ces identifiants sont créés automatiquement par `init_db()`.
+> Ces comptes ne sont créés que si `SEED_DEMO_DATA=true` (défaut hors production). Le Blueprint Render fixe cette option à `false` et exige `BOOTSTRAP_ADMIN_PASSWORD` (12 caractères minimum) pour une base neuve.
 
 ---
 
@@ -448,7 +540,7 @@ Gestion-de-personnel/
 ## 📌 Notes importantes
 
 - Base de données exclusivement PostgreSQL
-- Les migrations de schéma sont idempotentes et appliquées au démarrage
+- Les migrations de production sont versionnées par Alembic et appliquées dans le `preDeployCommand`, jamais par les workers web
 - Les contraintes `CHECK ... NOT VALID` protègent immédiatement les nouvelles écritures sans bloquer une base historique ; les index uniques protègent les workflows concurrents
 - Les soldes de congés sont recalculés automatiquement (~2,08 jours acquis par mois, plafond annuel de 25 jours)
 - Les retards sont calculés en minutes par rapport à `HEURE_ARRIVEE_ATTENDUE` (09:00 par défaut)
@@ -456,7 +548,7 @@ Gestion-de-personnel/
 - Les uploads (documents et photos) sont validés sur leur **contenu réel** (magic-bytes), pas seulement sur l'extension
 - Le stock des matériels n'est jamais édité à la main : il découle des mouvements, y compris des ajustements d'inventaire (traçabilité complète)
 - Sécurité applicative activée (CSRF, rate limiting, headers HTTP via Talisman) ; `SECRET_KEY` et `FLASK_DEBUG` sont lus depuis l'environnement
-- En production : prévoir un stockage de rate limiting partagé (Redis) et activer HTTPS (`force_https` + `SESSION_COOKIE_SECURE`)
+- En production, Redis partage les quotas entre workers et Talisman force HTTPS avec des cookies de session sécurisés
 
 ### Tâches planifiées (APScheduler)
 

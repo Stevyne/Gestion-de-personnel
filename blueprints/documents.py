@@ -1,13 +1,14 @@
 """Documents RH : dépôt, liste, suppression et téléchargement protégé."""
 
 from datetime import date, datetime, timedelta
-import io
 import os
 
 from flask import (Blueprint, flash, redirect, render_template, request,
                    send_file, session, url_for)
 import psycopg2
 from werkzeug.utils import secure_filename
+
+from services.object_storage import ObjectStorageError
 
 GLOBAL_DATA_ROLES = ('admin', 'rh')
 
@@ -28,19 +29,16 @@ def creer_blueprint_documents(deps):
     department_scope_sql = deps['department_scope_sql']
     upload_folder = deps['upload_folder']
     seuil_expiration = deps['seuil_expiration']
+    object_storage = deps['object_storage']
 
     def _traiter_upload_document(conn, cur, employe_id, titre, description, date_expiration):
         """Valide et enregistre un document uploadé (fichier dans request.files).
         Retourne (ok: bool, message: str). Réutilisée par /documents et par
         l'upload direct depuis la fiche employé.
 
-        IMPORTANT : le contenu est stocké directement dans PostgreSQL (colonne
-        `contenu`, BYTEA), PAS sur le disque local. Render (comme la plupart des
-        hébergeurs gratuits) a un système de fichiers ÉPHÉMÈRE : tout ce qui est
-        écrit sur disque est perdu à chaque redémarrage du service — y compris
-        après une période d'inactivité prolongée (le service "spin down" puis
-        redémarre). La base de données Postgres, elle, est persistante. C'était la
-        cause des documents/photos qui ne s'affichaient plus après inactivité.
+        Le stockage est hybride : petit BYTEA PostgreSQL ou objet S3 privé au-
+        delà du seuil configuré. Le disque local Render n'est jamais utilisé
+        pour un nouvel upload.
         """
         if 'fichier' not in request.files or request.files['fichier'].filename == '':
             return False, 'Aucun fichier sélectionné'
@@ -59,22 +57,41 @@ def creer_blueprint_documents(deps):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{filename}"
         contenu = fichier.stream.read()
-
-        cur.execute("""
-            INSERT INTO documents (employe_id, titre, nom_fichier, chemin_fichier, type_fichier, taille, description, date_expiration, contenu)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """, (employe_id, titre or filename, filename, filename,
-              filename.rsplit('.', 1)[1].lower(), len(contenu), description, date_expiration, psycopg2.Binary(contenu)))
-        document_id = cur.fetchone()['id']
-        if employe_id:
-            expiration = f" Il expire le {date_expiration}." if date_expiration else ""
-            _notifier_employe_evenement(
-                cur, int(employe_id), "Nouveau document dans votre dossier",
-                f"Le document « {titre or filename} » a été ajouté à votre dossier.{expiration}",
-                'info', cle_evenement=f"document-ajoute:{document_id}",
+        try:
+            stored = object_storage.store(
+                'documents', contenu, filename,
+                content_type=f'application/{detected}' if detected == 'pdf' else None,
             )
-        conn.commit()
+        except ObjectStorageError as exc:
+            return False, str(exc)
+
+        try:
+            cur.execute("""
+                INSERT INTO documents
+                    (employe_id, titre, nom_fichier, chemin_fichier, type_fichier,
+                     taille, description, date_expiration, contenu, storage_key,
+                     storage_etag, storage_sha256)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (employe_id, titre or filename, filename, filename,
+                  filename.rsplit('.', 1)[1].lower(), len(contenu), description,
+                  date_expiration,
+                  psycopg2.Binary(stored.content) if stored.content is not None else None,
+                  stored.storage_key, stored.storage_etag, stored.storage_sha256))
+            document_id = cur.fetchone()['id']
+            if employe_id:
+                expiration = f" Il expire le {date_expiration}." if date_expiration else ""
+                _notifier_employe_evenement(
+                    cur, int(employe_id), "Nouveau document dans votre dossier",
+                    f"Le document « {titre or filename} » a été ajouté à votre dossier.{expiration}",
+                    'info', cle_evenement=f"document-ajoute:{document_id}",
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            if stored.external:
+                object_storage.delete(stored.storage_key)
+            raise
         log_action(session.get('user_id'), session.get('username'), "UPLOAD_DOCUMENT", "document", document_id, f"{titre} ({filename})")
         return True, 'Document uploadé avec succès'
 
@@ -154,15 +171,17 @@ def creer_blueprint_documents(deps):
     def delete_document(doc_id):
         conn = get_db()
         cur = get_cursor(conn)
-        cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (doc_id,))
+        cur.execute("SELECT chemin_fichier, storage_key FROM documents WHERE id = %s", (doc_id,))
         doc = cur.fetchone()
         if doc:
             try:
                 if os.path.exists(doc['chemin_fichier']):
                     os.remove(doc['chemin_fichier'])
-            except: pass
+            except OSError:
+                pass
             cur.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
             conn.commit()
+            object_storage.delete(doc.get('storage_key'))
             flash('Document supprimé', 'success')
         cur.close(); conn.close()
         return redirect(url_for('documents.documents'))
@@ -171,7 +190,9 @@ def creer_blueprint_documents(deps):
     @login_required
     def download_document(doc_id):
         with db_cursor() as (conn, cur):
-            cur.execute("SELECT nom_fichier, employe_id, contenu, type_fichier FROM documents WHERE id = %s", (doc_id,))
+            cur.execute("""SELECT nom_fichier, employe_id, contenu, type_fichier,
+                                  storage_key
+                             FROM documents WHERE id = %s""", (doc_id,))
             doc = cur.fetchone()
         if not doc:
             flash('Document introuvable.', 'danger')
@@ -186,12 +207,17 @@ def creer_blueprint_documents(deps):
 
         filename = secure_filename(doc['nom_fichier'])
 
-        # Fichier stocké en base (cas normal depuis ce correctif) : persistant,
-        # ne dépend pas du disque local éphémère du service.
-        if doc.get('contenu') is not None:
-            resp = send_file(io.BytesIO(bytes(doc['contenu'])), as_attachment=True, download_name=filename)
-            resp.headers['X-Content-Type-Options'] = 'nosniff'
-            return resp
+        # Lecture rétrocompatible : objet privé S3 en priorité, puis BYTEA.
+        if doc.get('storage_key') or doc.get('contenu') is not None:
+            try:
+                return object_storage.download_response(
+                    content=doc.get('contenu'),
+                    storage_key=doc.get('storage_key'),
+                    filename=filename,
+                )
+            except ObjectStorageError as exc:
+                flash(str(exc), 'danger')
+                return redirect(url_for('documents.documents'))
 
         # Repli pour un document uploadé AVANT ce correctif : son fichier n'a
         # peut-être jamais survécu à un redémarrage du service. On tente quand

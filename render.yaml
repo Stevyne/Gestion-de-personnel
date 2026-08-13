@@ -1,17 +1,162 @@
+envVarGroups:
+  - name: gestion-personnel-production
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_DEBUG
+        value: "false"
+      - key: SEED_DEMO_DATA
+        value: "false"
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        value: admin
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: LOG_FORMAT
+        value: json
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: FORCE_HTTPS
+        value: "true"
+      - key: TRUSTED_PROXY_COUNT
+        value: "1"
+      - key: RATELIMIT_ENABLED
+        value: "true"
+      - key: REQUIRE_REDIS_RATE_LIMIT
+        value: "true"
+      - key: OBJECT_STORAGE_ENABLED
+        value: "true"
+      - key: OBJECT_STORAGE_REQUIRED
+        value: "true"
+      - key: OBJECT_STORAGE_THRESHOLD_BYTES
+        value: "1048576"
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_PREFIX
+        value: gestion-personnel
+      - key: S3_SERVER_SIDE_ENCRYPTION
+        value: AES256
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: "0.05"
+      - key: EMAIL_ENABLED
+        value: "false"
+
 services:
   - type: web
     name: gestion-personnel
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn app:app"
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements-production.txt
+    preDeployCommand: flask bootstrap-db && flask db upgrade
+    startCommand: >-
+      gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4
+      --timeout 60 --graceful-timeout 30 --max-requests 1000
+      --max-requests-jitter 100
+    healthCheckPath: /health/ready
+    autoDeployTrigger: 'off'
     envVars:
+      - fromGroup: gestion-personnel-production
+      - key: SERVICE_NAME
+        value: gestion-personnel-web
+      - key: AUTO_INIT_DB
+        value: "false"
+      - key: SCHEDULER_MODE
+        value: disabled
+      - key: REQUIRE_ALEMBIC_CURRENT
+        value: "true"
+      - key: REQUIRE_SCHEDULER_HEARTBEAT
+        value: "false"
+      - key: REQUIRE_BACKUP_FRESHNESS
+        value: "false"
+      - key: BACKUP_MAX_AGE_SECONDS
+        value: "129600"
       - key: DATABASE_URL
         fromDatabase:
           name: gestion-personnel-db
           property: connectionString
-      - key: SECRET_KEY
-        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: gestion-personnel-redis
+          property: connectionString
 
+  - type: worker
+    name: gestion-personnel-scheduler
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements-production.txt
+    preDeployCommand: flask bootstrap-db && flask db upgrade
+    startCommand: python scheduler_worker.py
+    autoDeployTrigger: 'off'
+    envVars:
+      - fromGroup: gestion-personnel-production
+      - key: SERVICE_NAME
+        value: gestion-personnel-scheduler
+      - key: AUTO_INIT_DB
+        value: "false"
+      - key: SCHEDULER_MODE
+        value: worker
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestion-personnel-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: gestion-personnel-redis
+          property: connectionString
+
+  - type: cron
+    name: gestion-personnel-backup
+    runtime: docker
+    plan: starter
+    schedule: "15 0 * * *"
+    dockerfilePath: ./Dockerfile.backup
+    dockerCommand: python scripts/backup_postgres.py
+    autoDeployTrigger: 'off'
+    envVars:
+      - fromGroup: gestion-personnel-production
+      - key: SERVICE_NAME
+        value: gestion-personnel-backup
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestion-personnel-db
+          property: connectionString
+      - key: BACKUP_S3_BUCKET
+        sync: false
+      - key: BACKUP_S3_PREFIX
+        value: backups/postgresql
+      - key: BACKUP_RETENTION_DAYS
+        value: "30"
+
+  - type: keyvalue
+    name: gestion-personnel-redis
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
+
+# Le plan PostgreSQL de production apporte les sauvegardes/PITR gérées par
+# Render en première ligne de défense. Le cron S3 fournit une copie logique
+# indépendante et testable avec scripts/restore_postgres.py.
 databases:
   - name: gestion-personnel-db
-    plan: free
+    plan: basic-256mb
+    postgresMajorVersion: "17"
+    ipAllowList: []

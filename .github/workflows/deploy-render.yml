@@ -1,0 +1,60 @@
+name: Déploiement Render
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WEB_HOOK: ${{ secrets.RENDER_WEB_DEPLOY_HOOK_URL }}
+  SCHEDULER_HOOK: ${{ secrets.RENDER_SCHEDULER_DEPLOY_HOOK_URL }}
+  BACKUP_HOOK: ${{ secrets.RENDER_BACKUP_DEPLOY_HOOK_URL }}
+  HEALTHCHECK_URL: ${{ vars.RENDER_HEALTHCHECK_URL }}
+
+concurrency:
+  group: render-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - name: Vérifier la configuration CD
+        run: |
+          test -n "$WEB_HOOK" || { echo "Secret RENDER_WEB_DEPLOY_HOOK_URL manquant"; exit 1; }
+          test -n "$SCHEDULER_HOOK" || { echo "Secret RENDER_SCHEDULER_DEPLOY_HOOK_URL manquant"; exit 1; }
+          test -n "$HEALTHCHECK_URL" || { echo "Variable RENDER_HEALTHCHECK_URL manquante"; exit 1; }
+
+      - name: Déployer le worker scheduler
+        run: curl --fail --silent --show-error --retry 3 -X POST "$SCHEDULER_HOOK"
+
+      - name: Déployer le service web
+        run: curl --fail --silent --show-error --retry 3 -X POST "$WEB_HOOK"
+
+      - name: Déployer le job de sauvegarde
+        if: env.BACKUP_HOOK != ''
+        run: curl --fail --silent --show-error --retry 3 -X POST "$BACKUP_HOOK"
+
+      - name: Attendre la readiness de production
+        run: |
+          sleep 45
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 10 "$HEALTHCHECK_URL"; then
+              exit 0
+            fi
+            echo "Readiness indisponible (tentative $attempt/30)"
+            sleep 15
+          done
+          exit 1

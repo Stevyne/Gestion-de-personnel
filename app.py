@@ -3,7 +3,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from flask_wtf.csrf import CSRFProtect
-from werkzeug.security import generate_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
@@ -15,15 +15,21 @@ from functools import wraps
 import io
 from urllib.parse import urlencode
 
-from flask_mail import Mail, Message
-from apscheduler.schedulers.background import BackgroundScheduler
-import atexit
+from dotenv import load_dotenv
+load_dotenv()   # charge .env avant la configuration des services
 
+from flask_mail import Mail, Message
+
+from extensions import db, migrate
+from services.bootstrap_seed import appliquer_seed_initial
 from services.email_outbox import ajouter_email, traiter_outbox
+from services.object_storage import object_storage
+from services.observability import configure_logging, init_sentry, register_observability
 from services.roles import GLOBAL_DATA_ROLES, ROLE_LABELS
 from services.phase1_schema import appliquer_contraintes_phase1
 from services.phase2_schema import appliquer_schema_phase2
 from services.phase3_schema import appliquer_schema_phase3
+from services.phase4_schema import appliquer_schema_phase4
 from blueprints.absence_justifications import (
     ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
 )
@@ -43,11 +49,9 @@ from blueprints.parc import (
     creer_blueprint_parc,
 )
 
-# ==================== LOGGING ====================
-logging.basicConfig(
-    level=getattr(logging, os.environ.get('LOG_LEVEL', 'INFO').upper(), logging.INFO),
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-)
+# ==================== LOGGING / MONITORING ====================
+configure_logging()
+init_sentry()
 logger = logging.getLogger('gestion_personnel')
 
 
@@ -60,9 +64,6 @@ from reportlab.lib.units import cm
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
-
-from dotenv import load_dotenv
-load_dotenv()   # charge .env dans os.environ
 
 app = Flask(__name__)
 
@@ -85,8 +86,11 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
 app.config['PERMANENT_SESSION_LIFETIME'] = int(os.environ.get('PERMANENT_SESSION_LIFETIME', 3600))
 
-# Limiter les uploads
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+# Limite globale configurable ; les modules gardent leurs limites métier plus
+# strictes (par exemple 8 Mo pour justificatifs et pièces jointes).
+app.config['MAX_CONTENT_LENGTH'] = int(
+    os.environ.get('MAX_CONTENT_LENGTH', str(16 * 1024 * 1024))
+)
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if not DATABASE_URL:
@@ -99,11 +103,40 @@ if not DATABASE_URL:
     DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/gestion_personnel'
     logger.warning("DATABASE_URL absente de l'environnement, utilisation du fallback de dev local (postgres/postgres).")
 
+# Proxy de confiance explicitement configuré (Render : 1).
+try:
+    trusted_proxies = max(0, int(os.environ.get('TRUSTED_PROXY_COUNT', '0')))
+except ValueError as exc:
+    raise RuntimeError("TRUSTED_PROXY_COUNT doit être un entier.") from exc
+if trusted_proxies:
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=trusted_proxies,
+        x_proto=trusted_proxies,
+        x_host=trusted_proxies,
+    )
+
+# Alembic versionne le schéma ; le métier reste en psycopg2.
+sqlalchemy_url = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = sqlalchemy_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': int(os.environ.get('SQLALCHEMY_POOL_RECYCLE', '300')),
+}
+db.init_app(app)
+migrate.init_app(app, db, directory='migrations')
+
+# Bootstrap automatique seulement en développement/tests.
+app.config['AUTO_INIT_DB'] = os.environ.get(
+    'AUTO_INIT_DB',
+    'false' if os.environ.get('FLASK_ENV') == 'production' else 'true',
+).lower() == 'true'
+
 # ==================== UPLOADS (Documents) ====================
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
 ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'txt'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -250,15 +283,33 @@ def _send_outbox_message(message):
 # === INITIALISATION SÉCURITÉ ===
 csrf = CSRFProtect(app)
 
-# Rate limiter — désactivable avant l'import (tests/CI). La configuration
-# modifiée après l'initialisation de l'extension arrivait trop tard.
+# Rate limiter partagé entre tous les workers Gunicorn via Redis. Le stockage
+# mémoire reste uniquement un repli de développement explicite.
 app.config['RATELIMIT_ENABLED'] = os.environ.get(
     'RATELIMIT_ENABLED', 'true').lower() == 'true'
+ratelimit_storage_uri = (
+    os.environ.get('RATELIMIT_STORAGE_URI')
+    or os.environ.get('REDIS_URL')
+    or 'memory://'
+)
+if (os.environ.get('FLASK_ENV') == 'production'
+        and app.config['RATELIMIT_ENABLED']
+        and ratelimit_storage_uri == 'memory://'
+        and os.environ.get('REQUIRE_REDIS_RATE_LIMIT', 'true').lower() == 'true'):
+    raise RuntimeError(
+        "REDIS_URL (ou RATELIMIT_STORAGE_URI) est obligatoire pour le rate "
+        "limiting multi-worker en production."
+    )
 limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
+    storage_uri=ratelimit_storage_uri,
+    storage_options={"socket_connect_timeout": 2, "socket_timeout": 2}
+        if ratelimit_storage_uri.startswith(('redis://', 'rediss://')) else None,
+    enabled=app.config['RATELIMIT_ENABLED'],
+    in_memory_fallback_enabled=False,
+    key_prefix=os.environ.get('RATELIMIT_KEY_PREFIX', 'gestion-personnel'),
 )
 
 # Headers de sécurité (Talisman)
@@ -270,7 +321,10 @@ csp = {
 }
 talisman = Talisman(
     app,
-    force_https=False,                    # passez à True en production HTTPS
+    force_https=os.environ.get(
+        'FORCE_HTTPS',
+        'true' if os.environ.get('FLASK_ENV') == 'production' else 'false',
+    ).lower() == 'true',
     frame_options='DENY',
     content_security_policy=csp,
     referrer_policy='strict-origin-when-cross-origin',
@@ -1248,6 +1302,7 @@ def recalculer_solde(employe_id, annee=None, cur=None):
 def init_db():
     conn = get_db()
     cur = get_cursor(conn)
+    cur.execute("SELECT pg_advisory_xact_lock(hashtext('gestion_personnel_init_db'))")
 
     cur.execute('''CREATE TABLE IF NOT EXISTS departements (
         id SERIAL PRIMARY KEY,
@@ -1683,9 +1738,8 @@ def init_db():
         date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (conversation_id, user_id)
     )''')
-    # Le contenu des pièces jointes est stocké EN BASE (BYTEA), pas sur le
-    # disque local éphémère du service — même raison que pour les documents
-    # et les photos de profil.
+    # Colonne BYTEA historique ; la Phase 4 ajoute les clés S3 hybrides.
+    # Aucun upload récent ne dépend du disque local éphémère.
     cur.execute('''CREATE TABLE IF NOT EXISTS messages (
         id SERIAL PRIMARY KEY,
         conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
@@ -1734,24 +1788,11 @@ def init_db():
     appliquer_contraintes_phase1(cur, logger)
     appliquer_schema_phase2(cur)
     appliquer_schema_phase3(cur)
+    appliquer_schema_phase4(cur)
 
-    # Seed employés
-    cur.execute("SELECT COUNT(*) FROM employes")
-    if cur.fetchone()['count'] == 0:
-        cur.executemany('INSERT INTO employes (nom, prenom, poste, departement, email, telephone, date_embauche, salaire) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)', [
-            ('Dupont','Jean','Développeur','Informatique','jean.dupont@entreprise.fr','0612345678','2023-01-15',52000),
-            ('Martin','Sophie','Responsable RH','Ressources Humaines','sophie.martin@entreprise.fr','0698765432','2022-06-01',58000),
-            ('Bernard','Pierre','Chef de projet','Informatique','pierre.bernard@entreprise.fr','0678912345','2021-09-10',61000),
-            ('Administrateur','Système','Administrateur Système','Administration','admin@entreprise.fr','0600000001','2022-01-01',72000),
-        ])
-
-    # Seed utilisateurs
-    cur.execute("SELECT COUNT(*) FROM users")
-    if cur.fetchone()['count'] == 0:
-        cur.execute("INSERT INTO users (username, password_hash, role, employe_id) VALUES (%s,%s,%s,%s)", ('admin', generate_password_hash('admin123'), 'admin', 4))
-        cur.execute("INSERT INTO users (username, password_hash, role, employe_id) VALUES (%s,%s,%s,%s)", ('rh', generate_password_hash('rh123'), 'rh', 2))
-        cur.execute("INSERT INTO users (username, password_hash, role, employe_id) VALUES (%s,%s,%s,%s)", ('manager', generate_password_hash('manager123'), 'manager', 3))
-        cur.execute("INSERT INTO users (username, password_hash, role, employe_id) VALUES (%s,%s,%s,%s)", ('employe', generate_password_hash('user123'), 'employe', 1))
+    # Les identifiants publics de démonstration sont strictement réservés au
+    # développement/tests ; la production exige un secret de bootstrap.
+    appliquer_seed_initial(cur, conn)
 
     # Seed soldes congés (maintenant possible car la table existe)
     annee_courante = datetime.now().year
@@ -3507,57 +3548,45 @@ def job_traiter_file_emails():
 
 
 def demarrer_scheduler():
-    """Démarre le scheduler en tâche de fond (1 seul process gunicorn en
-    production, cf. render.yaml). Avec le rechargeur Flask (FLASK_DEBUG=true en
-    local), le module est importé deux fois : on ne démarre le job que dans le
-    process qui sert réellement les requêtes (WERKZEUG_RUN_MAIN), pas dans le
-    process de surveillance du rechargeur, pour éviter un double job.
+    """Repli local optionnel ; la production utilise ``scheduler_worker.py``.
 
-    Si l'appli est un jour déployée avec plusieurs workers (gunicorn -w N), la
-    table `scheduler_runs` empêche quand même toute double exécution/notif.
+    ``SCHEDULER_MODE=embedded`` conserve l'expérience historique pour un poste
+    de développement mono-processus. Le mode par défaut est ``disabled`` en
+    production et ``embedded`` ailleurs. Gunicorn ne lance donc plus de tâches.
     """
-    if os.environ.get('FLASK_ENV') == 'testing':
-        return  # jamais de job planifié pendant les tests automatisés
+    mode_defaut = 'disabled' if os.environ.get('FLASK_ENV') == 'production' else 'embedded'
+    mode = os.environ.get('SCHEDULER_MODE', mode_defaut).lower()
+    if os.environ.get('FLASK_ENV') == 'testing' or mode != 'embedded':
+        return None
     debug_actif = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     if debug_actif and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
-        return
-    scheduler = BackgroundScheduler(timezone='Indian/Antananarivo')
-    scheduler.add_job(
-        job_generation_quotidienne_absences, 'cron',
-        hour=1, minute=0, id='generation_absences_quotidienne', replace_existing=True
+        return None
+
+    from services.scheduler_runtime import build_scheduler
+    import atexit
+
+    scheduler = build_scheduler(
+        jobs={
+            'generation_absences': job_generation_quotidienne_absences,
+            'alertes_documents': job_alertes_expiration_documents,
+            'recalcul_soldes': job_recalcul_soldes_conges,
+            'alertes_contrats': job_alertes_contrats,
+            'purge_sessions': job_purge_sessions,
+            'validation_maintenances': job_validation_auto_maintenances,
+            'email_outbox': job_traiter_file_emails,
+        },
+        db_cursor=db_cursor,
+        app_config=app.config,
+        blocking=False,
     )
-    scheduler.add_job(
-        job_alertes_expiration_documents, 'cron',
-        hour=1, minute=30, id='alertes_expiration_documents', replace_existing=True
-    )
-    scheduler.add_job(
-        job_recalcul_soldes_conges, 'cron',
-        hour=2, minute=0, id='recalcul_soldes_conges', replace_existing=True
-    )
-    scheduler.add_job(
-        job_alertes_contrats, 'cron',
-        hour=2, minute=30, id='alertes_contrats', replace_existing=True
-    )
-    scheduler.add_job(
-        job_purge_sessions, 'cron',
-        hour=3, minute=0, id='purge_sessions_actives', replace_existing=True
-    )
-    scheduler.add_job(
-        job_validation_auto_maintenances, 'cron',
-        hour=3, minute=30, id='validation_auto_maintenances', replace_existing=True
-    )
-    if app.config.get('EMAIL_ENABLED'):
-        scheduler.add_job(
-            job_traiter_file_emails, 'interval',
-            seconds=max(15, app.config.get('EMAIL_POLL_SECONDS', 60)),
-            id='traiter_file_emails', replace_existing=True,
-            max_instances=1, coalesce=True,
-        )
+    scheduler.phase4_heartbeat()
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
-    logger.info("Scheduler démarré : génération auto des absences (01h00) + alertes "
-                "d'expiration de documents (01h30) + recalcul des soldes de congés "
-                "(02h00), tous les jours.")
+    logger.warning(
+        "Scheduler embarqué actif pour le développement. En production, "
+        "utilisez python scheduler_worker.py."
+    )
+    return scheduler
 
 
 @app.route('/absences')
@@ -4492,6 +4521,7 @@ contrats_bp, contrats_api = creer_blueprint_contrats({
     'create_notification': create_notification,
     'queue_email': queue_email,
     'log_action': log_action,
+    'object_storage': object_storage,
 })
 job_alertes_contrats = contrats_api['job_alertes_contrats']
 app.register_blueprint(contrats_bp)
@@ -4583,6 +4613,7 @@ app.register_blueprint(creer_blueprint_documents({
     'department_scope_sql': department_scope_sql,
     'upload_folder': app.config['UPLOAD_FOLDER'],
     'seuil_expiration': SEUIL_ALERTE_EXPIRATION_DOCUMENTS_JOURS,
+    'object_storage': object_storage,
 }))
 
 parc_bp, parc_api = creer_blueprint_parc({
@@ -4614,6 +4645,7 @@ app.register_blueprint(creer_blueprint_justifications({
     'create_notification': create_notification,
     'queue_email': queue_email,
     'log_action': log_action,
+    'object_storage': object_storage,
 }))
 
 app.register_blueprint(creer_blueprint_messagerie({
@@ -4624,13 +4656,33 @@ app.register_blueprint(creer_blueprint_messagerie({
     'queue_email': queue_email,
     'log_action': log_action,
     'department_scope_sql': department_scope_sql,
+    'object_storage': object_storage,
 }))
 
-# Doit s'exécuter que l'app soit lancée directement (python app.py) OU importée
-# par un serveur WSGI (gunicorn app:app, cas du déploiement Render) : sinon les
-# tables créées via CREATE TABLE IF NOT EXISTS (comme `absences`) n'existent
-# jamais en production. Idempotent, donc sans risque même avec plusieurs workers.
-init_db()
+# Commandes d'exploitation : bootstrap transitoire du schéma historique,
+# migrations Alembic (`flask db ...`) et migration progressive des fichiers.
+import click
+from services.storage_migration import register_storage_cli
+
+
+@app.cli.command('bootstrap-db')
+def bootstrap_db_command():
+    """Amorce idempotemment une base historique avant le premier db upgrade."""
+    init_db()
+    click.echo('Bootstrap PostgreSQL terminé.')
+
+
+register_storage_cli(app, db_cursor, object_storage)
+health_live, health_ready = register_observability(
+    app, get_db, object_storage, alembic_revision='20260813_phase4'
+)
+limiter.exempt(health_live)
+limiter.exempt(health_ready)
+
+# En production, Render lance `flask bootstrap-db && flask db upgrade` dans le
+# preDeployCommand. Aucun worker web ne modifie alors le schéma au démarrage.
+if app.config['AUTO_INIT_DB']:
+    init_db()
 demarrer_scheduler()
 
 if __name__ == '__main__':

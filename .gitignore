@@ -98,6 +98,7 @@ logs/
 # Backup files (from your project)
 # ============================
 *.backup
+!Dockerfile.backup
 *.backup.*
 app.py.backup*
 *.bak

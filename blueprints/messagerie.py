@@ -3,21 +3,21 @@
 Un « petit réseau social » interne à l'application : chaque utilisateur peut
 démarrer une conversation privée avec un collègue, créer un groupe à plusieurs,
 ou (pour admin/rh) diffuser une annonce à tous ou à un rôle donné. Les pièces
-jointes sont stockées en base (BYTEA), comme les documents et les photos de
-profil : le disque local du service est éphémère sur Render.
+jointes utilisent un stockage hybride : BYTEA pour les petits fichiers et S3
+privé au-delà du seuil configuré. Le disque local Render n'est jamais utilisé.
 
 Suit le même patron que ``blueprints/absence_justifications.py`` : les
 dépendances (base, auth, notifications, e-mails, audit) sont injectées par la
 fabrique pour éviter tout import circulaire avec ``app.py``.
 """
 
-import io
 import psycopg2
 
 from flask import (Blueprint, abort, flash, redirect, render_template,
-                    request, send_file, session, url_for)
+                    request, session, url_for)
 from werkzeug.utils import secure_filename
 
+from services.object_storage import ObjectStorageError
 from services.roles import GLOBAL_DATA_ROLES, ROLE_CODES
 
 
@@ -68,6 +68,15 @@ def creer_blueprint_messagerie(deps):
     queue_email = deps['queue_email']
     log_action = deps['log_action']
     department_scope_sql = deps['department_scope_sql']
+    object_storage = deps['object_storage']
+
+    def _stocker_piece(piece):
+        if not piece:
+            return None
+        return object_storage.store(
+            'pieces-jointes-messagerie', piece['contenu'], piece['nom'],
+            content_type='application/pdf' if piece['type'] == 'pdf' else None,
+        )
 
     # ---------------------------------------------------------------- utils
     def _est_membre(cur, conversation_id, user_id):
@@ -264,6 +273,12 @@ def creer_blueprint_messagerie(deps):
                         type_conv = 'groupe'
                     membres_ids.extend(autorises)
 
+                try:
+                    stored = _stocker_piece(piece)
+                except ObjectStorageError as exc:
+                    flash(str(exc), 'danger')
+                    return redirect(url_for('messagerie.messagerie_nouveau'))
+
                 cur.execute("""
                     INSERT INTO conversations (type, titre, cible_role, cree_par)
                     VALUES (%s, %s, %s, %s) RETURNING id
@@ -278,16 +293,29 @@ def creer_blueprint_messagerie(deps):
                             VALUES (%s, %s) ON CONFLICT DO NOTHING
                         """, (conv_id, uid))
 
-                cur.execute("""
-                    INSERT INTO messages (conversation_id, sender_id, contenu,
-                                          piece_jointe_nom, piece_jointe_type,
-                                          piece_jointe_taille, piece_jointe_contenu)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
-                """, (conv_id, session['user_id'], contenu,
-                      piece['nom'] if piece else None, piece['type'] if piece else None,
-                      piece['taille'] if piece else None,
-                      psycopg2.Binary(piece['contenu']) if piece else None))
-                message_id = cur.fetchone()['id']
+                try:
+                    cur.execute("""
+                        INSERT INTO messages
+                            (conversation_id, sender_id, contenu, piece_jointe_nom,
+                             piece_jointe_type, piece_jointe_taille,
+                             piece_jointe_contenu, piece_jointe_storage_key,
+                             piece_jointe_storage_etag, piece_jointe_storage_sha256)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                    """, (conv_id, session['user_id'], contenu,
+                          piece['nom'] if piece else None,
+                          piece['type'] if piece else None,
+                          piece['taille'] if piece else None,
+                          psycopg2.Binary(stored.content)
+                          if stored and stored.content is not None else None,
+                          stored.storage_key if stored else None,
+                          stored.storage_etag if stored else None,
+                          stored.storage_sha256 if stored else None))
+                    message_id = cur.fetchone()['id']
+                except Exception:
+                    if stored and stored.external:
+                        object_storage.delete(stored.storage_key)
+                    raise
 
                 if type_conv in ('prive', 'groupe'):
                     cur.execute("""
@@ -459,16 +487,34 @@ def creer_blueprint_messagerie(deps):
                 # (ce qui ajoute un message visible par toute la cible).
                 abort(403)
 
-            cur.execute("""
-                INSERT INTO messages (conversation_id, sender_id, contenu,
-                                      piece_jointe_nom, piece_jointe_type,
-                                      piece_jointe_taille, piece_jointe_contenu)
-                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
-            """, (id, user_id, contenu or '',
-                  piece['nom'] if piece else None, piece['type'] if piece else None,
-                  piece['taille'] if piece else None,
-                  psycopg2.Binary(piece['contenu']) if piece else None))
-            message_id = cur.fetchone()['id']
+            try:
+                stored = _stocker_piece(piece)
+            except ObjectStorageError as exc:
+                flash(str(exc), 'danger')
+                return redirect(url_for('messagerie.messagerie_voir', id=id))
+            try:
+                cur.execute("""
+                    INSERT INTO messages
+                        (conversation_id, sender_id, contenu, piece_jointe_nom,
+                         piece_jointe_type, piece_jointe_taille,
+                         piece_jointe_contenu, piece_jointe_storage_key,
+                         piece_jointe_storage_etag, piece_jointe_storage_sha256)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (id, user_id, contenu or '',
+                      piece['nom'] if piece else None,
+                      piece['type'] if piece else None,
+                      piece['taille'] if piece else None,
+                      psycopg2.Binary(stored.content)
+                      if stored and stored.content is not None else None,
+                      stored.storage_key if stored else None,
+                      stored.storage_etag if stored else None,
+                      stored.storage_sha256 if stored else None))
+                message_id = cur.fetchone()['id']
+            except Exception:
+                if stored and stored.external:
+                    object_storage.delete(stored.storage_key)
+                raise
 
             if conv['type'] in ('prive', 'groupe'):
                 cur.execute("""
@@ -525,11 +571,13 @@ def creer_blueprint_messagerie(deps):
         role = session.get('role', 'employe')
         with db_cursor() as (conn, cur):
             cur.execute("""
-                SELECT m.piece_jointe_nom, m.piece_jointe_contenu, m.conversation_id
+                SELECT m.piece_jointe_nom, m.piece_jointe_contenu,
+                       m.piece_jointe_storage_key, m.conversation_id
                 FROM messages m WHERE m.id = %s
             """, (message_id,))
             msg = cur.fetchone()
-            if not msg or msg.get('piece_jointe_contenu') is None:
+            if not msg or (msg.get('piece_jointe_contenu') is None
+                           and not msg.get('piece_jointe_storage_key')):
                 abort(404)
             cur.execute("SELECT * FROM conversations WHERE id = %s", (msg['conversation_id'],))
             conv = cur.fetchone()
@@ -537,11 +585,14 @@ def creer_blueprint_messagerie(deps):
                 abort(403)
 
         filename = secure_filename(msg['piece_jointe_nom'])
-        resp = send_file(io.BytesIO(bytes(msg['piece_jointe_contenu'])),
-                         as_attachment=True, download_name=filename)
-        resp.headers['X-Content-Type-Options'] = 'nosniff'
-        resp.headers['Cache-Control'] = 'private, no-store'
-        return resp
+        try:
+            return object_storage.download_response(
+                content=msg.get('piece_jointe_contenu'),
+                storage_key=msg.get('piece_jointe_storage_key'),
+                filename=filename,
+            )
+        except ObjectStorageError:
+            abort(503)
 
     @bp.route('/messages/<int:id>/quitter', methods=['POST'])
     @login_required

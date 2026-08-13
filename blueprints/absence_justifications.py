@@ -5,12 +5,13 @@ Premier périmètre extrait de ``app.py`` sous forme de Blueprint. Les dépendan
 fabrique pour éviter tout import circulaire avec l'application historique.
 """
 
-import io
 import os
 
 from flask import (Blueprint, abort, flash, redirect, render_template, request,
-                   send_file, session, url_for)
+                   session, url_for)
 from werkzeug.utils import secure_filename
+
+from services.object_storage import ObjectStorageError
 
 
 ABSENCE_NON_JUSTIFIEE = 'non_justifiee'
@@ -69,6 +70,7 @@ def creer_blueprint_justifications(deps):
     create_notification = deps['create_notification']
     queue_email = deps['queue_email']
     log_action = deps['log_action']
+    object_storage = deps['object_storage']
 
     def _cible_employe(cur, employe_id):
         cur.execute("""
@@ -117,47 +119,70 @@ def creer_blueprint_justifications(deps):
             flash(erreur, 'danger')
             return redirect(url_for('.self_service_absences'))
 
-        with db_cursor(commit=True) as (conn, cur):
-            cur.execute("SELECT * FROM absences WHERE id = %s FOR UPDATE",
-                        (absence_id,))
-            absence = cur.fetchone()
-            if not absence or absence['employe_id'] != employe['id']:
-                abort(404)
-            if absence['statut'] not in (ABSENCE_NON_JUSTIFIEE, ABSENCE_REFUSEE):
-                flash("Cette absence ne peut plus recevoir de justificatif.", 'warning')
-                return redirect(url_for('.self_service_absences'))
+        stored = None
+        ancien_storage_key = None
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                cur.execute("SELECT * FROM absences WHERE id = %s FOR UPDATE",
+                            (absence_id,))
+                absence = cur.fetchone()
+                if not absence or absence['employe_id'] != employe['id']:
+                    abort(404)
+                if absence['statut'] not in (ABSENCE_NON_JUSTIFIEE, ABSENCE_REFUSEE):
+                    flash("Cette absence ne peut plus recevoir de justificatif.", 'warning')
+                    return redirect(url_for('.self_service_absences'))
 
-            cur.execute("""
-                UPDATE absences
-                   SET statut = %s, justificatif_nom = %s,
-                       justificatif_type = %s, justificatif_taille = %s,
-                       justificatif_contenu = %s,
-                       date_depot_justificatif = CURRENT_TIMESTAMP,
-                       justification_commentaire = %s,
-                       motif_refus = NULL, decide_par = NULL, decide_le = NULL
-                 WHERE id = %s
-            """, (ABSENCE_JUSTIFICATIF_DEPOSE, justificatif['nom'],
-                  justificatif['type'], justificatif['taille'],
-                  justificatif['contenu'], commentaire or None, absence_id))
+                stored = object_storage.store(
+                    'justificatifs-absences', justificatif['contenu'],
+                    justificatif['nom'],
+                    content_type='application/pdf'
+                    if justificatif['type'] == 'pdf' else None,
+                )
+                ancien_storage_key = absence.get('justificatif_storage_key')
+                cur.execute("""
+                    UPDATE absences
+                       SET statut = %s, justificatif_nom = %s,
+                           justificatif_type = %s, justificatif_taille = %s,
+                           justificatif_contenu = %s,
+                           justificatif_storage_key = %s,
+                           justificatif_storage_etag = %s,
+                           justificatif_storage_sha256 = %s,
+                           date_depot_justificatif = CURRENT_TIMESTAMP,
+                           justification_commentaire = %s,
+                           motif_refus = NULL, decide_par = NULL, decide_le = NULL
+                     WHERE id = %s
+                """, (ABSENCE_JUSTIFICATIF_DEPOSE, justificatif['nom'],
+                      justificatif['type'], justificatif['taille'],
+                      stored.content, stored.storage_key, stored.storage_etag,
+                      stored.storage_sha256, commentaire or None, absence_id))
 
-            nom = f"{employe['prenom']} {employe['nom']}"
-            cur.execute("""
-                SELECT u.id, e.email
-                  FROM users u LEFT JOIN employes e ON e.id = u.employe_id
-                 WHERE u.role IN ('admin', 'rh')
-            """)
-            for rh in cur.fetchall():
-                create_notification(
-                    rh['id'], "Justificatif d'absence à traiter",
-                    f"{nom} a déposé un justificatif pour l'absence du {absence['date']}.",
-                    'info', cur=cur)
-                queue_email(
-                    rh.get('email'), "Justificatif d'absence à traiter",
-                    f"{nom} a déposé un justificatif pour son absence du "
-                    f"{absence['date']}. Connectez-vous à l'application pour rendre la décision.",
-                    cur=cur,
-                    event_key=(f"absence-justificatif:{absence_id}:{rh['id']}:"
-                               f"{absence.get('decide_le') or 'initial'}"))
+                nom = f"{employe['prenom']} {employe['nom']}"
+                cur.execute("""
+                    SELECT u.id, e.email
+                      FROM users u LEFT JOIN employes e ON e.id = u.employe_id
+                     WHERE u.role IN ('admin', 'rh')
+                """)
+                for rh in cur.fetchall():
+                    create_notification(
+                        rh['id'], "Justificatif d'absence à traiter",
+                        f"{nom} a déposé un justificatif pour l'absence du {absence['date']}.",
+                        'info', cur=cur)
+                    queue_email(
+                        rh.get('email'), "Justificatif d'absence à traiter",
+                        f"{nom} a déposé un justificatif pour son absence du "
+                        f"{absence['date']}. Connectez-vous à l'application pour rendre la décision.",
+                        cur=cur,
+                        event_key=(f"absence-justificatif:{absence_id}:{rh['id']}:"
+                                   f"{absence.get('decide_le') or 'initial'}"))
+        except ObjectStorageError as exc:
+            flash(str(exc), 'danger')
+            return redirect(url_for('.self_service_absences'))
+        except Exception:
+            if stored and stored.external:
+                object_storage.delete(stored.storage_key)
+            raise
+        if ancien_storage_key and ancien_storage_key != stored.storage_key:
+            object_storage.delete(ancien_storage_key)
 
         log_action(session.get('user_id'), session.get('username'),
                    "Dépôt justificatif absence", 'absence', absence_id,
@@ -172,11 +197,12 @@ def creer_blueprint_justifications(deps):
         with db_cursor() as (conn, cur):
             cur.execute("""
                 SELECT employe_id, justificatif_nom, justificatif_type,
-                       justificatif_contenu
+                       justificatif_contenu, justificatif_storage_key
                   FROM absences WHERE id = %s
             """, (absence_id,))
             absence = cur.fetchone()
-        if not absence or absence.get('justificatif_contenu') is None:
+        if not absence or (absence.get('justificatif_contenu') is None
+                           and not absence.get('justificatif_storage_key')):
             abort(404)
 
         est_proprietaire = bool(employe and employe['id'] == absence['employe_id'])
@@ -184,14 +210,14 @@ def creer_blueprint_justifications(deps):
         if not (est_proprietaire or est_rh):
             abort(403)
 
-        reponse = send_file(
-            io.BytesIO(bytes(absence['justificatif_contenu'])),
-            as_attachment=True,
-            download_name=secure_filename(absence['justificatif_nom']) or 'justificatif',
-        )
-        reponse.headers['X-Content-Type-Options'] = 'nosniff'
-        reponse.headers['Cache-Control'] = 'private, no-store'
-        return reponse
+        try:
+            return object_storage.download_response(
+                content=absence.get('justificatif_contenu'),
+                storage_key=absence.get('justificatif_storage_key'),
+                filename=secure_filename(absence['justificatif_nom']) or 'justificatif',
+            )
+        except ObjectStorageError:
+            abort(503)
 
     @bp.route('/absences/<int:absence_id>/decision', methods=['POST'])
     @login_required
