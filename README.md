@@ -255,7 +255,8 @@ cp .env.example .env
 > ✅ **Bonnes nouvelles** : `SECRET_KEY` et `FLASK_DEBUG` sont **déjà lus depuis l'environnement** (aucune valeur sensible codée en dur dans `app.py`). En production, l'absence de `SECRET_KEY` lève une erreur (`RuntimeError`), et `FLASK_DEBUG=true` combiné à `FLASK_ENV=production` est bloqué. En production, l'absence de `DATABASE_URL` est également bloquante ; en développement, un fallback local (`postgres/postgres`) est utilisé avec un avertissement dans les logs.
 >
 > ⚠️ **Points à vérifier avant mise en production** :
-> - Le Blueprint Render configure Redis, HTTPS, un worker scheduler et exige la révision Alembic courante. Renseignez les secrets d'administration et Sentry marqués `sync: false`.
+> - Le seul secret demandé par le Blueprint est `BOOTSTRAP_ADMIN_PASSWORD` sur le service web (12 caractères minimum pour une base neuve). Aucun secret GitHub ni DSN Sentry n'est obligatoire.
+> - Le Blueprint Render configure Redis, HTTPS, le worker scheduler et les migrations Alembic ; les déploiements partent automatiquement après une CI réussie.
 > - **Aucun S3 n'est requis actuellement** : le Blueprint fixe `OBJECT_STORAGE_ENABLED=false` et conserve tous les fichiers en PostgreSQL `BYTEA`.
 > - Configurez SMTP puis passez `EMAIL_ENABLED=true`; sans cette activation explicite, aucun e-mail ne quitte l'application.
 > - `static/uploads/` n'est qu'un repli pour d'anciens fichiers ; les nouveaux fichiers restent persistants dans PostgreSQL.
@@ -360,15 +361,14 @@ Tester périodiquement la restauration sur une base isolée. Ne pointez jamais
 ### CI/CD
 
 `.github/workflows/tests.yml` vérifie Ruff, compile le code, applique Alembic,
-lance les tests PostgreSQL/Redis et construit l'image de backup. Après succès
-sur `master`, `.github/workflows/deploy-render.yml` déclenche les deploy hooks.
-Configurer l'environnement GitHub `production` avec :
+lance les tests PostgreSQL/Redis et construit l'image de backup. Les services
+Render utilisent `autoDeployTrigger: checksPass` : ils se déploient uniquement
+après la réussite de cette CI sur `master`.
 
-- secrets `RENDER_WEB_DEPLOY_HOOK_URL` et `RENDER_SCHEDULER_DEPLOY_HOOK_URL` ;
-- ne créez `RENDER_BACKUP_DEPLOY_HOOK_URL` qu'après ajout du futur cron S3 ;
-- variable `RENDER_HEALTHCHECK_URL` pointant vers
-  `https://<service>/health/ready` ;
-- une protection/approbation de l'environnement selon votre politique.
+Aucun deploy hook, secret GitHub ou variable `RENDER_HEALTHCHECK_URL` n'est
+nécessaire. Le workflow de déploiement qui échouait quand ces secrets étaient
+absents a été supprimé. Render valide directement `/health/ready` avant la
+bascule vers la nouvelle version.
 
 ---
 

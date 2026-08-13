@@ -170,17 +170,22 @@ def test_healthchecks_publics(client):
     assert live.headers.get('X-Request-ID')
 
 
-def test_configuration_production_versionnee():
+def test_configuration_production_versionnee_sans_blocage_cd():
     render = (ROOT / 'render.yaml').read_text(encoding='utf-8')
     workflow = (ROOT / '.github/workflows/tests.yml').read_text(encoding='utf-8')
-    deploy = (ROOT / '.github/workflows/deploy-render.yml').read_text(encoding='utf-8')
+    env_group = render.split('services:', 1)[0]
     assert 'type: keyvalue' in render
     assert 'python scheduler_worker.py' in render
     assert 'flask bootstrap-db && flask db upgrade' in render
+    assert render.count('autoDeployTrigger: checksPass') == 2
+    assert "autoDeployTrigger: 'off'" not in render
+    assert 'sync: false' not in env_group
+    assert 'BOOTSTRAP_ADMIN_PASSWORD\n        sync: false' in render
+    assert not (ROOT / '.github/workflows/deploy-render.yml').exists()
     assert 'OBJECT_STORAGE_ENABLED\n        value: "false"' in render
     assert 'type: cron' not in render
     assert (ROOT / 'scripts/backup_postgres.py').exists()
     assert 'redis:8-alpine' in workflow
     assert 'flask db upgrade' in workflow
-    assert 'RENDER_WEB_DEPLOY_HOOK_URL' in deploy
+    assert 'SCHEDULER_STARTUP_TIMEOUT' in render
     assert (ROOT / 'migrations/versions/20260813_phase4_production.py').exists()

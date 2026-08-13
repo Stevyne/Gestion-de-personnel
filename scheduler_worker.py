@@ -6,6 +6,7 @@ ne doit donc pas être ajouté aux workers Gunicorn.
 
 import logging
 import os
+import time
 
 # Évite tout scheduler embarqué pendant l'import de l'application.
 os.environ["SCHEDULER_MODE"] = "worker"
@@ -26,9 +27,44 @@ from services.scheduler_runtime import build_scheduler  # noqa: E402
 
 
 logger = logging.getLogger("gestion_personnel.scheduler.worker")
+EXPECTED_REVISION = "20260813_phase4"
+
+
+def attendre_schema() -> None:
+    """Attend le preDeploy web lors d'un premier déploiement parallèle Render."""
+    timeout = max(30, int(os.environ.get("SCHEDULER_STARTUP_TIMEOUT", "900")))
+    interval = max(2, int(os.environ.get("SCHEDULER_STARTUP_RETRY_SECONDS", "5")))
+    deadline = time.monotonic() + timeout
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            with db_cursor() as (_conn, cur):
+                cur.execute("""
+                    SELECT to_regclass('public.scheduler_heartbeats') IS NOT NULL
+                             AS heartbeat_ready,
+                           (SELECT version_num FROM alembic_version LIMIT 1)
+                             AS revision
+                """)
+                state = cur.fetchone()
+            if state["heartbeat_ready"] and state["revision"] == EXPECTED_REVISION:
+                return
+            last_error = RuntimeError(
+                f"schéma incomplet (révision={state.get('revision')!r})"
+            )
+        except Exception as exc:
+            last_error = exc
+        logger.warning(
+            "schéma PostgreSQL pas encore prêt; nouvelle tentative",
+            extra={"retry_seconds": interval, "error": repr(last_error)},
+        )
+        time.sleep(interval)
+    raise RuntimeError(
+        "Le schéma PostgreSQL n'est pas prêt après le délai du scheduler."
+    ) from last_error
 
 
 def main() -> None:
+    attendre_schema()
     jobs = {
         "generation_absences": job_generation_quotidienne_absences,
         "alertes_documents": job_alertes_expiration_documents,

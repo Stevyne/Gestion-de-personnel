@@ -12,9 +12,7 @@ envVarGroups:
       - key: BOOTSTRAP_ADMIN_USERNAME
         value: admin
       - key: BOOTSTRAP_ADMIN_EMAIL
-        sync: false
-      - key: BOOTSTRAP_ADMIN_PASSWORD
-        sync: false
+        value: admin@entreprise.fr
       - key: LOG_FORMAT
         value: json
       - key: LOG_LEVEL
@@ -37,8 +35,6 @@ envVarGroups:
         value: "false"
       - key: OBJECT_STORAGE_THRESHOLD_BYTES
         value: "1048576"
-      - key: SENTRY_DSN
-        sync: false
       - key: SENTRY_ENVIRONMENT
         value: production
       - key: SENTRY_TRACES_SAMPLE_RATE
@@ -58,11 +54,15 @@ services:
       --timeout 60 --graceful-timeout 30 --max-requests 1000
       --max-requests-jitter 100
     healthCheckPath: /health/ready
-    autoDeployTrigger: 'off'
+    autoDeployTrigger: checksPass
     envVars:
       - fromGroup: gestion-personnel-production
       - key: SERVICE_NAME
         value: gestion-personnel-web
+      # Seul secret manuel requis pour une base neuve. Il est ignoré si un
+      # compte existe déjà et peut ensuite être supprimé du Dashboard Render.
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
       - key: AUTO_INIT_DB
         value: "false"
       - key: SCHEDULER_MODE
@@ -90,9 +90,8 @@ services:
     runtime: python
     plan: starter
     buildCommand: pip install -r requirements-production.txt
-    preDeployCommand: flask bootstrap-db && flask db upgrade
     startCommand: python scheduler_worker.py
-    autoDeployTrigger: 'off'
+    autoDeployTrigger: checksPass
     envVars:
       - fromGroup: gestion-personnel-production
       - key: SERVICE_NAME
@@ -101,6 +100,8 @@ services:
         value: "false"
       - key: SCHEDULER_MODE
         value: worker
+      - key: SCHEDULER_STARTUP_TIMEOUT
+        value: "900"
       - key: DATABASE_URL
         fromDatabase:
           name: gestion-personnel-db
