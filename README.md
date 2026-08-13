@@ -158,7 +158,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Les données salariales et les coûts consolidés restent réservés aux vues admin/RH
 
 ### 🪟 Interface
-- **Navigation compacte** : une seule ligne (~63 px), 5 groupes déroulants, icônes SVG, menu du compte avec avatar. Paliers responsive : complet ≥ 1151 px, compressé 1071–1150 px, icônes seules 769–1070 px, tiroir latéral ≤ 768 px
+- **Navigation compacte et fixe** : reste visible en haut pendant le défilement, une seule ligne (~63 px), 5 groupes déroulants, icônes SVG, menu du compte avec avatar. Paliers responsive : complet ≥ 1151 px, compressé 1071–1150 px, icônes seules 769–1070 px, tiroir latéral ≤ 768 px
 - **Formulaires en popup** : créations et modifications s'ouvrent dans une fenêtre modale sans quitter la page courante (avec repli sur la page classique si JavaScript est absent)
 - Graphiques du tableau de bord responsives ; Chart.js servi **en local** (compatible avec la politique CSP)
 

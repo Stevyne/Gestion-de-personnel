@@ -17,6 +17,7 @@
     --card-shadow-hover: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     --radius: 12px;
     --radius-lg: 16px;
+    --navbar-height: 63px;
 }
 
 /* ===== BASE ===== */
@@ -28,6 +29,7 @@
 
 html {
     overflow-x: hidden;
+    scroll-padding-top: calc(var(--navbar-height) + 12px);
 }
 
 body {
@@ -38,6 +40,7 @@ body {
     min-height: 100vh;
     overflow-x: hidden;
     width: 100%;
+    padding-top: var(--navbar-height);
 }
 
 /* ===== NAVBAR ===== */
@@ -45,9 +48,10 @@ body {
     background: white;
     box-shadow: 0 1px 0 0 #e2e8f0, 0 4px 12px -2px rgb(0 0 0 / 0.05);
     padding: 0.75rem 0;
-    position: sticky;
-    top: 0;
-    z-index: 100;
+    position: fixed;
+    inset: 0 0 auto 0;
+    width: 100%;
+    z-index: 1200;
     border-bottom: 1px solid #e2e8f0;
 }
 
@@ -1928,6 +1932,9 @@ footer {
     background: rgba(255, 255, 255, 0.92);
     backdrop-filter: saturate(180%) blur(12px);
     -webkit-backdrop-filter: saturate(180%) blur(12px);
+    position: fixed;
+    inset: 0 0 auto 0;
+    width: 100%;
     padding: 0;
     border-bottom: 1px solid #e8edf3;
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
@@ -3088,7 +3095,7 @@ footer {
 /* Impression : seules les étiquettes sortent sur le papier. */
 @media print {
     .navbar, footer, .no-print, .flash-messages, .alert { display: none !important; }
-    body { background: #fff; }
+    body { background: #fff; padding-top: 0; }
     .container { padding: 0; margin: 0; max-width: none; }
     .planche-etiquettes {
         grid-template-columns: repeat(3, 60mm);
