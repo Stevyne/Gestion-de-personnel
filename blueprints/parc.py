@@ -18,6 +18,8 @@ from flask import (Blueprint, flash, redirect, render_template, request,
 from markupsafe import Markup, escape
 import psycopg2
 
+from services.roles import GLOBAL_DATA_ROLES
+
 MATERIEL_CATEGORIES = [
     ('fourniture', '✏️ Fourniture de bureau'),
     ('papeterie', '📄 Papeterie'),
@@ -76,7 +78,6 @@ MAINTENANCE_OUVERTS = ('signale', 'assigne', 'envoye', 'a_valider')
 MAINTENANCE_INDISPONIBLE = ('signale', 'assigne', 'envoye')
 # Délai au-delà duquel un retour sans réponse du demandeur est réputé validé.
 MAINTENANCE_VALIDATION_JOURS = int(os.environ.get('MAINTENANCE_VALIDATION_JOURS', 7))
-GLOBAL_DATA_ROLES = ('admin', 'rh')
 
 
 def creer_blueprint_parc(deps):
@@ -557,9 +558,11 @@ def creer_blueprint_parc(deps):
             mouvements = cur.fetchall()
 
             cur.execute(f"""
-                SELECT a.*, e.nom AS emp_nom, e.prenom AS emp_prenom
+                SELECT a.*, e.nom AS emp_nom, e.prenom AS emp_prenom,
+                       ex.numero_inventaire AS exemplaire_numero
                 FROM materiels_attributions a
                 JOIN employes e ON e.id = a.employe_id
+                LEFT JOIN materiel_exemplaires ex ON ex.id = a.exemplaire_id
                 WHERE a.materiel_id = %s AND {emp_scope}
                 ORDER BY a.date_retour NULLS FIRST, a.date_attribution DESC
             """, [id] + emp_params)
@@ -652,6 +655,7 @@ def creer_blueprint_parc(deps):
     def attribuer_materiel(id):
         employe_id = request.form.get('employe_id', type=int)
         quantite = request.form.get('quantite', type=int) or 1
+        exemplaire_id = request.form.get('exemplaire_id', type=int)
         commentaire = (request.form.get('commentaire') or '').strip()
 
         if not employe_id:
@@ -665,42 +669,73 @@ def creer_blueprint_parc(deps):
                     emp = cur.fetchone()
                     if not emp:
                         raise ValueError("Employé introuvable")
+                    cur.execute("SELECT * FROM materiels WHERE id=%s FOR UPDATE", (id,))
+                    materiel = cur.fetchone()
+                    if not materiel:
+                        raise ValueError("Matériel introuvable")
+
+                    numero_exemplaire = None
+                    if materiel.get('suivi_unitaire'):
+                        if not exemplaire_id:
+                            raise ValueError("Sélectionnez l'exemplaire physique à attribuer")
+                        quantite = 1
+                        cur.execute("""
+                            SELECT ex.id, ex.numero_inventaire, ex.etat, ex.employe_id,
+                                   EXISTS(SELECT 1 FROM materiels_attributions a
+                                          WHERE a.exemplaire_id=ex.id AND a.date_retour IS NULL) AS deja_attribue,
+                                   EXISTS(SELECT 1 FROM materiel_maintenances mt
+                                          WHERE mt.exemplaire_id=ex.id AND mt.statut IN %s) AS en_maintenance
+                              FROM materiel_exemplaires ex
+                             WHERE ex.id=%s AND ex.materiel_id=%s FOR UPDATE
+                        """, (MAINTENANCE_OUVERTS, exemplaire_id, id))
+                        exemplaire = cur.fetchone()
+                        if not exemplaire:
+                            raise ValueError("Exemplaire introuvable pour ce matériel")
+                        if exemplaire['deja_attribue'] or exemplaire['employe_id']:
+                            raise ValueError("Cet exemplaire est déjà attribué")
+                        if exemplaire['en_maintenance'] or exemplaire['etat'] not in ('bon', 'usage'):
+                            raise ValueError("Cet exemplaire n'est pas disponible")
+                        numero_exemplaire = exemplaire['numero_inventaire']
+                    else:
+                        exemplaire_id = None
+
                     nom_complet = f"{emp['prenom']} {emp['nom']}"
-                    # L'attribution retire physiquement l'article du stock.
+                    motif_sortie = f"Attribution à {nom_complet}"
+                    if numero_exemplaire:
+                        motif_sortie += f" — {numero_exemplaire}"
                     _enregistrer_mouvement(cur, id, 'sortie', quantite, employe_id,
-                                           f"Attribution à {nom_complet}")
+                                           motif_sortie)
                     cur.execute("""
                         INSERT INTO materiels_attributions
-                            (materiel_id, employe_id, quantite, commentaire, attribue_par)
-                        VALUES (%s, %s, %s, %s, %s) RETURNING id
-                    """, (id, employe_id, quantite, commentaire or None,
-                          session.get('username')))
-                    cur.fetchone()  # consomme le RETURNING id
+                            (materiel_id, employe_id, exemplaire_id, quantite,
+                             commentaire, attribue_par)
+                        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+                    """, (id, employe_id, exemplaire_id, quantite,
+                          commentaire or None, session.get('username')))
+                    cur.fetchone()
 
-                    # L'attribution n'est acquise qu'une fois l'employé l'ayant
-                    # confirmée : on l'invite à accuser réception.
-                    cur.execute("SELECT nom FROM materiels WHERE id = %s", (id,))
-                    mrow = cur.fetchone()
-                    libelle = mrow['nom'] if mrow else "matériel"
                     uid = _user_id_de_employe(cur, employe_id)
                     if uid:
+                        libelle = materiel['nom']
+                        if numero_exemplaire:
+                            libelle += f" ({numero_exemplaire})"
                         create_notification(
                             uid, "Matériel à réceptionner",
                             "%s (x%s) vous a été attribué. Merci d'accuser réception "
                             "depuis votre espace, ou de contester si l'équipement "
                             "ne vous a pas été remis." % (libelle, quantite), 'info')
+                details = nom_complet + (f" — {numero_exemplaire}" if numero_exemplaire else "")
                 log_action(session.get('user_id'), session.get('username'),
-                           "Attribution matériel", "materiel", id, nom_complet)
+                           "Attribution matériel", "materiel", id, details)
                 flash(f"Matériel attribué à {nom_complet} — en attente de son accusé de réception",
                       "success")
             except ValueError as e:
                 flash(str(e), "danger")
             except Exception as e:
                 logger.error("Erreur attribution matériel: %s", e, exc_info=True)
-                flash(f"Erreur : {e}", "danger")
+                flash("L'attribution n'a pas pu être enregistrée.", "danger")
 
         return redirect(url_for('parc.view_materiel', id=id))
-
 
     @bp.route('/materiels/attribution/<int:attribution_id>/retour', methods=['POST'])
     @login_required
@@ -1370,7 +1405,6 @@ def creer_blueprint_parc(deps):
         emplacement = (request.form.get('emplacement') or '').strip()
         commentaire = (request.form.get('commentaire') or '').strip()
         etat = (request.form.get('etat') or '').strip()
-        employe_id = request.form.get('employe_id', type=int)
         garantie_fin = (request.form.get('garantie_fin') or '').strip()
         prix = (request.form.get('prix_acquisition') or '').strip()
 
@@ -1389,12 +1423,11 @@ def creer_blueprint_parc(deps):
                 cur.execute("""
                     UPDATE materiel_exemplaires
                     SET numero_serie = %s, emplacement = %s, commentaire = %s,
-                        employe_id = %s, garantie_fin = %s, prix_acquisition = %s,
+                        garantie_fin = %s, prix_acquisition = %s,
                         etat = CASE WHEN %s THEN etat ELSE COALESCE(NULLIF(%s,''), etat) END
                     WHERE id = %s
                 """, (numero_serie or None, emplacement or None, commentaire or None,
-                      employe_id or None, garantie_fin or None,
-                      prix.replace(' ', '').replace(',', '.') or None,
+                      garantie_fin or None, prix.replace(' ', '').replace(',', '.') or None,
                       bloque, etat, id))
             if bloque and etat:
                 flash("Exemplaire mis à jour. L'état reste piloté par l'intervention en cours.", "info")

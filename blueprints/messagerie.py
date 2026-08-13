@@ -18,14 +18,16 @@ from flask import (Blueprint, abort, flash, redirect, render_template,
                     request, send_file, session, url_for)
 from werkzeug.utils import secure_filename
 
+from services.roles import GLOBAL_DATA_ROLES, ROLE_CODES
+
 
 PIECE_JOINTE_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx', 'xls', 'xlsx', 'txt'}
 PIECE_JOINTE_MAX_BYTES = 8 * 1024 * 1024  # 8 Mo, cohérent avec les autres pièces jointes de l'app
 MESSAGE_MAX_CHARS = 20_000
 TITRE_MAX_CHARS = 200
 
-ROLES_VALIDES = ('admin', 'rh', 'manager', 'technicien', 'employe')
-ROLES_GLOBAUX = ('admin', 'rh')
+ROLES_VALIDES = ROLE_CODES
+ROLES_GLOBAUX = GLOBAL_DATA_ROLES
 
 
 def _lire_piece_jointe(fichier, detect_file_type):

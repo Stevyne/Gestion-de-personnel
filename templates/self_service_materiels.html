@@ -25,7 +25,9 @@
     <tbody>
     {% for a in attributions %}
     <tr>
-      <td data-label="Matériel">{{ a.materiel_nom }}<div class="wf-meta">{{ a.categorie or '—' }}</div></td>
+      <td data-label="Matériel">{{ a.materiel_nom }}
+        <div class="wf-meta">{{ a.categorie or '—' }}{% if a.exemplaire_numero %} · 🏷 {{ a.exemplaire_numero }}{% endif %}</div>
+      </td>
       <td data-label="Qté">{{ a.quantite }} {{ a.unite or '' }}</td>
       <td data-label="Attribué le">{{ a.date_attribution }}
         {% if a.attribue_par %}<div class="wf-meta">par {{ a.attribue_par }}</div>{% endif %}

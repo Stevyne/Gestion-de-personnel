@@ -1,5 +1,7 @@
 # 👥 Gestion du Personnel
 
+[![Tests](https://github.com/Stevyne/Gestion-de-personnel/actions/workflows/tests.yml/badge.svg)](https://github.com/Stevyne/Gestion-de-personnel/actions/workflows/tests.yml)
+
 **Application RH complète en Flask + PostgreSQL**
 
 Système de gestion du personnel multi-utilisateur avec suivi des présences, congés, matériels, documents et notifications.
@@ -49,6 +51,8 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Stock de fournitures et d'équipements rattaché à un **département** (papiers, stylos, classeurs, cartouches, mobilier, informatique...)
 - **Traçabilité complète** : chaque entrée / sortie est enregistrée dans `materiels_mouvements` (quantité, motif, employé concerné, auteur, horodatage). Le stock n'est jamais édité à la main, il découle des mouvements
 - **Attribution durable** à un employé (PC, téléphone, clés) : l'article sort du stock puis y revient au retour (`materiels_attributions`)
+- Pour le parc suivi à l'unité, chaque attribution référence l'**exemplaire physique exact** ; le détenteur de l'exemplaire est synchronisé automatiquement et ne peut plus être modifié hors workflow
+- Contraintes et triggers PostgreSQL empêchent un exemplaire d'un autre article, indisponible, déjà attribué ou associé à une quantité différente de 1
 - **Alerte de stock bas** : seuil configurable par article, badge dans la liste et notification interne aux admin/RH/managers. Anti-spam (une seule notif tant que le stock n'est pas réapprovisionné)
 - Filtres par nom, département, catégorie et état (stock bas / rupture), avec pagination
 - Rôles : `admin`, `rh` et `manager` gèrent le stock ; la suppression est réservée à `admin`/`rh` ; les autres rôles consultent
@@ -108,7 +112,8 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 
 ### 🔐 Sécurité & Rôles
 - Authentification par session (Werkzeug pour le hash des mots de passe)
-- 5 rôles : `admin`, `rh`, `manager`, `technicien`, `employe`
+- 5 rôles officiels centralisés dans `services/roles.py` : `admin`, `rh`, `manager`, `technicien`, `employe`
+- Une contrainte PostgreSQL interdit tout code de rôle inconnu, y compris via une écriture SQL directe
 - Self-service pour les employés (`/self-service` ou `/mon-espace`)
 - Logs d'audit (`/audit`, réservé à `admin`/`rh`)
 - Protection CSRF (Flask-WTF), rate limiting (Flask-Limiter), headers de sécurité (Flask-Talisman)
@@ -321,7 +326,13 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-> Surchargez la base avec la variable `TEST_DATABASE_URL` si besoin (CI, autre machine). Le CSRF, le rate limiting et SMTP sont désactivés pendant les tests (`conftest.py`). La suite couvre notamment le parc matériel, le workflow de maintenance, les justificatifs d'absence, les notifications événementielles et l'outbox.
+> Surchargez la base avec la variable `TEST_DATABASE_URL` si besoin (CI, autre machine). Le CSRF, le rate limiting et SMTP sont désactivés pendant les tests (`conftest.py`). La suite couvre notamment le parc matériel, le workflow de maintenance, les justificatifs d'absence, la messagerie, les contraintes PostgreSQL, les notifications événementielles et l'outbox.
+
+### Intégration continue
+
+Le workflow `.github/workflows/tests.yml` lance automatiquement PostgreSQL 17,
+compile les modules puis exécute `pytest -q` sur chaque push et pull request vers
+`master`. Il peut également être déclenché manuellement depuis GitHub Actions.
 
 > 💡 Si vous testez manuellement en enchaînant beaucoup de requêtes, le rate limiter (50/heure par route) finit par renvoyer `429 Too Many Requests` — ce n'est pas un bug de l'application. Redémarrez le serveur (le compteur est en mémoire) ou désactivez le limiteur dans votre script de test.
 
@@ -364,7 +375,11 @@ Gestion-de-personnel/
 │   ├── absence_justifications.py
 │   └── messagerie.py
 ├── services/
-│   └── email_outbox.py     # File SMTP persistante, indépendante de Flask
+│   ├── email_outbox.py     # File SMTP persistante, indépendante de Flask
+│   ├── roles.py            # Référentiel officiel des rôles
+│   └── phase1_schema.py    # Contraintes, triggers et migrations d'intégrité
+├── .github/workflows/
+│   └── tests.yml           # PostgreSQL 17 + pytest sur push/PR
 ├── requirements.txt        # Dépendances production
 ├── requirements-dev.txt    # Dépendances dev (pytest)
 ├── pytest.ini
@@ -404,6 +419,7 @@ Gestion-de-personnel/
 
 - Base de données exclusivement PostgreSQL
 - Les migrations de schéma sont idempotentes et appliquées au démarrage
+- Les contraintes `CHECK ... NOT VALID` protègent immédiatement les nouvelles écritures sans bloquer une base historique ; les index uniques protègent les workflows concurrents
 - Les soldes de congés sont recalculés automatiquement (~2,08 jours acquis par mois, plafond annuel de 25 jours)
 - Les retards sont calculés en minutes par rapport à `HEURE_ARRIVEE_ATTENDUE` (09:00 par défaut)
 - Les exports incluent le calcul des retards

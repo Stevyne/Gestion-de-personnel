@@ -231,16 +231,36 @@
                 {% endfor %}
             </select>
         </div>
+        {% if materiel.suivi_unitaire %}
+        {% set disponibles = namespace(nb=0) %}
+        <div class="filtre-champ">
+            <label>Exemplaire physique</label>
+            <select name="exemplaire_id" class="form-control" required>
+                <option value="">— Sélectionner —</option>
+                {% for ex in exemplaires %}
+                    {% if not ex.employe_id and not ex.maintenance_id and ex.etat in ['bon', 'usage'] %}
+                    {% set disponibles.nb = disponibles.nb + 1 %}
+                    <option value="{{ ex.id }}">{{ ex.numero_inventaire }}{% if ex.numero_serie %} · {{ ex.numero_serie }}{% endif %}</option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+            {% if disponibles.nb == 0 %}<small class="form-hint">Aucun exemplaire disponible.</small>{% endif %}
+            <input type="hidden" name="quantite" value="1">
+        </div>
+        {% else %}
+        {% set disponibles = namespace(nb=materiel.quantite) %}
         <div class="filtre-champ">
             <label>Quantité</label>
             <input type="number" name="quantite" class="form-control" min="1"
                    max="{{ materiel.quantite }}" value="1" style="max-width:110px;">
         </div>
+        {% endif %}
         <div class="filtre-champ">
             <label>Commentaire</label>
             <input type="text" name="commentaire" class="form-control" placeholder="N° de série...">
         </div>
-        <button type="submit" class="btn btn-primary" {{ 'disabled' if materiel.quantite == 0 }}>
+        <button type="submit" class="btn btn-primary"
+                {{ 'disabled' if materiel.quantite == 0 or disponibles.nb == 0 }}>
             Attribuer
         </button>
     </form>
@@ -263,6 +283,7 @@
                 {% for a in attributions %}
                 <tr>
                     <td data-label="Employé"><strong>{{ a.emp_prenom }} {{ a.emp_nom }}</strong>
+                        {% if a.exemplaire_numero %}<div class="wf-meta">🏷 {{ a.exemplaire_numero }}</div>{% endif %}
                         {% if a.commentaire %}<br><small style="color:#64748b;">{{ a.commentaire }}</small>{% endif %}
                     </td>
                     <td data-label="Quantité">{{ a.quantite }}</td>

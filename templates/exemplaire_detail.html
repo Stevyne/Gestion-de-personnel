@@ -362,13 +362,10 @@
                 {% endif %}
             </div>
             <div class="form-group">
-                <label for="employe_id">Détenteur</label>
-                <select id="employe_id" name="employe_id" class="form-control">
-                    <option value="">— Non attribué —</option>
-                    {% for e in employes %}
-                    <option value="{{ e.id }}" {{ 'selected' if ex.employe_id == e.id }}>{{ e.prenom }} {{ e.nom }}</option>
-                    {% endfor %}
-                </select>
+                <label>Détenteur</label>
+                <input type="text" class="form-control" disabled
+                       value="{{ (ex.emp_prenom ~ ' ' ~ ex.emp_nom)|trim if ex.employe_id else '— Non attribué —' }}">
+                <small class="form-hint">Le détenteur est piloté par le workflow d'attribution de la fiche article.</small>
             </div>
         </div>
         <div class="form-row">

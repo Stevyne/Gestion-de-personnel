@@ -20,6 +20,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 
 from services.email_outbox import ajouter_email, traiter_outbox
+from services.roles import GLOBAL_DATA_ROLES, ROLE_LABELS
+from services.phase1_schema import appliquer_contraintes_phase1
 from blueprints.absence_justifications import (
     ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
 )
@@ -296,9 +298,6 @@ def send_html_email(recipients, subject, html_template, event_key=None, **contex
 
 HEURE_ARRIVEE_ATTENDUE = "09:00"
 
-ROLE_LABELS = {'admin':'Administrateur', 'rh':'Responsable RH', 'manager':'Manager',
-               'technicien':'Technicien', 'employe':'Employé'}
-
 def get_role_label(role):
     return ROLE_LABELS.get(role, role or 'Employé')
 
@@ -403,7 +402,6 @@ def role_required(*allowed_roles):
 # Admin et RH ont une portée globale. Tous les autres rôles sont limités au
 # département de leur fiche employé. Une absence de rattachement produit une
 # portée vide — jamais un accès global implicite.
-GLOBAL_DATA_ROLES = ('admin', 'rh')
 
 
 def get_department_scope(cur=None):
@@ -1726,6 +1724,8 @@ def init_db():
         PRIMARY KEY (conversation_id, user_id)
     )''')
 
+    appliquer_contraintes_phase1(cur, logger)
+
     # Seed employés
     cur.execute("SELECT COUNT(*) FROM employes")
     if cur.fetchone()['count'] == 0:
@@ -2136,9 +2136,11 @@ def self_service_materiels():
         return redirect(url_for('self_service'))
     with db_cursor() as (conn, cur):
         cur.execute("""
-            SELECT a.*, m.nom AS materiel_nom, m.categorie, m.unite
+            SELECT a.*, m.nom AS materiel_nom, m.categorie, m.unite,
+                   ex.numero_inventaire AS exemplaire_numero
               FROM materiels_attributions a
               JOIN materiels m ON m.id = a.materiel_id
+              LEFT JOIN materiel_exemplaires ex ON ex.id = a.exemplaire_id
              WHERE a.employe_id = %s
              ORDER BY a.accuse_reception ASC, a.date_attribution DESC
         """, (emp['id'],))

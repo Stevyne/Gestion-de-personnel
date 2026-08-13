@@ -6,6 +6,8 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 import psycopg2
 from werkzeug.security import generate_password_hash
 
+from services.roles import ROLE_CHOICES, ROLE_CODES
+
 
 def creer_blueprint_utilisateurs(deps):
     bp = Blueprint('utilisateurs', __name__)
@@ -60,9 +62,7 @@ def creer_blueprint_utilisateurs(deps):
         Seul un admin peut promouvoir/rétrograder vers ou depuis le rôle 'admin'."""
         nouveau_role = request.form.get('role', '').strip()
         employe_id = request.form.get('employe_id') or None
-        roles_valides = ['admin', 'rh', 'manager', 'technicien', 'employe']
-
-        if nouveau_role not in roles_valides:
+        if nouveau_role not in ROLE_CODES:
             flash("Rôle invalide.", "danger")
             return redirect(url_for('utilisateurs.utilisateurs_page'))
 
@@ -203,13 +203,7 @@ def creer_blueprint_utilisateurs(deps):
         return redirect(url_for('utilisateurs.utilisateurs_page'))
 
 
-    ROLES_CREATION_UTILISATEUR = [
-        ('employe', 'Employé'),
-        ('manager', 'Manager'),
-        ('technicien', 'Technicien'),
-        ('rh', 'Responsable RH'),
-        ('admin', 'Administrateur'),
-    ]
+    ROLES_CREATION_UTILISATEUR = ROLE_CHOICES
 
 
     def _contexte_creation_utilisateur(username='', role='employe', employe_id=''):
