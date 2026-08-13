@@ -32,3 +32,30 @@ def test_notifications_template_has_csrf_token():
     with open(path, encoding='utf-8') as f:
         content = f.read()
     assert 'csrf_token' in content
+
+
+def test_notification_longue_reste_complete_et_recoit_classes_responsives(admin_client):
+    titre = 'TitreTresLongSansEspace' * 8
+    message = 'MessageTresLongSansEspace' * 20
+    with application.db_cursor() as (conn, cur):
+        cur.execute("SELECT id FROM users WHERE username='admin'")
+        user_id = cur.fetchone()['id']
+    application.create_notification(user_id, titre, message, 'info')
+
+    response = admin_client.get('/notifications')
+    assert response.status_code == 200
+    assert titre.encode() in response.data
+    assert message.encode() in response.data
+    assert b'notification-message-cell' in response.data
+    assert b'notification-content' in response.data
+    assert b'notification-title' in response.data
+    assert b'notification-text' in response.data
+
+
+def test_css_notifications_mobile_tronque_sans_debordement():
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[1] / 'static' / 'style.css').read_text(encoding='utf-8')
+    assert '.notifications-table .notification-content' in css
+    assert 'overflow-wrap: anywhere' in css
+    assert '-webkit-line-clamp: 2' in css
+    assert 'text-overflow: ellipsis' in css

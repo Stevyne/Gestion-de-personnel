@@ -748,6 +748,9 @@ body.drawer-open #navToggle {
     font-weight: 500;
     box-shadow: 0 2px 6px rgba(0,0,0,0.05);
     border: 1px solid transparent;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .alert-success {
@@ -766,6 +769,50 @@ body.drawer-open #navToggle {
     background: var(--danger-light);
     color: #991b1b;
     border-color: #fecaca;
+}
+
+/* ===== NOTIFICATIONS ===== */
+.notifications-card,
+.notifications-card .table-container,
+.notification-message-cell,
+.notification-content {
+    min-width: 0;
+}
+
+.notifications-table {
+    table-layout: fixed;
+}
+
+.notifications-table th:nth-child(1) { width: 18%; }
+.notifications-table th:nth-child(2) { width: 14%; }
+.notifications-table th:nth-child(3) { width: 54%; }
+.notifications-table th:nth-child(4) { width: 14%; }
+
+.notification-content {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.notification-title,
+.notification-text {
+    display: block;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.notification-title {
+    color: #0f172a;
+    line-height: 1.35;
+}
+
+.notification-text {
+    margin-top: 4px;
+    color: #64748b;
+    line-height: 1.4;
 }
 
 /* ===== TABLES - RESPONSIVE ===== */
@@ -1218,6 +1265,39 @@ footer {
         flex: 0 0 42%;
         text-align: left;
         padding-right: 12px;
+    }
+
+    /* Les notifications longues ne provoquent plus de défilement horizontal.
+       Le titre tient sur une ligne et le détail sur deux lignes, puis une
+       ellipse masque proprement la suite sur mobile. Le texte complet reste
+       disponible dans l'attribut title du bloc. */
+    .notifications-table td.notification-message-cell {
+        align-items: flex-start;
+        overflow: hidden;
+    }
+
+    .notifications-table .notification-content {
+        flex: 1 1 52%;
+        width: 0;
+        text-align: left;
+    }
+
+    .notifications-table .notification-title,
+    .notifications-table .notification-text {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .notifications-table .notification-title {
+        -webkit-line-clamp: 1;
+        line-clamp: 1;
+    }
+
+    .notifications-table .notification-text {
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
     }
     
     .actions {
