@@ -5,7 +5,7 @@
     <div class="card-header">
         <h1>🖨️ Étiquettes — {{ titre }}</h1>
         <div>
-            <button type="button" class="btn btn-primary" onclick="window.print();">Imprimer</button>
+            <button type="button" class="btn btn-primary" onclick="window.print();">🖨️ Imprimer la planche</button>
             <a href="{{ retour_url }}" class="btn btn-secondary">← Retour</a>
         </div>
     </div>
@@ -49,4 +49,5 @@
     </div>
     {% endfor %}
 </div>
+{% if auto_print %}<script>window.addEventListener('load',()=>window.print());</script>{% endif %}
 {% endblock %}

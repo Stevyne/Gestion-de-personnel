@@ -25,6 +25,8 @@ PIECE_JOINTE_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx', 'xls', 'x
 PIECE_JOINTE_MAX_BYTES = 8 * 1024 * 1024  # 8 Mo, cohérent avec les autres pièces jointes de l'app
 MESSAGE_MAX_CHARS = 20_000
 TITRE_MAX_CHARS = 200
+MESSAGES_PAR_PAGE = 50
+MAX_PAGES_MESSAGES = 20
 
 ROLES_VALIDES = ROLE_CODES
 ROLES_GLOBAUX = GLOBAL_DATA_ROLES
@@ -357,6 +359,9 @@ def creer_blueprint_messagerie(deps):
     def messagerie_voir(id):
         user_id = session['user_id']
         role = session.get('role', 'employe')
+        page_messages = max(1, min(request.args.get('page_messages', 1, type=int),
+                                   MAX_PAGES_MESSAGES))
+        limite_messages = page_messages * MESSAGES_PAR_PAGE
         with db_cursor(commit=True) as (conn, cur):
             cur.execute("SELECT * FROM conversations WHERE id = %s", (id,))
             conv = cur.fetchone()
@@ -366,15 +371,27 @@ def creer_blueprint_messagerie(deps):
                 flash("Vous n'avez pas accès à cette conversation.", "danger")
                 return redirect(url_for('messagerie.messagerie_inbox'))
 
+            contexte = None
+            if conv.get('contexte_type') == 'maintenance' and conv.get('contexte_id'):
+                cur.execute("""SELECT mt.reference,mt.priorite,ex.id AS exemplaire_id,
+                                      ex.numero_inventaire
+                               FROM materiel_maintenances mt
+                               JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id
+                               WHERE mt.id=%s""", (conv['contexte_id'],))
+                contexte = cur.fetchone()
+
             cur.execute("""
                 SELECT m.id, m.contenu, m.date_envoi, m.sender_id,
                        m.piece_jointe_nom, m.piece_jointe_taille,
                        COALESCE(u.username, 'Utilisateur supprimé') AS sender_username,
                        u.photo AS sender_photo
                 FROM messages m LEFT JOIN users u ON u.id = m.sender_id
-                WHERE m.conversation_id = %s ORDER BY m.id ASC
-            """, (id,))
-            messages = cur.fetchall()
+                WHERE m.conversation_id = %s
+                ORDER BY m.id DESC LIMIT %s
+            """, (id, limite_messages + 1))
+            messages_desc = cur.fetchall()
+            has_older_messages = len(messages_desc) > limite_messages
+            messages = list(reversed(messages_desc[:limite_messages]))
 
             dernier_id = messages[-1]['id'] if messages else None
             if conv['type'] == 'annonce':
@@ -409,7 +426,11 @@ def creer_blueprint_messagerie(deps):
                                membres=membres, user_id=user_id,
                                conversations=conversations,
                                active_conversation=active_conversation,
-                               active_conversation_id=id)
+                               active_conversation_id=id,
+                               page_messages=page_messages,
+                               has_older_messages=has_older_messages,
+                               messages_par_page=MESSAGES_PAR_PAGE,
+                               contexte=contexte)
 
     @bp.route('/messages/<int:id>/repondre', methods=['POST'])
     @login_required

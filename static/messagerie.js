@@ -79,7 +79,12 @@
 
   const messageStream = document.getElementById('messageStream');
   if (messageStream) {
-    requestAnimationFrame(function () { messageStream.scrollTop = messageStream.scrollHeight; });
+    requestAnimationFrame(function () {
+      const anchor = new URLSearchParams(window.location.search).get('anchor');
+      const target = anchor && messageStream.querySelector('[data-message-id="' + anchor + '"]');
+      if (target) target.scrollIntoView({ block: 'start' });
+      else messageStream.scrollTop = messageStream.scrollHeight;
+    });
   }
 
   const composer = document.getElementById('messageComposer');

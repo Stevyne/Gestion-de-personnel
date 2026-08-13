@@ -228,6 +228,54 @@ def creer_blueprint_parc(deps):
             create_notification(row['id'], titre, message, type_)
 
 
+    def _assurer_conversation_maintenance(cur, maintenance, info):
+        """Crée une seule discussion liée au ticket et y inscrit les acteurs."""
+        if maintenance.get('conversation_id'):
+            return maintenance['conversation_id']
+        titre = f"{maintenance.get('reference') or 'Maintenance'} · {info['numero_inventaire']}"
+        cur.execute("""INSERT INTO conversations(type,titre,cree_par,contexte_type,contexte_id)
+                       VALUES ('groupe',%s,%s,'maintenance',%s) RETURNING id""",
+                    (titre, session.get('user_id'), maintenance['id']))
+        conversation_id = cur.fetchone()['id']
+        membres = {session.get('user_id'), maintenance.get('signale_par_id'),
+                   maintenance.get('assigne_user_id')}
+        cur.execute("""SELECT u.id FROM users u LEFT JOIN employes e ON e.id=u.employe_id
+                       WHERE u.role IN ('admin','rh')
+                          OR (u.role='manager' AND e.departement=%s)""",
+                    (info.get('departement_nom'),))
+        membres.update(row['id'] for row in cur.fetchall())
+        for user_id in {m for m in membres if m}:
+            cur.execute("""INSERT INTO conversation_membres(conversation_id,user_id)
+                           VALUES (%s,%s) ON CONFLICT DO NOTHING""",
+                        (conversation_id, user_id))
+        cur.execute("""INSERT INTO messages(conversation_id,sender_id,contenu)
+                       VALUES (%s,%s,%s) RETURNING id""",
+                    (conversation_id, session.get('user_id'),
+                     f"Discussion ouverte pour {maintenance.get('reference') or 'le ticket'} : {maintenance.get('panne') or ''}"))
+        message_id = cur.fetchone()['id']
+        cur.execute("""UPDATE conversation_membres SET dernier_message_lu_id=%s
+                       WHERE conversation_id=%s AND user_id=%s""",
+                    (message_id, conversation_id, session.get('user_id')))
+        cur.execute("UPDATE materiel_maintenances SET conversation_id=%s WHERE id=%s",
+                    (conversation_id, maintenance['id']))
+        return conversation_id
+
+    def _message_maintenance(cur, maintenance, texte, ajouter_user_id=None):
+        conversation_id = maintenance.get('conversation_id')
+        if not conversation_id:
+            return
+        if ajouter_user_id:
+            cur.execute("""INSERT INTO conversation_membres(conversation_id,user_id)
+                           VALUES (%s,%s) ON CONFLICT DO NOTHING""",
+                        (conversation_id, ajouter_user_id))
+        cur.execute("""INSERT INTO messages(conversation_id,sender_id,contenu)
+                       VALUES (%s,%s,%s) RETURNING id""",
+                    (conversation_id, session.get('user_id'), texte))
+        message_id = cur.fetchone()['id']
+        cur.execute("""UPDATE conversation_membres SET dernier_message_lu_id=%s
+                       WHERE conversation_id=%s AND user_id=%s""",
+                    (message_id, conversation_id, session.get('user_id')))
+
     def _acteurs_intervention(mt):
         """Qui a le droit de faire quoi sur cette intervention, pour l'utilisateur courant."""
         uid = session.get('user_id')
@@ -1523,6 +1571,9 @@ def creer_blueprint_parc(deps):
                                LEFT JOIN departements d ON d.id=m.departement_id
                                WHERE ex.id = %s""", (id,))
                 info = cur.fetchone()
+                ticket.update({'panne': panne, 'signale_par_id': session.get('user_id'),
+                               'assigne_user_id': None, 'conversation_id': None})
+                _assurer_conversation_maintenance(cur, ticket, info)
                 _notifier_pilotes(
                     cur, "%s · Panne signalée : %s" % (ticket['reference'], info['numero_inventaire']),
                     "%s — %s (priorité %s, signalé par %s). À assigner avant %s."
@@ -1539,6 +1590,24 @@ def creer_blueprint_parc(deps):
             logger.error("Erreur signalement panne: %s", e, exc_info=True)
             flash(f"Erreur : {e}", "danger")
         return redirect(url_for('parc.view_exemplaire', id=id))
+
+
+    @bp.route('/maintenances/<int:id>/discussion', methods=['POST'])
+    @login_required
+    def discussion_maintenance(id):
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute("""SELECT mt.*,ex.numero_inventaire,d.nom AS departement_nom
+                           FROM materiel_maintenances mt
+                           JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id
+                           JOIN materiels m ON m.id=ex.materiel_id
+                           LEFT JOIN departements d ON d.id=m.departement_id
+                           WHERE mt.id=%s FOR UPDATE""", (id,))
+            maintenance = cur.fetchone()
+            if not maintenance:
+                flash("Ticket introuvable.", 'danger')
+                return redirect(url_for('parc.maintenances'))
+            conversation_id = _assurer_conversation_maintenance(cur, maintenance, maintenance)
+        return redirect(url_for('messagerie.messagerie_voir', id=conversation_id))
 
 
     @bp.route('/maintenances/<int:id>/assigner', methods=['POST'])
@@ -1610,6 +1679,8 @@ def creer_blueprint_parc(deps):
                                LEFT JOIN departements d ON d.id=m.departement_id
                                WHERE ex.id = %s""", (mt['exemplaire_id'],))
                 info = cur.fetchone()
+                _message_maintenance(cur, mt, f"Ticket assigné à {technicien}.",
+                                     ajouter_user_id=user_id)
                 if user_id:
                     create_notification(
                         user_id, "Intervention assignée : %s" % info['numero_inventaire'],
@@ -2096,6 +2167,7 @@ def creer_blueprint_parc(deps):
         return render_template(
             'etiquettes.html', etiquettes=etiquettes, titre=titre,
             sous_titre=sous_titre, retour_url=retour_url,
+            auto_print=request.args.get('print') == '1',
             qr_indisponible=bool(etiquettes) and etiquettes[0]['qr'] is None)
 
 

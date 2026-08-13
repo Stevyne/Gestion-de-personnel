@@ -15,7 +15,7 @@ def test_app_py_reste_sous_4700_lignes():
 
 def test_blueprints_metier_sont_enregistres(app):
     assert {'parc', 'documents', 'departements', 'presences', 'utilisateurs',
-            'auth', 'departs', 'contrats', 'rapports_parc',
+            'auth', 'departs', 'contrats', 'rapports_parc', 'dashboards_roles',
             'absence_justifications', 'messagerie'} <= set(app.blueprints)
 
 
@@ -34,6 +34,9 @@ def test_urls_publiques_des_modules_extraits_sont_inchangees(app):
         '/departs': 'departs.departs_liste',
         '/contrats': 'contrats.contrats_liste',
         '/export/materiels/pdf': 'rapports_parc.export_materiels_pdf',
+        '/dashboard/rh': 'dashboards_roles.dashboard_rh',
+        '/dashboard/parc': 'dashboards_roles.dashboard_parc',
+        '/dashboard/direction': 'dashboards_roles.dashboard_direction',
     }
     regles = {rule.rule: rule.endpoint for rule in app.url_map.iter_rules()}
     for url, endpoint in attendu.items():

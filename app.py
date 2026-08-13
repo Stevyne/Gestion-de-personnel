@@ -23,6 +23,7 @@ from services.email_outbox import ajouter_email, traiter_outbox
 from services.roles import GLOBAL_DATA_ROLES, ROLE_LABELS
 from services.phase1_schema import appliquer_contraintes_phase1
 from services.phase2_schema import appliquer_schema_phase2
+from services.phase3_schema import appliquer_schema_phase3
 from blueprints.absence_justifications import (
     ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
 )
@@ -34,6 +35,7 @@ from blueprints.utilisateurs import creer_blueprint_utilisateurs
 from blueprints.departs import creer_blueprint_departs
 from blueprints.contrats import creer_blueprint_contrats
 from blueprints.rapports_parc import creer_blueprint_rapports_parc
+from blueprints.dashboards_roles import creer_blueprint_dashboards_roles
 from blueprints.auth import creer_blueprint_auth
 from blueprints.parc import (
     MAINTENANCE_OUVERTS,  # réexport de compatibilité pour les tests/plug-ins  # noqa: F401
@@ -538,6 +540,7 @@ DEPARTMENT_RESOURCE_GUARDS = {
     'parc.edit_exemplaire': ("SELECT d.nom AS departement FROM materiel_exemplaires ex JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE ex.id=%s", 'id'),
     'parc.delete_exemplaire': ("SELECT d.nom AS departement FROM materiel_exemplaires ex JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE ex.id=%s", 'id'),
     'parc.signaler_panne': ("SELECT d.nom AS departement FROM materiel_exemplaires ex JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE ex.id=%s", 'id'),
+    'parc.discussion_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
     'parc.assigner_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
     'parc.envoyer_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
     'parc.cloturer_maintenance': ("SELECT d.nom AS departement FROM materiel_maintenances mt JOIN materiel_exemplaires ex ON ex.id=mt.exemplaire_id JOIN materiels m ON m.id=ex.materiel_id LEFT JOIN departements d ON d.id=m.departement_id WHERE mt.id=%s", 'id'),
@@ -1730,6 +1733,7 @@ def init_db():
 
     appliquer_contraintes_phase1(cur, logger)
     appliquer_schema_phase2(cur)
+    appliquer_schema_phase3(cur)
 
     # Seed employés
     cur.execute("SELECT COUNT(*) FROM employes")
@@ -1781,6 +1785,7 @@ RECHERCHE_ACCES = {
     'employe':     None,
     'departement': None,
     'materiel':    None,
+    'exemplaire':  None,
     'conge':       ('admin', 'rh', 'manager'),
     'absence':     ('admin', 'rh', 'manager'),
     'document':    None,
@@ -1925,6 +1930,25 @@ def recherche_globale(terme, role, limite_par_categorie=5):
                 'url': (url_for('parc.materiels_departement', id=r['departement_id'])
                         if r.get('departement_id') else url_for('parc.materiels')),
             } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('parc.materiels'))
+
+        # ---- Exemplaires / numéros d'inventaire ----
+        if _recherche_autorise('exemplaire', role):
+            cur.execute(f"""SELECT COUNT(*) OVER() AS _total,
+                       ex.id,ex.numero_inventaire,ex.numero_serie,ex.etat,
+                       m.nom AS materiel_nom,d.nom AS departement
+                  FROM materiel_exemplaires ex JOIN materiels m ON m.id=ex.materiel_id
+                  LEFT JOIN departements d ON d.id=m.departement_id
+                 WHERE (LOWER(ex.numero_inventaire) LIKE %s
+                    OR LOWER(COALESCE(ex.numero_serie,'')) LIKE %s
+                    OR LOWER(m.nom) LIKE %s) AND {department_scope}
+                 ORDER BY ex.numero_inventaire LIMIT %s""",
+                        [motif,motif,motif] + department_scope_params + [limite_par_categorie+1])
+            lignes = cur.fetchall()
+            ajouter('exemplaire','Exemplaires','box',[{
+                'titre': r['numero_inventaire'],
+                'sous_titre': ' · '.join(x for x in [r['materiel_nom'],r.get('departement'),r.get('etat')] if x),
+                'url': url_for('parc.view_exemplaire', id=r['id']),
+            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('parc.materiels', search=terme))
 
         # ---- Congés ----
         if _recherche_autorise('conge', role):
@@ -4471,6 +4495,14 @@ contrats_bp, contrats_api = creer_blueprint_contrats({
 })
 job_alertes_contrats = contrats_api['job_alertes_contrats']
 app.register_blueprint(contrats_bp)
+
+app.register_blueprint(creer_blueprint_dashboards_roles({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'role_required': role_required,
+    'department_scope_sql': department_scope_sql,
+    'get_department_scope': get_department_scope,
+}))
 
 app.register_blueprint(creer_blueprint_rapports_parc({
     'db_cursor': db_cursor,

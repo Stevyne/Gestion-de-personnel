@@ -72,10 +72,11 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Une seule campagne ouverte à la fois par département (évite deux ajustements concurrents). Une campagne peut aussi être **annulée** sans toucher au stock
 - Rôles : `admin`, `rh` et `manager` saisissent les comptages ; la **clôture** (qui modifie le stock) est réservée à `admin`/`rh` ; les autres consultent
 - Routes : `/inventaires`, `/inventaires/nouveau`, `/inventaires/<id>`, `/inventaires/<id>/compter`, `/inventaires/<id>/cloturer`, `/inventaires/<id>/annuler`
+- Planches d'étiquettes QR imprimables en A4, trois colonnes de 60 × 35 mm, avec numéro d'inventaire, série et lien direct vers la fiche
 
 ### 🔎 Recherche globale
 - Barre de recherche dans l'en-tête, avec **aperçu instantané** groupé par type et page complète `/recherche`
-- Couvre les **employés, départements, matériels, congés, absences, documents, comptes** — et les pages de l'application (façon palette de navigation)
+- Couvre les **employés, départements, matériels, exemplaires par numéro d'inventaire ou série, congés, absences, documents, comptes** — et les pages de l'application (façon palette de navigation)
 - **Filtrée par rôle côté serveur** : les catégories interdites ne sont pas interrogées du tout (un employé ne voit ni les congés ni les comptes, y compris en appelant l'API directement)
 - Raccourci **Ctrl+K** / Cmd+K, navigation aux flèches, `Échap` pour fermer
 - Sur écran étroit, le champ laisse place à une entrée « Rechercher » dans le tiroir de navigation
@@ -107,6 +108,8 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Interface responsive inspirée de Messenger : liste des discussions à gauche, fil actif à droite, bulles, avatars, recherche instantanée et zone de saisie fixe
 - Sur mobile, navigation plein écran entre la liste et la conversation ; `Entrée` envoie et `Maj+Entrée` ajoute une ligne
 - Conversations privées et groupes avec suivi lu/non-lu et badge dans la navigation
+- Chaque ticket de maintenance possède automatiquement un groupe de discussion avec demandeur, assigné et gestionnaires concernés ; le lien ticket ↔ conversation est bidirectionnel
+- Chargement initial limité à 50 messages, puis pagination progressive des messages précédents
 - Pour manager/technicien/employé, le sélecteur et les identifiants forgés sont limités au département courant ; admin/RH peuvent contacter tous les comptes
 - Conversations privées strictement réservées à leurs membres, y compris pour admin/RH ; contrôle identique sur les réponses et les pièces jointes
 - Annonces globales ou ciblées par rôle (`admin`, `rh`, `manager`, `technicien`, `employe`) réservées à admin/RH
@@ -147,8 +150,10 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Les prestataires constituent un référentiel global sans département : leur gestion est donc réservée à admin/RH
 - Le rôle est relu en base à chaque requête : une rétrogradation prend effet immédiatement, sans attendre une reconnexion
 
-### 📊 Tableau de bord complet
-- Couverture des modules exploitables : personnel, présences/temps, congés/soldes, permissions, absences/justificatifs, documents, matériels/parc, maintenance et inventaires
+### 📊 Tableaux de bord spécialisés
+- Tableau général conservé, complété par `/dashboard/rh`, `/dashboard/parc` et `/dashboard/direction`
+- RH et Direction : admin/RH en vue globale ; Parc : admin/RH global, manager/technicien limités à leur département
+- Couverture des modules exploitables : personnel, présences/temps, congés/soldes, permissions, absences/justificatifs, contrats, documents, matériels/parc, SLA maintenance et inventaires
 - La vue globale ajoute les statistiques d'accès, sessions, audit, notifications et outbox e-mail
 - Les données salariales et les coûts consolidés restent réservés aux vues admin/RH
 
@@ -369,6 +374,7 @@ Blueprints Flask :
 - `departs.py` : préparation et finalisation des départs ;
 - `contrats.py` : contrats, versions, fichiers et alertes ;
 - `rapports_parc.py` : exports PDF/Excel du matériel ;
+- `dashboards_roles.py` : tableaux RH, Parc et Direction ;
 - `absence_justifications.py` : workflow confidentiel des justificatifs ;
 - `messagerie.py` : messagerie interne.
 
@@ -393,13 +399,15 @@ Gestion-de-personnel/
 │   ├── departs.py          # Départs et archivage
 │   ├── contrats.py         # Contrats et alertes
 │   ├── rapports_parc.py    # Exports du parc
+│   ├── dashboards_roles.py # Tableaux RH, Parc et Direction
 │   ├── absence_justifications.py
 │   └── messagerie.py
 ├── services/
 │   ├── email_outbox.py     # File SMTP persistante, indépendante de Flask
 │   ├── roles.py            # Référentiel officiel des rôles
 │   ├── phase1_schema.py    # Contraintes, triggers et migrations d'intégrité
-│   └── phase2_schema.py    # Départs, SLA et contrats
+│   ├── phase2_schema.py    # Départs, SLA et contrats
+│   └── phase3_schema.py    # Contexte messagerie/maintenance
 ├── .github/workflows/
 │   └── tests.yml           # PostgreSQL 17 + pytest sur push/PR
 ├── requirements.txt        # Dépendances production

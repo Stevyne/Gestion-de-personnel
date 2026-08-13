@@ -18,6 +18,12 @@
       <a href="{{ url_for('rapports') }}" class="btn btn-secondary">📋 Rapports</a>
     </div>
   </div>
+  <nav class="dashboard-tabs">
+    <a href="{{ url_for('dashboard') }}" class="active">Général</a>
+    {% if current_role in ['admin','rh'] %}<a href="{{ url_for('dashboards_roles.dashboard_rh') }}">RH</a>{% endif %}
+    {% if current_role in ['admin','rh','manager','technicien'] %}<a href="{{ url_for('dashboards_roles.dashboard_parc') }}">Parc</a>{% endif %}
+    {% if current_role in ['admin','rh'] %}<a href="{{ url_for('dashboards_roles.dashboard_direction') }}">Direction</a>{% endif %}
+  </nav>
 
   {% if dashboard_scope.is_empty %}
   <div class="dashboard-warning">

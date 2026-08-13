@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header"><div><h1>{{ titre }}</h1><p style="margin:5px 0 0;color:#64748b;">{{ sous_titre }}</p></div><a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Tableau général</a></div>
+  <nav class="dashboard-tabs">
+    {% if current_role in ['admin','rh'] %}<a href="{{ url_for('dashboards_roles.dashboard_rh') }}" class="{{ 'active' if dashboard_actif=='rh' }}">RH</a>{% endif %}
+    {% if current_role in ['admin','rh','manager','technicien'] %}<a href="{{ url_for('dashboards_roles.dashboard_parc') }}" class="{{ 'active' if dashboard_actif=='parc' }}">Parc</a>{% endif %}
+    {% if current_role in ['admin','rh'] %}<a href="{{ url_for('dashboards_roles.dashboard_direction') }}" class="{{ 'active' if dashboard_actif=='direction' }}">Direction</a>{% endif %}
+  </nav>
+  <div class="role-dashboard-grid">
+    {% for label,value,icone in cards %}<section class="role-dashboard-card"><h3>{{ icone }} {{ label }}</h3><div class="role-dashboard-metric"><span>Valeur</span><strong>{{ value }}</strong></div></section>{% endfor %}
+  </div>
+</div>
+{% endblock %}

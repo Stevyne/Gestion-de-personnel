@@ -27,6 +27,11 @@
           {% endif %}
         </p>
       </div>
+      {% if contexte %}
+      <a href="{{ url_for('parc.view_exemplaire', id=contexte.exemplaire_id) }}" class="maintenance-chat-link" title="Ouvrir le ticket">
+        🔧 {{ contexte.reference }}
+      </a>
+      {% endif %}
       {% if conv.type == 'groupe' %}
       <form method="post" action="{{ url_for('messagerie.messagerie_quitter', id=conv.id) }}"
             class="msg-thread-action confirm-form"
@@ -39,6 +44,10 @@
     </header>
 
     <section class="msg-stream" id="messageStream" aria-live="polite">
+      {% if has_older_messages and messages %}
+      <a href="{{ url_for('messagerie.messagerie_voir', id=conv.id, page_messages=page_messages+1, anchor=messages[0].id) }}"
+         class="msg-load-older">↑ Charger {{ messages_par_page }} messages précédents</a>
+      {% endif %}
       <div class="msg-conversation-intro">
         <span class="msg-avatar msg-avatar--{{ active_conversation.type }} msg-avatar--intro">
           {% if active_conversation.type == 'prive' and active_conversation.avatar_photo %}
@@ -51,7 +60,7 @@
 
       {% for m in messages %}
       {% set own = (m.sender_id == user_id) %}
-      <article class="msg-row {% if own %}is-own{% endif %}">
+      <article class="msg-row {% if own %}is-own{% endif %}" data-message-id="{{ m.id }}">
         {% if not own %}
         <span class="msg-avatar msg-avatar--message" title="{{ m.sender_username }}">
           {% if m.sender_photo %}<img src="{{ url_for('auth.avatar_image', filename=m.sender_photo) }}" alt="">

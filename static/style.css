@@ -3091,11 +3091,23 @@ footer {
     body { background: #fff; }
     .container { padding: 0; margin: 0; max-width: none; }
     .planche-etiquettes {
-        grid-template-columns: repeat(3, 1fr);
-        gap: 6px;
+        grid-template-columns: repeat(3, 60mm);
+        grid-auto-rows: 35mm;
+        gap: 3mm;
+        justify-content: center;
     }
-    .etiquette { border-color: #cbd5e1; }
-    @page { margin: 10mm; }
+    .etiquette {
+        width: 60mm;
+        height: 35mm;
+        box-sizing: border-box;
+        border: .25mm solid #cbd5e1;
+        border-radius: 2mm;
+        padding: 2mm;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    .etiquette-qr, .etiquette-qr svg { width: 25mm; height: 25mm; }
+    @page { size: A4 portrait; margin: 8mm; }
 }
 
 @media (max-width: 768px) {

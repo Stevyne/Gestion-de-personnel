@@ -165,6 +165,10 @@
                             {%- elif m.statut == 'a_valider' %}Valider
                             {%- else %}Voir{% endif %}
                         </a>
+                        <form method="post" action="{{ url_for('parc.discussion_maintenance', id=m.id) }}" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="maintenance-chat-link">💬</button>
+                        </form>
                     </td>
                 </tr>
                 {% else %}
