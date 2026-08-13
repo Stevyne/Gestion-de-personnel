@@ -21,6 +21,7 @@ os.environ.setdefault(
     os.environ.get('TEST_DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/gestion_personnel_test')
 )
 os.environ.setdefault('FLASK_ENV', 'testing')
+os.environ.setdefault('RATELIMIT_ENABLED', 'false')
 os.environ.setdefault('MAIL_USERNAME', '')  # force le mode démo (pas de vrai envoi d'email)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,7 +36,7 @@ import app as application  # noqa: E402  (import après config des env vars, vol
 MUTABLE_TABLES = [
     'presences', 'conges', 'permissions', 'absences', 'absences_exclues',
     'soldes_conges', 'audit_logs', 'documents', 'documents_alertes',
-    'notifications', 'email_outbox', 'scheduler_runs',
+    'notifications', 'email_outbox', 'scheduler_runs', 'sessions_actives',
     # Les modules parc/maintenance sont désormais couverts eux aussi.
     'inventaires', 'materiel_maintenances', 'materiel_exemplaires',
     'materiels_attributions', 'materiels_mouvements', 'materiel_compteurs',
@@ -56,8 +57,9 @@ def _clean_tables():
     with application.db_cursor(commit=True) as (conn, cur):
         for table in MUTABLE_TABLES:
             cur.execute(f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE")
-        # Conserver uniquement les quatre employés seedés : les scénarios de
-        # création d'un salarié ne doivent pas polluer les tests suivants.
+        # Conserver uniquement les quatre comptes et employés seedés : les
+        # scénarios de création ne doivent pas polluer les tests suivants.
+        cur.execute("DELETE FROM users WHERE id > 4")
         cur.execute("DELETE FROM employes WHERE id > 4")
         # Certains tests d'absences déplacent les dates d'embauche. Sans remise
         # à zéro, leur ordre modifiait le résultat des tests de soldes.

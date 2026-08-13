@@ -234,7 +234,10 @@ def _send_outbox_message(message):
 # === INITIALISATION SÉCURITÉ ===
 csrf = CSRFProtect(app)
 
-# Rate limiter
+# Rate limiter — désactivable avant l'import (tests/CI). La configuration
+# modifiée après l'initialisation de l'extension arrivait trop tard.
+app.config['RATELIMIT_ENABLED'] = os.environ.get(
+    'RATELIMIT_ENABLED', 'true').lower() == 'true'
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -4688,66 +4691,145 @@ def delete_utilisateur(user_id):
     return redirect(url_for('utilisateurs_page'))
 
 
+ROLES_CREATION_UTILISATEUR = [
+    ('employe', 'Employé'),
+    ('manager', 'Manager'),
+    ('technicien', 'Technicien'),
+    ('rh', 'Responsable RH'),
+    ('admin', 'Administrateur'),
+]
+
+
+def _contexte_creation_utilisateur(username='', role='employe', employe_id=''):
+    """Données du formulaire, en excluant les salariés déjà liés à un compte."""
+    with db_cursor() as (conn, cur):
+        cur.execute("""
+            SELECT e.id, e.nom, e.prenom, e.poste, e.departement
+              FROM employes e
+             WHERE NOT EXISTS (
+                   SELECT 1 FROM users u WHERE u.employe_id = e.id
+             )
+             ORDER BY e.nom, e.prenom
+        """)
+        employes_disponibles = cur.fetchall()
+
+    roles = ROLES_CREATION_UTILISATEUR
+    if session.get('role') != 'admin':
+        roles = [r for r in roles if r[0] != 'admin']
+    return {
+        'employees': employes_disponibles,
+        'roles_creation': roles,
+        'form_values': {
+            'username': username,
+            'role': role,
+            'employe_id': str(employe_id or ''),
+        },
+    }
+
+
 @app.route('/register', methods=['GET', 'POST'])
 @login_required
 @role_required('admin', 'rh')
 def register():
-    if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '')
-        confirm_password = request.form.get('confirm_password', '')
-        
-        # Validation
-        if not username or not password:
-            flash("Veuillez remplir tous les champs obligatoires.", "danger")
-            return render_template('register.html')
-        
-        if len(username) < 3:
-            flash("Le nom d'utilisateur doit contenir au moins 3 caractères.", "danger")
-            return render_template('register.html')
-        
-        if len(password) < 6:
-            flash("Le mot de passe doit contenir au moins 6 caractères.", "danger")
-            return render_template('register.html')
-        
-        if password != confirm_password:
-            flash("Les mots de passe ne correspondent pas.", "danger")
-            return render_template('register.html')
-        
-        conn = get_db()
-        cur = get_cursor(conn)
-        
-        try:
-            # Check if username already exists
-            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+    """Crée en une étape un compte opérationnel, avec rôle et salarié lié."""
+    if request.method == 'GET':
+        return render_template('register.html', **_contexte_creation_utilisateur())
+
+    # Les identifiants sont normalisés en minuscules : la connexion est ainsi
+    # prévisible et la contrainte UNIQUE bloque aussi les variantes de casse.
+    username = request.form.get('username', '').strip().lower()
+    password = request.form.get('password', '')
+    confirm_password = request.form.get('confirm_password', '')
+    role = request.form.get('role', 'employe').strip()
+    employe_brut = request.form.get('employe_id', '').strip()
+    employe_id = int(employe_brut) if employe_brut.isdigit() else None
+    contexte = lambda: _contexte_creation_utilisateur(username, role, employe_brut)
+
+    if not username or not password or not confirm_password:
+        flash("Veuillez remplir tous les champs obligatoires.", "danger")
+        return render_template('register.html', **contexte())
+    if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{2,79}', username):
+        flash("L'identifiant doit contenir 3 à 80 caractères : lettres non accentuées, "
+              "chiffres, point, tiret ou soulignement.", "danger")
+        return render_template('register.html', **contexte())
+    if len(password) < 8 or len(password) > 128:
+        flash("Le mot de passe doit contenir entre 8 et 128 caractères.", "danger")
+        return render_template('register.html', **contexte())
+    if password != confirm_password:
+        flash("Les mots de passe ne correspondent pas.", "danger")
+        return render_template('register.html', **contexte())
+
+    roles_valides = {code for code, _ in ROLES_CREATION_UTILISATEUR}
+    if role not in roles_valides:
+        flash("Rôle invalide.", "danger")
+        return render_template('register.html', **contexte())
+    if role == 'admin' and session.get('role') != 'admin':
+        flash("Seul un administrateur peut créer un compte administrateur.", "danger")
+        return render_template('register.html', **contexte())
+    if employe_brut and employe_id is None:
+        flash("Employé invalide.", "danger")
+        return render_template('register.html', **contexte())
+
+    user_id = None
+    try:
+        with db_cursor(commit=True) as (conn, cur):
+            # Le verrou sur la fiche salarié sérialise deux créations
+            # concurrentes qui tenteraient de rattacher la même personne.
+            employe = None
+            if employe_id is not None:
+                cur.execute("""
+                    SELECT id, nom, prenom, email FROM employes
+                     WHERE id = %s FOR UPDATE
+                """, (employe_id,))
+                employe = cur.fetchone()
+                if not employe:
+                    flash("Employé introuvable.", "danger")
+                    return render_template('register.html', **contexte())
+                cur.execute("SELECT username FROM users WHERE employe_id = %s LIMIT 1",
+                            (employe_id,))
+                compte_existant = cur.fetchone()
+                if compte_existant:
+                    flash("Cet employé est déjà lié au compte "
+                          f"« {compte_existant['username']} ».", "danger")
+                    return render_template('register.html', **contexte())
+
+            cur.execute("SELECT id FROM users WHERE LOWER(username) = %s", (username,))
             if cur.fetchone():
                 flash("Ce nom d'utilisateur est déjà utilisé.", "danger")
-                cur.close()
-                conn.close()
-                return render_template('register.html')
-            
-            # Create the user (default role = 'employe')
-            password_hash = generate_password_hash(password)
-            cur.execute(
-                "INSERT INTO users (username, password_hash, role, employe_id) VALUES (%s, %s, %s, %s)",
-                (username, password_hash, 'employe', None)
-            )
-            conn.commit()
-            
-            flash("Compte créé avec succès.", "success")
-            cur.close()
-            conn.close()
-            return redirect(url_for('utilisateurs_page'))
-            
-        except Exception as e:
-            conn.rollback()
-            flash(f"Une erreur est survenue lors de la création du compte : {str(e)}", "danger")
-            logger.error("Erreur register: %s", e, exc_info=True)
-        finally:
-            cur.close()
-            conn.close()
-    
-    return render_template('register.html')
+                return render_template('register.html', **contexte())
+
+            cur.execute("""
+                INSERT INTO users (username, password_hash, role, employe_id)
+                VALUES (%s, %s, %s, %s) RETURNING id
+            """, (username, generate_password_hash(password), role, employe_id))
+            user_id = cur.fetchone()['id']
+            create_notification(
+                user_id, "Votre compte a été créé",
+                "Votre accès à Gestion du Personnel est actif. Pensez à modifier "
+                "votre mot de passe après votre première connexion.",
+                'success', cur=cur)
+            if employe:
+                queue_email(
+                    employe.get('email'), "Votre accès Gestion du Personnel est créé",
+                    f"Bonjour {employe['prenom']},\n\nVotre compte « {username} » est actif. "
+                    "Contactez les RH pour recevoir votre mot de passe initial, puis "
+                    "modifiez-le après votre première connexion.",
+                    cur=cur, event_key=f"compte-cree:{user_id}")
+    except psycopg2.errors.UniqueViolation:
+        # Garde-fou pour deux requêtes strictement simultanées.
+        flash("Ce nom d'utilisateur est déjà utilisé.", "danger")
+        return render_template('register.html', **contexte())
+    except Exception as e:
+        logger.error("Erreur register: %s", e, exc_info=True)
+        flash("Le compte n'a pas pu être créé. Réessayez ou contactez l'administrateur.",
+              "danger")
+        return render_template('register.html', **contexte())
+
+    log_action(session.get('user_id'), session.get('username'),
+               "CREATE_USER", "user", user_id,
+               f"username={username}, role={role}, employe_id={employe_id}")
+    flash(f"Compte « {username} » créé avec le rôle {get_role_label(role)}.", "success")
+    return redirect(url_for('utilisateurs_page'))
 
 @app.route('/add_employee', methods=['GET', 'POST'])
 @login_required

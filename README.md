@@ -100,7 +100,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Self-service pour les employés (`/self-service` ou `/mon-espace`)
 - Logs d'audit (`/audit`, réservé à `admin`/`rh`)
 - Protection CSRF (Flask-WTF), rate limiting (Flask-Limiter), headers de sécurité (Flask-Talisman)
-- Formulaire d'inscription (`/register`)
+- Création de comptes réservée aux admin/RH (`/register`) avec choix immédiat du rôle et de l'employé lié ; seul un administrateur peut créer un autre administrateur
 
 ### 🖥️ Sessions actives & déconnexion forcée
 - Registre des sessions ouvertes en base (`sessions_actives`) : les cookies signés Flask n'étant pas révocables, un identifiant de session est stocké côté serveur
@@ -185,6 +185,7 @@ cp .env.example .env
 | `EMAIL_POLL_SECONDS`, `EMAIL_BATCH_SIZE`, `EMAIL_MAX_ATTEMPTS` | Fréquence et limites de l'outbox |
 | `ADMIN_EMAIL`             | Destinataire des alertes admin |
 | `FLASK_ENV`, `FLASK_DEBUG` | Mode d'exécution |
+| `RATELIMIT_ENABLED`       | Active les limites de requêtes (`true` par défaut ; `false` en tests) |
 | `SESSION_COOKIE_SECURE`   | `true` en HTTPS (défaut `false`) |
 | `PERMANENT_SESSION_LIFETIME` | Durée de vie d'une session, en secondes |
 | `SESSION_ONLINE_WINDOW_MIN` | Fenêtre d'inactivité avant de passer un compte de « En ligne » à « Inactif » (défaut 5 min) |
@@ -239,7 +240,8 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 | Route                              | Description                      | Accès                  |
 |------------------------------------|----------------------------------|------------------------|
 | `/`                                | Tableau de bord                  | Connecté               |
-| `/login`, `/logout`, `/register`   | Authentification et inscription  | Public / Connecté      |
+| `/login`, `/logout`                | Authentification / déconnexion   | Public / Connecté      |
+| `/register`                        | Création d'un compte et rattachement salarié | admin, rh (admin pour rôle admin) |
 | `/recherche`, `/api/recherche`     | Recherche globale (page + JSON)  | Connecté (filtré par rôle) |
 | `/employes`, `/employes/add`, ...  | Gestion des employés             | Tous / selon rôle      |
 | `/departements`                    | Gestion des départements         | Selon rôle             |

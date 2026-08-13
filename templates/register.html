@@ -9,7 +9,7 @@
                 <span class="logo-icon">📝</span>
             </div>
             <h1>Créer un compte</h1>
-            <p class="auth-subtitle">Ajouter a la plateforme Gestion du Personnel</p>
+            <p class="auth-subtitle">Créer un accès complet à la plateforme</p>
         </div>
 
         <!-- Form Body -->
@@ -21,15 +21,50 @@
                     <label for="username">Identifiant</label>
                     <div class="input-group">
                         <span class="input-icon">👤</span>
-                        <input type="text" 
-                               id="username" 
-                               name="username" 
-                               placeholder="Votre identifiant" 
-                               required 
+                        <input type="text"
+                               id="username"
+                               name="username"
+                               value="{{ form_values.username }}"
+                               placeholder="ex. jean.dupont"
+                               required
                                minlength="3"
+                               maxlength="80"
+                               pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,79}"
+                               autocomplete="off"
+                               autocapitalize="none"
+                               spellcheck="false"
                                autofocus>
                     </div>
-                    <div class="field-hint">Minimum 3 caractères • Unique</div>
+                    <div class="field-hint">3 à 80 caractères • lettres, chiffres, point, tiret ou _ • enregistré en minuscules</div>
+                </div>
+
+                <div class="form-row">
+                    <label for="role">Rôle</label>
+                    <select id="role" name="role" class="register-select" required>
+                        {% for code, libelle in roles_creation %}
+                        <option value="{{ code }}" {{ 'selected' if form_values.role == code }}>{{ libelle }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="field-hint">Le rôle détermine immédiatement les droits du compte.</div>
+                </div>
+
+                <div class="form-row">
+                    <label for="employe_id">Employé lié <span style="font-weight:400;color:#64748b;">(optionnel)</span></label>
+                    <select id="employe_id" name="employe_id" class="register-select">
+                        <option value="">— Aucun / compte technique —</option>
+                        {% for emp in employees %}
+                        <option value="{{ emp.id }}" {{ 'selected' if form_values.employe_id == emp.id|string }}>
+                            {{ emp.prenom }} {{ emp.nom }}{% if emp.poste %} — {{ emp.poste }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="field-hint">
+                        Nécessaire pour le self-service, les congés, absences, présences et documents.
+                        Seuls les employés sans compte sont proposés.
+                    </div>
+                    {% if not employees %}
+                    <div class="field-alert">Tous les employés sont déjà liés à un compte.</div>
+                    {% endif %}
                 </div>
 
                 <!-- Password -->
@@ -37,13 +72,15 @@
                     <label for="password">Mot de passe</label>
                     <div class="input-group">
                         <span class="input-icon">🔒</span>
-                        <input type="password" 
-                               id="password" 
-                               name="password" 
-                               placeholder="Créez un mot de passe sécurisé" 
-                               required 
-                               minlength="6"
-                               oninput="updatePasswordStrength()">
+                        <input type="password"
+                               id="password"
+                               name="password"
+                               placeholder="8 caractères minimum"
+                               required
+                               minlength="8"
+                               maxlength="128"
+                               autocomplete="new-password"
+                               oninput="updatePasswordStrength(); checkPasswordMatch()">
                     </div>
                     
                     <!-- Password Strength Meter -->
@@ -60,11 +97,14 @@
                     <label for="confirm_password">Confirmer le mot de passe</label>
                     <div class="input-group">
                         <span class="input-icon">🔒</span>
-                        <input type="password" 
-                               id="confirm_password" 
-                               name="confirm_password" 
-                               placeholder="Confirmez votre mot de passe" 
+                        <input type="password"
+                               id="confirm_password"
+                               name="confirm_password"
+                               placeholder="Confirmez le mot de passe"
                                required
+                               minlength="8"
+                               maxlength="128"
+                               autocomplete="new-password"
                                oninput="checkPasswordMatch()">
                     </div>
                     <div id="matchMessage" class="match-message"></div>
@@ -88,7 +128,7 @@
 
 <style>
 .auth-wrapper {
-    max-width: 440px;
+    max-width: 540px;
     margin: 40px auto;
     padding: 0 16px;
 }
@@ -177,10 +217,36 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
+.register-select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    font-size: .95rem;
+    color: #0f172a;
+    background: #fff;
+}
+
+.register-select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
 .field-hint {
     font-size: 0.78rem;
     color: #64748b;
     margin-top: 4px;
+    line-height: 1.35;
+}
+
+.field-alert {
+    margin-top: 7px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #fffbeb;
+    color: #854d0e;
+    font-size: .78rem;
 }
 
 .strength-container {
@@ -330,8 +396,8 @@ function updatePasswordStrength() {
     if (!fill || !label) return;
 
     let score = 0;
-    if (password.length >= 6) score += 25;
-    if (password.length >= 8) score += 20;
+    if (password.length >= 8) score += 25;
+    if (password.length >= 12) score += 20;
     if (/[A-Z]/.test(password)) score += 15;
     if (/[0-9]/.test(password)) score += 15;
     if (/[^A-Za-z0-9]/.test(password)) score += 25;
