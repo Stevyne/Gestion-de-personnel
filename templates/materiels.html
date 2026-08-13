@@ -13,6 +13,8 @@
             <a href="{{ url_for('parc.etiquettes_departement', id=filters.departement) }}"
                class="btn btn-secondary" target="_blank">🏷️ Étiquettes du service</a>
             {% endif %}
+            <a href="{{ url_for('rapports_parc.export_materiels_pdf') }}" class="btn btn-secondary">📄 PDF</a>
+            <a href="{{ url_for('rapports_parc.export_materiels_excel') }}" class="btn btn-secondary">📊 Excel</a>
             <a href="{{ url_for('parc.inventaires') }}" class="btn btn-secondary">📋 Inventaire</a>
             <a href="{{ url_for('departements.departements') }}" class="btn btn-secondary">🏢 Départements</a>
         </div>

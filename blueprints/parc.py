@@ -70,6 +70,13 @@ MAINTENANCE_STATUTS = [
     ('annule',      'Annulé'),
 ]
 MAINTENANCE_STATUTS_DICT = dict(MAINTENANCE_STATUTS)
+MAINTENANCE_PRIORITES = [
+    ('basse', 'Basse · SLA 7 jours'),
+    ('normale', 'Normale · SLA 3 jours'),
+    ('haute', 'Haute · SLA 1 jour'),
+    ('critique', 'Critique · SLA 4 heures'),
+]
+MAINTENANCE_PRIORITES_DICT = dict(MAINTENANCE_PRIORITES)
 # Une intervention est « en cours » tant qu'elle n'est pas close. `a_valider`
 # en fait partie : le matériel est revenu mais le demandeur n'a pas encore
 # confirmé que la panne est réellement résolue.
@@ -573,7 +580,7 @@ def creer_blueprint_parc(deps):
                 SELECT e.id, e.nom, e.prenom
                 FROM employes e
                 LEFT JOIN departements d ON d.nom = e.departement
-                WHERE {emp_scope}
+                WHERE {emp_scope} AND e.actif
                 ORDER BY (d.id = %s) DESC NULLS LAST, e.nom, e.prenom
             """, emp_params + [materiel['departement_id']])
             employes = cur.fetchall()
@@ -665,7 +672,7 @@ def creer_blueprint_parc(deps):
         else:
             try:
                 with db_cursor(commit=True) as (conn, cur):
-                    cur.execute("SELECT nom, prenom FROM employes WHERE id = %s", (employe_id,))
+                    cur.execute("SELECT nom, prenom FROM employes WHERE id = %s AND actif", (employe_id,))
                     emp = cur.fetchone()
                     if not emp:
                         raise ValueError("Employé introuvable")
@@ -1341,8 +1348,8 @@ def creer_blueprint_parc(deps):
                 return redirect(url_for('parc.materiels'))
 
             cur.execute("""
-                SELECT * FROM materiel_maintenances
-                WHERE exemplaire_id = %s
+                SELECT *, (sla_echeance<CURRENT_TIMESTAMP AND statut IN ('signale','assigne','envoye','a_valider')) AS sla_depasse
+                FROM materiel_maintenances WHERE exemplaire_id = %s
                 ORDER BY date_creation DESC
             """, (id,))
             maintenances = cur.fetchall()
@@ -1389,6 +1396,8 @@ def creer_blueprint_parc(deps):
                                etats=EXEMPLAIRE_ETATS,
                                etats_dict=EXEMPLAIRE_ETATS_DICT,
                                statuts_dict=MAINTENANCE_STATUTS_DICT,
+                               priorites=MAINTENANCE_PRIORITES,
+                               priorites_dict=MAINTENANCE_PRIORITES_DICT,
                                maintenance_ouverts=MAINTENANCE_OUVERTS,
                                maintenance_indisponible=MAINTENANCE_INDISPONIBLE,
                                validation_jours=MAINTENANCE_VALIDATION_JOURS,
@@ -1472,6 +1481,10 @@ def creer_blueprint_parc(deps):
         """Signale une panne. Ouvert à tous : celui qui constate n'est pas
         forcément gestionnaire du parc."""
         panne = (request.form.get('panne') or '').strip()
+        priorite = (request.form.get('priorite') or 'normale').strip()
+        if priorite not in MAINTENANCE_PRIORITES_DICT:
+            flash("Priorité invalide.", "danger")
+            return redirect(url_for('parc.view_exemplaire', id=id))
         if not panne:
             flash("Veuillez décrire la panne.", "danger")
             return redirect(url_for('parc.view_exemplaire', id=id))
@@ -1494,10 +1507,11 @@ def creer_blueprint_parc(deps):
 
                 cur.execute("""
                     INSERT INTO materiel_maintenances
-                        (exemplaire_id, statut, panne, signale_par, signale_par_id)
-                    VALUES (%s, 'signale', %s, %s, %s) RETURNING id
-                """, (id, panne, session.get('username'), session.get('user_id')))
-                cur.fetchone()  # consomme le RETURNING id
+                        (exemplaire_id, statut, panne, priorite, signale_par, signale_par_id)
+                    VALUES (%s, 'signale', %s, %s, %s, %s)
+                    RETURNING id, reference, sla_echeance
+                """, (id, panne, priorite, session.get('username'), session.get('user_id')))
+                ticket = cur.fetchone()
                 cur.execute("UPDATE materiel_exemplaires SET etat = 'panne' WHERE id = %s", (id,))
 
                 # Étape 1 du workflow : prévenir les gestionnaires qu'il y a une
@@ -1510,15 +1524,17 @@ def creer_blueprint_parc(deps):
                                WHERE ex.id = %s""", (id,))
                 info = cur.fetchone()
                 _notifier_pilotes(
-                    cur, "Panne signalée : %s" % info['numero_inventaire'],
-                    "%s — %s (signalé par %s). À assigner."
-                    % (info['nom'], panne[:120], session.get('username')),
+                    cur, "%s · Panne signalée : %s" % (ticket['reference'], info['numero_inventaire']),
+                    "%s — %s (priorité %s, signalé par %s). À assigner avant %s."
+                    % (info['nom'], panne[:120], priorite, session.get('username'),
+                       ticket['sla_echeance']),
                     'warning', sauf=session.get('user_id'),
                     departement=info.get('departement_nom'))
 
             log_action(session.get('user_id'), session.get('username'),
-                       "Signalement panne", "exemplaire", id, panne[:120])
-            flash("Panne signalée. Un gestionnaire va assigner l'intervention.", "success")
+                       "Signalement panne", "maintenance", ticket['id'],
+                       f"{ticket['reference']} · {priorite} · {panne[:100]}")
+            flash(f"Ticket {ticket['reference']} créé — SLA jusqu'au {ticket['sla_echeance']}.", "success")
         except Exception as e:
             logger.error("Erreur signalement panne: %s", e, exc_info=True)
             flash(f"Erreur : {e}", "danger")
@@ -1578,9 +1594,11 @@ def creer_blueprint_parc(deps):
                     return redirect(url_for('parc.view_exemplaire', id=mt['exemplaire_id']))
 
                 cur.execute("""UPDATE materiel_maintenances
-                               SET statut = 'assigne', technicien = %s,
-                                   assigne_user_id = %s, prestataire_id = %s,
-                                   date_assignation = CURRENT_DATE, assigne_par = %s
+                           SET statut = 'assigne', technicien = %s,
+                               assigne_user_id = %s, prestataire_id = %s,
+                               date_assignation = CURRENT_DATE,
+                               date_prise_en_charge = COALESCE(date_prise_en_charge,CURRENT_TIMESTAMP),
+                               assigne_par = %s
                                WHERE id = %s""",
                             (technicien, user_id, prestataire_id,
                              session.get('username'), id))
@@ -1710,7 +1728,9 @@ def creer_blueprint_parc(deps):
                 cur.execute("""UPDATE materiel_maintenances
                                SET statut = %s, cout = %s, diagnostic = %s,
                                    date_retour = COALESCE(NULLIF(%s,'')::date, CURRENT_DATE),
-                                   date_execution = CURRENT_DATE, execute_par = %s
+                                   date_execution = CURRENT_DATE, execute_par = %s,
+                                   date_resolution = CURRENT_TIMESTAMP,
+                                   sla_respecte = (sla_echeance IS NULL OR CURRENT_TIMESTAMP <= sla_echeance)
                                WHERE id = %s""",
                             (nouveau_statut, cout or None, diagnostic or None,
                              date_retour, session.get('username'), id))
@@ -1877,7 +1897,8 @@ def creer_blueprint_parc(deps):
                     return redirect(url_for('parc.view_exemplaire', id=mt['exemplaire_id']))
                 cur.execute("""UPDATE materiel_maintenances
                                SET statut = 'annule', cloture_par = %s,
-                                   date_retour = CURRENT_DATE
+                                   date_retour = CURRENT_DATE, date_resolution=CURRENT_TIMESTAMP,
+                                   sla_respecte=(sla_echeance IS NULL OR CURRENT_TIMESTAMP<=sla_echeance)
                                WHERE id = %s""", (session.get('username'), id))
                 cur.execute("""UPDATE materiel_exemplaires SET etat = 'bon'
                                WHERE id = %s AND etat <> 'rebut'""", (mt['exemplaire_id'],))
@@ -1898,10 +1919,14 @@ def creer_blueprint_parc(deps):
         page = max(1, request.args.get('page', 1, type=int))
         per_page = 12
         statut = (request.args.get('statut') or '').strip()
+        priorite = (request.args.get('priorite') or '').strip()
         dept_id = request.args.get('departement', type=int)
         portee = (request.args.get('portee') or '').strip()
 
         where, params = [], []
+        if priorite in MAINTENANCE_PRIORITES_DICT:
+            where.append("mt.priorite=%s")
+            params.append(priorite)
         if statut in MAINTENANCE_STATUTS_DICT:
             where.append("mt.statut = %s")
             params.append(statut)
@@ -1931,14 +1956,19 @@ def creer_blueprint_parc(deps):
 
             cur.execute(f"""
                 SELECT mt.*, e.numero_inventaire, e.id AS exemplaire_id,
-                       m.nom AS materiel_nom, d.nom AS departement_nom
+                       m.nom AS materiel_nom, d.nom AS departement_nom,
+                       (mt.sla_echeance<CURRENT_TIMESTAMP AND mt.statut IN ('signale','assigne','envoye','a_valider')) AS sla_depasse
                 FROM materiel_maintenances mt
                 JOIN materiel_exemplaires e ON e.id = mt.exemplaire_id
                 JOIN materiels m ON m.id = e.materiel_id
                 LEFT JOIN departements d ON d.id = m.departement_id
                 {clause}
                 ORDER BY CASE WHEN mt.statut IN ('signale','assigne','envoye','a_valider')
-                               THEN 0 ELSE 1 END,
+                                   AND mt.sla_echeance<CURRENT_TIMESTAMP THEN 0
+                              WHEN mt.statut IN ('signale','assigne','envoye','a_valider') THEN 1
+                              ELSE 2 END,
+                         CASE mt.priorite WHEN 'critique' THEN 0 WHEN 'haute' THEN 1
+                              WHEN 'normale' THEN 2 ELSE 3 END,
                          mt.date_creation DESC
                 LIMIT %s OFFSET %s
             """, params + [per_page, (page - 1) * per_page])
@@ -1951,6 +1981,8 @@ def creer_blueprint_parc(deps):
                        COUNT(*) FILTER (WHERE mt.statut = 'a_valider')   AS a_valider,
                        COUNT(*) FILTER (WHERE mt.statut = 'repare')      AS reparees,
                        COUNT(*) FILTER (WHERE mt.statut = 'irreparable') AS rebuts,
+                       COUNT(*) FILTER (WHERE mt.statut IN ('signale','assigne','envoye','a_valider')
+                                         AND mt.sla_echeance<CURRENT_TIMESTAMP) AS sla_depasses,
                        COALESCE(SUM(mt.cout), 0)                         AS cout_total
                 FROM materiel_maintenances mt
                 JOIN materiel_exemplaires e ON e.id=mt.exemplaire_id
@@ -1978,12 +2010,15 @@ def creer_blueprint_parc(deps):
             mes_taches = cur.fetchone()
 
         pg = pagination_info(total, page, per_page)
-        filters = {'statut': statut, 'departement': dept_id, 'portee': portee}
+        filters = {'statut': statut, 'priorite': priorite,
+                   'departement': dept_id, 'portee': portee}
         return render_template('maintenances.html',
                                interventions=interventions, stats=stats,
                                departements=departements, filters=filters,
                                statuts=MAINTENANCE_STATUTS,
                                statuts_dict=MAINTENANCE_STATUTS_DICT,
+                               priorites=MAINTENANCE_PRIORITES,
+                               priorites_dict=MAINTENANCE_PRIORITES_DICT,
                                mes_taches=mes_taches,
                                pg=pg, page_items=page_list(pg['page'], pg['pages']),
                                base_qs=urlencode({k: v for k, v in filters.items() if v}),

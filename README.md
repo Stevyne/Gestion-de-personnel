@@ -17,6 +17,8 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Affectation aux départements (CRUD départements via `/departements`)
 - Historique des salaires et dates d'embauche
 - Page `/historique` dédiée
+- Workflow de départ strict (`/departs`) : préparation, restitution obligatoire, archivage de la fiche, désactivation des comptes et fermeture des sessions
+- L'historique RH est conservé ; un trigger PostgreSQL interdit l'archivage tant qu'un matériel ou exemplaire reste détenu
 - Photo de profil affichée dans la liste et sur la fiche détaillée (à défaut : initiales)
 
 ### 🕒 Gestion des présences
@@ -56,6 +58,9 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - **Alerte de stock bas** : seuil configurable par article, badge dans la liste et notification interne aux admin/RH/managers. Anti-spam (une seule notif tant que le stock n'est pas réapprovisionné)
 - Filtres par nom, département, catégorie et état (stock bas / rupture), avec pagination
 - Rôles : `admin`, `rh` et `manager` gèrent le stock ; la suppression est réservée à `admin`/`rh` ; les autres rôles consultent
+- Rapports parc PDF/Excel (`/export/materiels/pdf`, `/export/materiels/excel`) filtrés par la portée départementale
+- Maintenance priorisée avec SLA : critique 4 h, haute 1 jour, normale 3 jours, basse 7 jours
+- Chaque panne reçoit un ticket transactionnel `MAINT-AAAA-xxx`, avec prise en charge, échéance, dépassement et résultat SLA
 - Routes : `/materiels`, `/materiels/add`, `/materiels/edit/<id>`, `/materiels/<id>`, `/materiels/<id>/mouvement`, `/materiels/<id>/attribuer`, `/materiels/attribution/<id>/retour`, `/materiels/delete/<id>`
 
 ### 📋 Inventaire physique
@@ -90,6 +95,13 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Alertes internes et e-mails avant expiration puis après expiration
 - Rapports avancés avec filtres (`/rapports`)
 - Exports PDF (ReportLab) et Excel (Openpyxl) pour présences et congés
+
+### 📑 Contrats
+- Module versionné pour CDI, CDD, stages, consultants et autres contrats
+- Dates, référence, statut, notes et document signé stocké en PostgreSQL (`BYTEA`)
+- Renouvellement créant une nouvelle version liée à l'ancien contrat ; résiliation motivée et auditée
+- Accès confidentiel : admin/RH gèrent tous les contrats, chaque employé ne consulte que les siens
+- Alertes idempotentes à J-30, J-7 et après expiration, par notification interne et e-mail via l'outbox
 
 ### 💬 Messagerie interne
 - Interface responsive inspirée de Messenger : liste des discussions à gauche, fil actif à droite, bulles, avatars, recherche instantanée et zone de saisie fixe
@@ -289,6 +301,9 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 | `/calendrier-conges`               | Calendrier des congés            | Tous                   |
 | `/rapports`                        | Rapports avancés + filtres       | Tous                   |
 | `/documents`                       | Documents                        | Tous                   |
+| `/contrats`                        | Contrats, versions et échéances  | Propriétaire, admin, rh |
+| `/departs`                         | Workflow de départ et archivage  | admin, rh              |
+| `/export/materiels/pdf`, `/export/materiels/excel` | Rapports du parc | Connecté, portée départementale |
 | `/messages`, `/messages/nouveau`   | Messagerie privée, groupes et annonces | Connecté, portée départementale |
 | `/historique`                      | Historique salaires / embauches  | Tous                   |
 | `/notifications`                   | Centre de notifications          | Tous                   |
@@ -351,6 +366,9 @@ Blueprints Flask :
 - `presences.py` : pointages, saisie des présences et historique du temps ;
 - `utilisateurs.py` : comptes, rôles, sessions et création d'accès ;
 - `auth.py` : connexion, déconnexion, profil, photo et mot de passe ;
+- `departs.py` : préparation et finalisation des départs ;
+- `contrats.py` : contrats, versions, fichiers et alertes ;
+- `rapports_parc.py` : exports PDF/Excel du matériel ;
 - `absence_justifications.py` : workflow confidentiel des justificatifs ;
 - `messagerie.py` : messagerie interne.
 
@@ -372,12 +390,16 @@ Gestion-de-personnel/
 │   ├── presences.py        # Pointages et historique
 │   ├── utilisateurs.py     # Comptes, rôles et sessions
 │   ├── auth.py             # Authentification et profil
+│   ├── departs.py          # Départs et archivage
+│   ├── contrats.py         # Contrats et alertes
+│   ├── rapports_parc.py    # Exports du parc
 │   ├── absence_justifications.py
 │   └── messagerie.py
 ├── services/
 │   ├── email_outbox.py     # File SMTP persistante, indépendante de Flask
 │   ├── roles.py            # Référentiel officiel des rôles
-│   └── phase1_schema.py    # Contraintes, triggers et migrations d'intégrité
+│   ├── phase1_schema.py    # Contraintes, triggers et migrations d'intégrité
+│   └── phase2_schema.py    # Départs, SLA et contrats
 ├── .github/workflows/
 │   └── tests.yml           # PostgreSQL 17 + pytest sur push/PR
 ├── requirements.txt        # Dépendances production
@@ -435,6 +457,7 @@ Gestion-de-personnel/
 | 01h00     | Génération automatique des absences             |
 | 01h30     | Alertes d'expiration des documents              |
 | 02h00     | Recalcul des soldes de congés                   |
+| 02h30     | Alertes contrats à J-30, J-7 et expiration      |
 | 03h00     | Purge des sessions expirées (> 30 jours)        |
 | 03h30     | Validation automatique des retours maintenance  |
 | 60 s      | Traitement de l'outbox (si `EMAIL_ENABLED=true`) |

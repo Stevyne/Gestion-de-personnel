@@ -22,6 +22,7 @@ import atexit
 from services.email_outbox import ajouter_email, traiter_outbox
 from services.roles import GLOBAL_DATA_ROLES, ROLE_LABELS
 from services.phase1_schema import appliquer_contraintes_phase1
+from services.phase2_schema import appliquer_schema_phase2
 from blueprints.absence_justifications import (
     ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
 )
@@ -30,6 +31,9 @@ from blueprints.documents import creer_blueprint_documents
 from blueprints.departements import creer_blueprint_departements
 from blueprints.presences import creer_blueprint_presences
 from blueprints.utilisateurs import creer_blueprint_utilisateurs
+from blueprints.departs import creer_blueprint_departs
+from blueprints.contrats import creer_blueprint_contrats
+from blueprints.rapports_parc import creer_blueprint_rapports_parc
 from blueprints.auth import creer_blueprint_auth
 from blueprints.parc import (
     MAINTENANCE_OUVERTS,  # réexport de compatibilité pour les tests/plug-ins  # noqa: F401
@@ -1725,6 +1729,7 @@ def init_db():
     )''')
 
     appliquer_contraintes_phase1(cur, logger)
+    appliquer_schema_phase2(cur)
 
     # Seed employés
     cur.execute("SELECT COUNT(*) FROM employes")
@@ -1800,6 +1805,8 @@ RECHERCHE_PAGES = [
     ('Soldes de congés',       'soldes_conges_page',   None,                        'wallet'),
     ('Permissions',            'permissions',          None,                        'file'),
     ('Documents',              'documents.documents',  None,                        'file'),
+    ('Contrats',               'contrats.contrats_liste', None,                      'file'),
+    ('Départs',                'departs.departs_liste', ('admin', 'rh'),             'logout'),
     ('Utilisateurs',           'utilisateurs.utilisateurs_page', ('admin', 'rh'),            'shield'),
     ('Notifications',          'notifications',        None,                        'bell'),
     ('Mon espace',             'auth.mon_profil',      None,                        'user'),
@@ -2409,7 +2416,7 @@ def dashboard():
             SELECT COUNT(*) AS total,
                    COALESCE(AVG(e.salaire), 0) AS salaire_moyen,
                    COALESCE(AVG(CURRENT_DATE - e.date_embauche), 0) AS anciennete_jours
-              FROM employes e WHERE {emp_where}
+              FROM employes e WHERE {emp_where} AND e.actif
         """, emp_params)
         personnel = cur.fetchone()
         total_employes = personnel['total'] or 0
@@ -2433,7 +2440,7 @@ def dashboard():
         cur.execute(f"""
             SELECT p.*, e.nom, e.prenom
               FROM presences p JOIN employes e ON e.id = p.employe_id
-             WHERE p.date = %s AND {emp_where}
+             WHERE p.date = %s AND {emp_where} AND e.actif
         """, [today] + emp_params)
         presences_today = cur.fetchall()
         teletravail = 0
@@ -2468,7 +2475,7 @@ def dashboard():
               FROM presences p JOIN employes e ON e.id = p.employe_id
              WHERE p.heure_arrivee IS NOT NULL AND p.heure_depart IS NOT NULL
                AND DATE_TRUNC('month', p.date) = DATE_TRUNC('month', CURRENT_DATE)
-               AND {emp_where}
+               AND {emp_where} AND e.actif
         """, emp_params)
         heures_totales = round(float(cur.fetchone()['heures'] or 0), 1)
 
@@ -2482,7 +2489,7 @@ def dashboard():
                    COALESCE(SUM(c.nombre_jours) FILTER (WHERE c.statut = 'approuvé'
                          AND EXTRACT(YEAR FROM c.date_debut) = %s), 0) AS jours_approuves
               FROM conges c JOIN employes e ON e.id = c.employe_id
-             WHERE {emp_where}
+             WHERE {emp_where} AND e.actif
         """, [annee, annee, annee] + emp_params)
         conges_row = cur.fetchone()
         conges_stat = {
@@ -2499,7 +2506,7 @@ def dashboard():
                    COUNT(*) FILTER (WHERE p.statut = 'refusé'
                          AND EXTRACT(YEAR FROM p.date_debut) = %s) AS refuse
               FROM permissions p JOIN employes e ON e.id = p.employe_id
-             WHERE {emp_where}
+             WHERE {emp_where} AND e.actif
         """, [annee, annee] + emp_params)
         permission_row = cur.fetchone()
         permissions_stat = {
@@ -2511,7 +2518,7 @@ def dashboard():
         cur.execute(f"""
             SELECT COALESCE(SUM(s.jours_acquis - s.jours_utilises), 0) AS restant
               FROM soldes_conges s JOIN employes e ON e.id = s.employe_id
-             WHERE s.annee = %s AND {emp_where}
+             WHERE s.annee = %s AND {emp_where} AND e.actif
         """, [annee] + emp_params)
         solde_conges_restant = round(float(cur.fetchone()['restant'] or 0), 1)
 
@@ -2524,7 +2531,7 @@ def dashboard():
                    COUNT(*) FILTER (WHERE EXTRACT(YEAR FROM a.date) = %s
                        AND a.statut = 'acceptee') AS acceptees
               FROM absences a JOIN employes e ON e.id = a.employe_id
-             WHERE {emp_where}
+             WHERE {emp_where} AND e.actif
         """, [annee, annee, annee] + emp_params)
         absence_row = cur.fetchone()
         absences_stat = {
@@ -2541,7 +2548,7 @@ def dashboard():
                    COUNT(*) FILTER (WHERE d.date_expiration BETWEEN CURRENT_DATE
                                       AND CURRENT_DATE + INTERVAL '30 days') AS expirent_bientot
               FROM documents d LEFT JOIN employes e ON e.id = d.employe_id
-             WHERE {emp_where}
+             WHERE {emp_where} AND e.actif
         """, emp_params)
         document_row = cur.fetchone()
         documents_stat = {
@@ -2643,7 +2650,7 @@ def dashboard():
         cur.execute(f"""
             SELECT COALESCE(NULLIF(e.departement,''), 'Sans département') AS nom,
                    COUNT(*) AS nb_employes
-              FROM employes e WHERE {emp_where}
+              FROM employes e WHERE {emp_where} AND e.actif
              GROUP BY COALESCE(NULLIF(e.departement,''), 'Sans département')
              ORDER BY nb_employes DESC LIMIT 8
         """, emp_params)
@@ -2656,13 +2663,13 @@ def dashboard():
         cur.execute(f"""
             SELECT p.*, e.nom, e.prenom FROM presences p
             JOIN employes e ON e.id = p.employe_id
-            WHERE {emp_where} ORDER BY p.date DESC, p.id DESC LIMIT 5
+            WHERE {emp_where} AND e.actif ORDER BY p.date DESC, p.id DESC LIMIT 5
         """, emp_params)
         recent_presences = cur.fetchall()
         cur.execute(f"""
             SELECT c.*, e.nom, e.prenom FROM conges c
             JOIN employes e ON e.id = c.employe_id
-            WHERE {emp_where} ORDER BY c.date_demande DESC, c.id DESC LIMIT 5
+            WHERE {emp_where} AND e.actif ORDER BY c.date_demande DESC, c.id DESC LIMIT 5
         """, emp_params)
         recent_conges = cur.fetchall()
 
@@ -3125,10 +3132,10 @@ def generer_absences_automatiques(cur, date_jusqua=None, date_depuis=None,
     debut_global = _to_date(date_depuis)
 
     if departement is None:
-        cur.execute("SELECT id, date_embauche FROM employes ORDER BY id")
+        cur.execute("SELECT id, date_embauche FROM employes WHERE actif ORDER BY id")
     else:
         cur.execute("""SELECT id, date_embauche FROM employes
-                       WHERE departement = %s ORDER BY id""", (departement,))
+                       WHERE actif AND departement = %s ORDER BY id""", (departement,))
     employes = cur.fetchall()
 
     nb_creees = 0
@@ -3502,6 +3509,10 @@ def demarrer_scheduler():
     scheduler.add_job(
         job_recalcul_soldes_conges, 'cron',
         hour=2, minute=0, id='recalcul_soldes_conges', replace_existing=True
+    )
+    scheduler.add_job(
+        job_alertes_contrats, 'cron',
+        hour=2, minute=30, id='alertes_contrats', replace_existing=True
     )
     scheduler.add_job(
         job_purge_sessions, 'cron',
@@ -4448,6 +4459,35 @@ def add_employee_alt():
 
 # Blueprints métier : dépendances partagées injectées explicitement pour éviter
 # les imports circulaires avec l'application historique.
+contrats_bp, contrats_api = creer_blueprint_contrats({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'role_required': role_required,
+    'get_current_employee': get_current_employee,
+    'detect_file_type': detect_file_type,
+    'create_notification': create_notification,
+    'queue_email': queue_email,
+    'log_action': log_action,
+})
+job_alertes_contrats = contrats_api['job_alertes_contrats']
+app.register_blueprint(contrats_bp)
+
+app.register_blueprint(creer_blueprint_rapports_parc({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'department_scope_sql': department_scope_sql,
+    'get_department_scope': get_department_scope,
+}))
+
+app.register_blueprint(creer_blueprint_departs({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'role_required': role_required,
+    'create_notification': create_notification,
+    'queue_email': queue_email,
+    'log_action': log_action,
+}))
+
 app.register_blueprint(creer_blueprint_auth({
     'db_cursor': db_cursor,
     'login_required': login_required,

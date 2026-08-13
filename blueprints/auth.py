@@ -35,7 +35,7 @@ def creer_blueprint_auth(deps):
             with db_cursor() as (conn, cur):
                 cur.execute("SELECT * FROM users WHERE username=%s", (u,))
                 user = cur.fetchone()
-            if user and check_password_hash(user['password_hash'], p):
+            if user and user.get('actif', True) and check_password_hash(user['password_hash'], p):
                 session['user_id'] = user['id']
                 session['username'] = user['username']
                 session['role'] = user['role']

@@ -40,6 +40,10 @@
             <div class="materiel-stat-value" style="color:#991b1b;">{{ stats.rebuts }}</div>
             <div class="materiel-stat-label">Irréparables</div>
         </div>
+        <div class="materiel-stat" style="background:#fff1f2;">
+            <div class="materiel-stat-value" style="color:#be123c;">{{ stats.sla_depasses }}</div>
+            <div class="materiel-stat-label">SLA dépassés</div>
+        </div>
         <div class="materiel-stat" style="background:#f1f5f9;">
             <div class="materiel-stat-value" style="color:#475569; font-size:1.3rem;">
                 {{ '{:,.0f}'.format(stats.cout_total)|replace(',', ' ') }} Ar
@@ -78,6 +82,13 @@
             </select>
         </div>
         <div class="filtre-champ">
+            <label>Priorité</label>
+            <select name="priorite" class="form-control">
+                <option value="">Toutes</option>
+                {% for val,lib in priorites %}<option value="{{ val }}" {{ 'selected' if filters.priorite==val }}>{{ lib }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="filtre-champ">
             <label>Département</label>
             <select name="departement" class="form-control">
                 <option value="">Tous</option>
@@ -94,7 +105,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>N° inventaire</th>
+                    <th>Ticket / inventaire</th>
                     <th>Matériel</th>
                     <th>Panne</th>
                     <th>Technicien</th>
@@ -106,10 +117,11 @@
             <tbody>
                 {% for m in interventions %}
                 <tr>
-                    <td data-label="N° inventaire">
-                        <a href="{{ url_for('parc.view_exemplaire', id=m.exemplaire_id) }}">
-                            <strong>{{ m.numero_inventaire }}</strong>
-                        </a>
+                    <td data-label="Ticket / inventaire">
+                        <a href="{{ url_for('parc.view_exemplaire', id=m.exemplaire_id) }}"><strong>{{ m.reference }}</strong></a>
+                        <div class="wf-meta">{{ m.numero_inventaire }}</div>
+                        <span class="badge {{ 'badge-danger' if m.priorite=='critique' else 'badge-warning' }}">{{ m.priorite }}</span>
+                        {% if m.sla_echeance %}<div class="wf-meta {{ 'wf-meta-danger' if m.sla_depasse }}">SLA {{ m.sla_echeance.strftime('%d/%m %H:%M') }}</div>{% endif %}
                     </td>
                     <td data-label="Matériel">
                         {{ m.materiel_nom }}

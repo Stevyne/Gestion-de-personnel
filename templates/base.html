@@ -273,7 +273,7 @@
 
                 {# --- Personnel : employés + départements --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement','departs.departs_liste'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('users') }}<span>Personnel</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
@@ -283,6 +283,11 @@
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
                         <a href="{{ url_for('departements.departements') }}" class="nav-dropdown-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">
                             {{ icon('building', 17) }}<span>Départements</span>
+                        </a>
+                        {% endif %}
+                        {% if session.get('role') in ['admin', 'rh'] %}
+                        <a href="{{ url_for('departs.departs_liste') }}" class="nav-dropdown-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">
+                            {{ icon('logout', 17) }}<span>Départs</span>
                         </a>
                         {% endif %}
                     </div>
@@ -310,7 +315,7 @@
 
                 {# --- Congés : congés, permissions, soldes, calendrier --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['conges','permissions','soldes_conges_page','calendrier_conges','add_conge','add_permission'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['conges','permissions','soldes_conges_page','calendrier_conges','add_conge','add_permission'] or (request.endpoint and request.endpoint.startswith('contrats.')) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('palm') }}<span>Congés</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
@@ -322,6 +327,9 @@
                         </a>
                         <a href="{{ url_for('calendrier_conges') }}" class="nav-dropdown-link {% if request.endpoint == 'calendrier_conges' %}active{% endif %}">
                             {{ icon('calendar', 17) }}<span>Calendrier</span>
+                        </a>
+                        <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">
+                            {{ icon('file', 17) }}<span>Contrats</span>
                         </a>
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
                         <a href="{{ url_for('soldes_conges_page') }}" class="nav-dropdown-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">
@@ -487,6 +495,9 @@
                 {%  if session.get('role') in ['admin', 'rh', 'manager'] %}
                 <a href="{{ url_for('departements.departements') }}" class="nav-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">{{ icon('building') }}<span>Départements</span></a>
                 {% endif %}
+                {% if session.get('role') in ['admin', 'rh'] %}
+                <a href="{{ url_for('departs.departs_liste') }}" class="nav-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">{{ icon('logout') }}<span>Départs</span></a>
+                {% endif %}
 
                 <p class="drawer-section">Temps</p>
                 <a href="{{ url_for('presences.presences') }}" class="nav-link {% if request.endpoint == 'presences.presences' %}active{% endif %}">{{ icon('clock') }}<span>Présences</span></a>
@@ -499,6 +510,7 @@
                 <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">{{ icon('palm') }}<span>Congés</span></a>
                 <a href="{{ url_for('permissions') }}" class="nav-link {% if request.endpoint == 'permissions' %}active{% endif %}">{{ icon('file') }}<span>Permissions</span></a>
                 <a href="{{ url_for('calendrier_conges') }}" class="nav-link {% if request.endpoint == 'calendrier_conges' %}active{% endif %}">{{ icon('calendar') }}<span>Calendrier</span></a>
+                <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">{{ icon('file') }}<span>Contrats</span></a>
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
                 <a href="{{ url_for('soldes_conges_page') }}" class="nav-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">{{ icon('wallet') }}<span>Soldes</span></a>
                 {% endif %}

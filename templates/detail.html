@@ -27,12 +27,21 @@
                         {% if employee.date_embauche %}
                         <span class="badge badge-info">Embauché le {{ employee.date_embauche }}</span>
                         {% endif %}
+                        {% if not employee.actif %}
+                        <span class="badge badge-danger">Archivé · départ {{ employee.date_depart_effective }}</span>
+                        {% elif employee.statut_depart == 'preparation' %}
+                        <span class="badge badge-warning">Départ prévu le {{ employee.date_depart_prevue }}</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>
             
             <!-- Quick actions -->
             <div class="employee-actions">
+                {% if current_role in ['admin','rh'] %}
+                <a href="{{ url_for('contrats.contrats_liste', employe_id=employee.id) }}" class="btn btn-secondary">📑 Contrats</a>
+                <a href="{{ url_for('departs.departs_liste') }}" class="btn btn-secondary">🚪 Départ</a>
+                {% endif %}
                 <a data-modal-title="Modifier l'employé" href="{{ url_for('edit_employee', id=employee.id) }}" class="js-modal-form btn btn-secondary">
                     <span>✏️</span> Modifier
                 </a>

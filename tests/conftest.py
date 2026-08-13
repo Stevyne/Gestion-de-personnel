@@ -38,6 +38,7 @@ MUTABLE_TABLES = [
     'soldes_conges', 'audit_logs', 'documents', 'documents_alertes',
     'notifications', 'email_outbox', 'scheduler_runs', 'sessions_actives',
     'conversations',  # CASCADE : messages, membres et lectures d'annonces
+    'contrats', 'depart_employe_logs', 'maintenance_compteurs',
     # Les modules parc/maintenance sont désormais couverts eux aussi.
     'inventaires', 'materiel_maintenances', 'materiel_exemplaires',
     'materiels_attributions', 'materiels_mouvements', 'materiel_compteurs',
@@ -67,7 +68,7 @@ def _clean_tables():
             3: ('manager', 3), 4: ('employe', 1),
         }
         for user_id, (role, employe_id) in comptes_seed.items():
-            cur.execute("UPDATE users SET role=%s, employe_id=%s WHERE id=%s",
+            cur.execute("UPDATE users SET role=%s, employe_id=%s, actif=TRUE WHERE id=%s",
                         (role, employe_id, user_id))
         # Certains tests d'absences déplacent les dates d'embauche. Sans remise
         # à zéro, leur ordre modifiait le résultat des tests de soldes.
@@ -78,8 +79,10 @@ def _clean_tables():
             4: ('2022-01-01', 'Administration'),
         }
         for employe_id, (date_embauche, departement) in employes_seed.items():
-            cur.execute("""UPDATE employes SET date_embauche = %s, departement = %s
-                           WHERE id = %s""",
+            cur.execute("""UPDATE employes SET date_embauche=%s, departement=%s,
+                           actif=TRUE, statut_depart='aucun', date_depart_prevue=NULL,
+                           date_depart_effective=NULL, motif_depart=NULL
+                           WHERE id=%s""",
                         (date_embauche, departement, employe_id))
     yield
 

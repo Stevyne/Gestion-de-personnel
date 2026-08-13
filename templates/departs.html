@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <div><h1>🚪 Départs des employés</h1><p style="margin:5px 0 0;color:#64748b;">Archivage strict après restitution de tous les matériels.</p></div>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Employés</a>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead><tr><th>Employé</th><th>Département</th><th>Statut</th><th>Matériel restant</th><th>Action</th></tr></thead>
+      <tbody>
+      {% for e in employes %}
+      <tr>
+        <td data-label="Employé"><a href="{{ url_for('view_employee', id=e.id) }}"><strong>{{ e.prenom }} {{ e.nom }}</strong></a><div class="wf-meta">{{ e.poste or '—' }}</div></td>
+        <td data-label="Département">{{ e.departement or '—' }}</td>
+        <td data-label="Statut">
+          {% if not e.actif %}<span class="badge badge-danger">Archivé</span><div class="wf-meta">{{ e.date_depart_effective or '' }}</div>
+          {% elif e.statut_depart == 'preparation' %}<span class="badge badge-warning">Départ en préparation</span><div class="wf-meta">Prévu le {{ e.date_depart_prevue }}</div>
+          {% else %}<span class="badge badge-success">Actif</span>{% endif %}
+        </td>
+        <td data-label="Matériel restant">
+          {% if e.materiels_restants %}<span class="badge badge-danger">{{ e.materiels_restants }} à restituer</span>
+          {% else %}<span class="badge badge-success">Tout est rendu</span>{% endif %}
+        </td>
+        <td data-label="Action">
+          {% if e.actif and e.statut_depart != 'preparation' %}
+          <form method="post" action="{{ url_for('departs.depart_initier', id=e.id) }}" style="display:grid;gap:6px;min-width:230px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="date" name="date_depart_prevue" class="form-control" min="{{ today }}" required>
+            <input type="text" name="motif_depart" class="form-control" placeholder="Motif du départ" required maxlength="500">
+            <button class="btn btn-primary" type="submit">Initier le départ</button>
+          </form>
+          {% elif e.actif and e.statut_depart == 'preparation' %}
+          <div class="wf-actions" style="display:grid;gap:7px;">
+            <form method="post" action="{{ url_for('departs.depart_finaliser', id=e.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="date" name="date_depart_effective" class="form-control" value="{{ today }}" required>
+              <button class="btn btn-primary" type="submit" {{ 'disabled' if e.materiels_restants }}>Finaliser et archiver</button>
+            </form>
+            <form method="post" action="{{ url_for('departs.depart_annuler', id=e.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-secondary" type="submit">Annuler le workflow</button>
+            </form>
+          </div>
+          {% else %}<span class="wf-meta">Historique conservé</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

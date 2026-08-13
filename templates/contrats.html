@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header"><div><h1>📑 Contrats</h1><p style="margin:5px 0 0;color:#64748b;">Versions, renouvellements et échéances.</p></div></div>
+  {% if current_role in ['admin','rh'] %}
+  <form method="get" class="materiels-filtres">
+    <div class="filtre-champ"><label>Employé</label><select name="employe_id" class="form-control"><option value="">Tous</option>{% for e in employes %}<option value="{{ e.id }}" {{ 'selected' if selected_employe==e.id }}>{{ e.prenom }} {{ e.nom }}</option>{% endfor %}</select></div>
+    <div class="filtre-champ"><label>Statut</label><select name="statut" class="form-control"><option value="">Tous</option>{% for s in ['actif','expire','resilie','renouvele'] %}<option value="{{ s }}" {{ 'selected' if selected_statut==s }}>{{ s|capitalize }}</option>{% endfor %}</select></div>
+    <button class="btn btn-secondary">Filtrer</button>
+    {% if selected_employe %}<a href="{{ url_for('contrats.contrat_nouveau', employe_id=selected_employe) }}" class="btn btn-primary">+ Nouveau contrat</a>{% endif %}
+  </form>
+  {% endif %}
+  <div class="table-container"><table>
+    <thead><tr><th>Employé</th><th>Type / référence</th><th>Période</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
+    <tbody>{% for c in contrats %}<tr>
+      <td data-label="Employé"><strong>{{ c.prenom }} {{ c.nom }}</strong><div class="wf-meta">{{ c.departement or '—' }}</div></td>
+      <td data-label="Type"><strong>{{ c.type_contrat|upper }}</strong><div class="wf-meta">{{ c.reference or 'Sans référence' }}</div></td>
+      <td data-label="Période">{{ c.date_debut }} → {{ c.date_fin or 'indéterminée' }}</td>
+      <td data-label="Échéance">{% if c.date_fin and c.date_fin < today %}<span class="badge badge-danger">Expiré</span>{% elif c.date_fin and c.date_fin <= bientot %}<span class="badge badge-warning">{{ c.date_fin }}</span>{% else %}{{ c.date_fin or '—' }}{% endif %}</td>
+      <td data-label="Statut"><span class="badge {{ 'badge-success' if c.statut=='actif' else 'badge-warning' }}">{{ c.statut }}</span></td>
+      <td data-label="Action"><a class="btn btn-sm btn-secondary" href="{{ url_for('contrats.contrat_voir', id=c.id) }}">Voir</a></td>
+    </tr>{% else %}<tr><td colspan="6">Aucun contrat.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}

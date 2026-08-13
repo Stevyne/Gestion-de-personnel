@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:760px;margin:auto;">
+  <div class="card-header"><h1>📑 {{ 'Renouveler le contrat' if renouvellement else 'Nouveau contrat' }} — {{ employe.prenom }} {{ employe.nom }}</h1></div>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row">
+      <div class="form-group"><label>Type *</label><select name="type_contrat" class="form-control" required>{% for code,label in type_contrats %}<option value="{{ code }}" {{ 'selected' if contrat and contrat.type_contrat==code }}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label>Référence</label><input name="reference" class="form-control" maxlength="80" value="{{ contrat.reference if contrat else '' }}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Date de début *</label><input type="date" name="date_debut" class="form-control" required></div>
+      <div class="form-group"><label>Date de fin</label><input type="date" name="date_fin" class="form-control"></div>
+    </div>
+    <div class="form-group"><label>Document signé</label><input type="file" name="fichier" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"></div>
+    <div class="form-group"><label>Notes</label><textarea name="notes" class="form-control" rows="3">{{ contrat.notes if contrat else '' }}</textarea></div>
+    <div class="form-actions"><button class="btn btn-primary">{{ 'Renouveler' if renouvellement else 'Créer le contrat' }}</button><a href="{{ url_for('contrats.contrats_liste') }}" class="btn btn-secondary">Annuler</a></div>
+  </form>
+</div>
+{% endblock %}

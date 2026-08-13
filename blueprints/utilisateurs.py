@@ -49,7 +49,7 @@ def creer_blueprint_utilisateurs(deps):
                 ORDER BY u.role, u.username
             """, (session_online_window, permanent_session_lifetime))
             users_list = cur.fetchall()
-            cur.execute("SELECT id, nom, prenom FROM employes ORDER BY nom, prenom")
+            cur.execute("SELECT id, nom, prenom FROM employes WHERE actif ORDER BY nom, prenom")
             employees = cur.fetchall()
         return render_template('utilisateurs.html', users=users_list, employees=employees)
 
@@ -212,7 +212,7 @@ def creer_blueprint_utilisateurs(deps):
             cur.execute("""
                 SELECT e.id, e.nom, e.prenom, e.poste, e.departement
                   FROM employes e
-                 WHERE NOT EXISTS (
+                 WHERE e.actif AND NOT EXISTS (
                        SELECT 1 FROM users u WHERE u.employe_id = e.id
                  )
                  ORDER BY e.nom, e.prenom

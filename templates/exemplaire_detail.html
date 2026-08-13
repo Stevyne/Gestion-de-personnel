@@ -97,6 +97,11 @@
             <span class="etape {{ 'faite' if intervention.statut == 'a_valider' }}">4. Validation</span>
         </div>
 
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+            <span class="badge" style="background:#dbeafe;color:#1e40af;">{{ intervention.reference }}</span>
+            <span class="badge {{ 'badge-danger' if intervention.priorite=='critique' else 'badge-warning' }}">{{ intervention.priorite|capitalize }}</span>
+            {% if intervention.sla_echeance %}<span class="badge {{ 'badge-danger' if intervention.sla_depasse else 'badge-info' }}">SLA {{ intervention.sla_echeance.strftime('%d/%m %H:%M') }}</span>{% endif %}
+        </div>
         <p style="margin:12px 0 4px;"><strong>Panne :</strong> {{ intervention.panne }}</p>
         <p style="margin:0; color:#64748b; font-size:0.88rem;">
             Signalée le {{ intervention.date_signalement.strftime('%d/%m/%Y') if intervention.date_signalement else '—' }}
@@ -286,6 +291,12 @@
             <input type="text" name="panne" class="form-control" required
                    placeholder="Ne s'allume plus, écran cassé...">
         </div>
+        <div class="filtre-champ">
+            <label>Priorité / SLA</label>
+            <select name="priorite" class="form-control">
+                {% for code,label in priorites %}<option value="{{ code }}" {{ 'selected' if code=='normale' }}>{{ label }}</option>{% endfor %}
+            </select>
+        </div>
         <button type="submit" class="btn btn-primary" style="background:#dc2626;">⚠ Signaler une panne</button>
     </form>
     {% endif %}
@@ -311,7 +322,7 @@
             <tbody>
                 {% for m in closes %}
                 <tr>
-                    <td data-label="Signalée"><small>{{ m.date_signalement.strftime('%d/%m/%Y') if m.date_signalement else '—' }}</small></td>
+                    <td data-label="Signalée"><strong>{{ m.reference }}</strong><br><small>{{ m.date_signalement.strftime('%d/%m/%Y') if m.date_signalement else '—' }} · {{ m.priorite }}</small>{% if m.sla_respecte is not none %}<div class="wf-meta {{ 'wf-meta-danger' if not m.sla_respecte }}">SLA {{ 'respecté' if m.sla_respecte else 'dépassé' }}</div>{% endif %}</td>
                     <td data-label="Panne">
                         {{ m.panne }}
                         {% if m.diagnostic %}<br><small style="color:#64748b;">{{ m.diagnostic }}</small>{% endif %}
