@@ -3,10 +3,10 @@
 <div class="card" style="max-width:820px;margin:auto;">
   <div class="card-header"><div><h1>📑 {{ type_contrats.get(contrat.type_contrat,contrat.type_contrat) }}</h1><p style="margin:4px 0;color:#64748b;">{{ contrat.prenom }} {{ contrat.nom }} · {{ contrat.reference or 'Sans référence' }}</p></div><a href="{{ url_for('contrats.contrats_liste') }}" class="btn btn-secondary">← Contrats</a></div>
   <div class="detail-grid">
-    <div class="detail-item"><span>Début</span><strong>{{ contrat.date_debut }}</strong></div>
-    <div class="detail-item"><span>Fin</span><strong>{{ contrat.date_fin or 'Indéterminée' }}</strong></div>
-    <div class="detail-item"><span>Statut</span><strong>{{ contrat.statut }}</strong></div>
-    <div class="detail-item"><span>Département</span><strong>{{ contrat.departement or '—' }}</strong></div>
+    <div class="detail-item"><span>Début :</span><strong>{{ contrat.date_debut }}</strong></div>
+    <div class="detail-item"><span>Fin :</span><strong>{{ contrat.date_fin or 'Indéterminée' }}</strong></div>
+    <div class="detail-item"><span>Statut :</span><strong>{{ contrat.statut }}</strong></div>
+    <div class="detail-item"><span>Département :</span><strong>{{ contrat.departement or '—' }}</strong></div>
   </div>
   {% if contrat.notes %}<div class="wf-circuit" style="margin-top:18px;">{{ contrat.notes }}</div>{% endif %}
   <div class="form-actions" style="margin-top:20px;">
