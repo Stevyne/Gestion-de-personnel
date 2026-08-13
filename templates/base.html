@@ -607,6 +607,7 @@
     </div>
 
 
+    <script src="{{ url_for('static', filename='register.js') }}"></script>
     <script>
         // ===== ROBUST MOBILE DRAWER (no blur + no tap-through + clickable) =====
         const navToggle = document.getElementById('navToggle');
@@ -869,7 +870,16 @@
             const form = body.querySelector('form');
             if (!form) return;
 
-            if (!form.getAttribute('action')) form.setAttribute('action', url);
+            // Le POST AJAX conserve ?modal=1. Sans cela, une erreur de
+            // validation renverrait la page complète (navbar comprise) dans
+            // la popup au lieu du seul formulaire.
+            const actionUrl = new URL(form.getAttribute('action') || url, window.location.href);
+            actionUrl.searchParams.set('modal', '1');
+            form.setAttribute('action', actionUrl.toString());
+
+            // Initialise les interactions propres au formulaire de création
+            // d'utilisateur (force, concordance, affichage des mots de passe).
+            if (window.initRegisterForm) window.initRegisterForm(body);
 
             // Les liens « Annuler » ferment la popup au lieu de naviguer.
             body.querySelectorAll('a.btn-secondary, a.btn').forEach(a => {
@@ -885,6 +895,7 @@
 
             form.addEventListener('submit', e => {
                 e.preventDefault();
+                if (!form.reportValidity()) return;
                 const btn = form.querySelector('button[type=submit]');
                 const label = btn ? btn.textContent : '';
                 if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }

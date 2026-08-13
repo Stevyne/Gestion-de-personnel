@@ -1,477 +1,121 @@
-{% extends "base.html" %}
+{% extends layout|default("base.html") %}
 
 {% block content %}
-<div class="auth-wrapper">
-    <div class="auth-card">
-        <!-- Beautiful Header -->
-        <div class="auth-header">
-            <div class="auth-logo">
-                <span class="logo-icon">📝</span>
-            </div>
-            <h1>Créer un compte</h1>
-            <p class="auth-subtitle">Créer un accès complet à la plateforme</p>
+<div class="card register-card" style="max-width:720px;margin:0 auto;">
+    <div class="card-header">
+        <div>
+            <h1>👤 Créer un compte utilisateur</h1>
+            <p style="margin:5px 0 0;color:#64748b;">Définissez immédiatement le rôle et, si nécessaire, la fiche employé liée.</p>
         </div>
-
-        <!-- Form Body -->
-        <div class="auth-body">
-            <form method="POST" action="{{ url_for('register') }}" id="registerForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <!-- Username -->
-                <div class="form-row">
-                    <label for="username">Identifiant</label>
-                    <div class="input-group">
-                        <span class="input-icon">👤</span>
-                        <input type="text"
-                               id="username"
-                               name="username"
-                               value="{{ form_values.username }}"
-                               placeholder="ex. jean.dupont"
-                               required
-                               minlength="3"
-                               maxlength="80"
-                               pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,79}"
-                               autocomplete="off"
-                               autocapitalize="none"
-                               spellcheck="false"
-                               autofocus>
-                    </div>
-                    <div class="field-hint">3 à 80 caractères • lettres, chiffres, point, tiret ou _ • enregistré en minuscules</div>
-                </div>
-
-                <div class="form-row">
-                    <label for="role">Rôle</label>
-                    <select id="role" name="role" class="register-select" required>
-                        {% for code, libelle in roles_creation %}
-                        <option value="{{ code }}" {{ 'selected' if form_values.role == code }}>{{ libelle }}</option>
-                        {% endfor %}
-                    </select>
-                    <div class="field-hint">Le rôle détermine immédiatement les droits du compte.</div>
-                </div>
-
-                <div class="form-row">
-                    <label for="employe_id">Employé lié <span style="font-weight:400;color:#64748b;">(optionnel)</span></label>
-                    <select id="employe_id" name="employe_id" class="register-select">
-                        <option value="">— Aucun / compte technique —</option>
-                        {% for emp in employees %}
-                        <option value="{{ emp.id }}" {{ 'selected' if form_values.employe_id == emp.id|string }}>
-                            {{ emp.prenom }} {{ emp.nom }}{% if emp.poste %} — {{ emp.poste }}{% endif %}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    <div class="field-hint">
-                        Nécessaire pour le self-service, les congés, absences, présences et documents.
-                        Seuls les employés sans compte sont proposés.
-                    </div>
-                    {% if not employees %}
-                    <div class="field-alert">Tous les employés sont déjà liés à un compte.</div>
-                    {% endif %}
-                </div>
-
-                <!-- Password -->
-                <div class="form-row">
-                    <label for="password">Mot de passe</label>
-                    <div class="input-group">
-                        <span class="input-icon">🔒</span>
-                        <input type="password"
-                               id="password"
-                               name="password"
-                               placeholder="8 caractères minimum"
-                               required
-                               minlength="8"
-                               maxlength="128"
-                               autocomplete="new-password"
-                               oninput="updatePasswordStrength(); checkPasswordMatch()">
-                    </div>
-                    
-                    <!-- Password Strength Meter -->
-                    <div class="strength-container">
-                        <div class="strength-bar">
-                            <div class="strength-fill" id="strengthFill"></div>
-                        </div>
-                        <div class="strength-label" id="strengthLabel">Force du mot de passe</div>
-                    </div>
-                </div>
-
-                <!-- Confirm Password -->
-                <div class="form-row">
-                    <label for="confirm_password">Confirmer le mot de passe</label>
-                    <div class="input-group">
-                        <span class="input-icon">🔒</span>
-                        <input type="password"
-                               id="confirm_password"
-                               name="confirm_password"
-                               placeholder="Confirmez le mot de passe"
-                               required
-                               minlength="8"
-                               maxlength="128"
-                               autocomplete="new-password"
-                               oninput="checkPasswordMatch()">
-                    </div>
-                    <div id="matchMessage" class="match-message"></div>
-                </div>
-
-                <!-- Submit -->
-                <button type="submit" class="btn-auth-primary" id="submitBtn">
-                    <span id="btnText">Créer le compte</span>
-                    <span id="btnSpinner" class="spinner" style="display:none;"></span>
-                </button>
-            </form>
-        </div>
-
-        <div class="auth-footer">
-            <a href="{{ url_for('utilisateurs_page') }}" class="auth-link">← Retour à la gestion des utilisateurs</a>
-        </div>
-
     </div>
 
+    <p class="register-intro">
+        Le rattachement à un employé active le self-service : présences, congés,
+        absences, documents et matériel. Laissez le champ vide uniquement pour
+        un compte technique.
+    </p>
+
+    <form method="POST" action="{{ url_for('register') }}" id="registerForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+            <label for="username">Identifiant *</label>
+            <input type="text" id="username" name="username" class="form-control"
+                   value="{{ form_values.username }}" placeholder="ex. jean.dupont"
+                   required minlength="3" maxlength="80"
+                   pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,79}"
+                   autocomplete="off" autocapitalize="none" spellcheck="false">
+            <small class="form-hint">3 à 80 caractères : lettres, chiffres, point, tiret ou _. L'identifiant est enregistré en minuscules.</small>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="role">Rôle *</label>
+                <select id="role" name="role" class="form-control" required>
+                    {% for code, libelle in roles_creation %}
+                    <option value="{{ code }}" {{ 'selected' if form_values.role == code }}>{{ libelle }}</option>
+                    {% endfor %}
+                </select>
+                <small class="form-hint">Le rôle détermine immédiatement les droits du compte.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="employe_id">Employé lié <span style="font-weight:400;color:#64748b;">(optionnel)</span></label>
+                <select id="employe_id" name="employe_id" class="form-control">
+                    <option value="">— Aucun / compte technique —</option>
+                    {% for emp in employees %}
+                    <option value="{{ emp.id }}" {{ 'selected' if form_values.employe_id == emp.id|string }}>
+                        {{ emp.prenom }} {{ emp.nom }}{% if emp.poste %} — {{ emp.poste }}{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="form-hint">Seuls les employés sans compte sont proposés.</small>
+            </div>
+        </div>
+
+        {% if not employees %}
+        <div class="register-notice">Tous les employés sont déjà liés à un compte. Vous pouvez encore créer un compte technique.</div>
+        {% endif %}
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="password">Mot de passe initial *</label>
+                <div class="register-password-wrap">
+                    <input type="password" id="password" name="password" class="form-control"
+                           placeholder="8 caractères minimum" required minlength="8"
+                           maxlength="128" autocomplete="new-password">
+                    <button type="button" class="register-password-toggle" data-target="password"
+                            aria-label="Afficher le mot de passe">👁️</button>
+                </div>
+                <div class="strength-container" aria-live="polite">
+                    <div class="strength-bar"><div class="strength-fill" id="strengthFill"></div></div>
+                    <div class="strength-label" id="strengthLabel">Force du mot de passe</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password">Confirmer le mot de passe *</label>
+                <div class="register-password-wrap">
+                    <input type="password" id="confirm_password" name="confirm_password"
+                           class="form-control" placeholder="Saisissez-le à nouveau"
+                           required minlength="8" maxlength="128" autocomplete="new-password">
+                    <button type="button" class="register-password-toggle" data-target="confirm_password"
+                            aria-label="Afficher la confirmation">👁️</button>
+                </div>
+                <div id="matchMessage" class="match-message" aria-live="polite"></div>
+            </div>
+        </div>
+
+        <div class="register-security-note">
+            🔒 Le mot de passe n'est jamais envoyé par e-mail. Communiquez-le par un canal sûr ; l'utilisateur sera invité à le changer après sa première connexion.
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submitBtn">
+                <span id="btnText">Créer le compte</span>
+                <span id="btnSpinner" class="register-spinner" hidden></span>
+            </button>
+            <a href="{{ url_for('utilisateurs_page') }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
 </div>
 
 <style>
-.auth-wrapper {
-    max-width: 540px;
-    margin: 40px auto;
-    padding: 0 16px;
-}
-
-.auth-card {
-    background: #ffffff;
-    border-radius: 20px;
-    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.15), 
-                0 10px 10px -6px rgb(0 0 0 / 0.1);
-    border: 1px solid #e2e8f0;
-    overflow: hidden;
-}
-
-.auth-header {
-    background: linear-gradient(135deg, #1e40af, #3b82f6);
-    color: white;
-    padding: 36px 32px 28px;
-    text-align: center;
-}
-
-.auth-logo {
-    margin-bottom: 12px;
-}
-
-.logo-icon {
-    font-size: 2.8rem;
-    display: inline-block;
-}
-
-.auth-header h1 {
-    margin: 0;
-    font-size: 1.85rem;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-}
-
-.auth-subtitle {
-    margin: 8px 0 0;
-    opacity: 0.9;
-    font-size: 0.95rem;
-}
-
-.auth-body {
-    padding: 32px 28px 24px;
-}
-
-.form-row {
-    margin-bottom: 20px;
-}
-
-.form-row label {
-    display: block;
-    font-weight: 600;
-    color: #334155;
-    margin-bottom: 6px;
-    font-size: 0.9rem;
-}
-
-.input-group {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.input-icon {
-    position: absolute;
-    left: 15px;
-    color: #64748b;
-    font-size: 1.05rem;
-    z-index: 1;
-}
-
-.input-group input {
-    width: 100%;
-    padding: 13px 15px 13px 44px;
-    border: 1.5px solid #cbd5e1;
-    border-radius: 10px;
-    font-size: 1rem;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    background: white;
-}
-
-.input-group input:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
-}
-
-.register-select {
-    width: 100%;
-    padding: 12px 14px;
-    border: 1.5px solid #cbd5e1;
-    border-radius: 10px;
-    font-size: .95rem;
-    color: #0f172a;
-    background: #fff;
-}
-
-.register-select:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
-}
-
-.field-hint {
-    font-size: 0.78rem;
-    color: #64748b;
-    margin-top: 4px;
-    line-height: 1.35;
-}
-
-.field-alert {
-    margin-top: 7px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: #fffbeb;
-    color: #854d0e;
-    font-size: .78rem;
-}
-
-.strength-container {
-    margin-top: 8px;
-}
-
-.strength-bar {
-    height: 6px;
-    background: #e2e8f0;
-    border-radius: 999px;
-    overflow: hidden;
-}
-
-.strength-fill {
-    height: 100%;
-    width: 0%;
-    transition: width 0.3s ease, background-color 0.3s ease;
-    border-radius: 999px;
-}
-
-.strength-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    margin-top: 4px;
-    color: #64748b;
-}
-
-.match-message {
-    font-size: 0.8rem;
-    margin-top: 5px;
-    font-weight: 500;
-    min-height: 18px;
-}
-
-.match-message.match {
-    color: #16a34a;
-}
-
-.match-message.no-match {
-    color: #dc2626;
-}
-
-.btn-auth-primary {
-    width: 100%;
-    padding: 15px;
-    background: linear-gradient(135deg, #1e40af, #3b82f6);
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 1.05rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 10px;
-}
-
-.btn-auth-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgb(30 64 175 / 0.3);
-}
-
-.btn-auth-primary:disabled {
-    opacity: 0.7;
-    transform: none;
-}
-
-.spinner {
-    width: 18px;
-    height: 18px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-.auth-footer {
-    padding: 20px 28px;
-    background: #f8fafc;
-    text-align: center;
-    border-top: 1px solid #e2e8f0;
-}
-
-.auth-footer p {
-    margin: 0 0 4px;
-    color: #64748b;
-    font-size: 0.9rem;
-}
-
-.auth-link {
-    color: #2563eb;
-    font-weight: 700;
-    text-decoration: none;
-    font-size: 0.95rem;
-}
-
-.auth-link:hover {
-    text-decoration: underline;
-}
-
-.demo-accounts {
-    margin-top: 28px;
-    text-align: center;
-}
-
-.demo-card {
-    display: inline-block;
-    background: #f1f5f9;
-    padding: 12px 20px;
-    border-radius: 10px;
-    font-size: 0.82rem;
-    color: #475569;
-    line-height: 1.4;
-}
-
-.demo-creds {
-    margin-top: 4px;
-    font-family: monospace;
-    font-size: 0.78rem;
-}
-
-/* Mobile */
-@media (max-width: 480px) {
-    .auth-wrapper {
-        margin: 20px auto;
-    }
-    .auth-body {
-        padding: 26px 20px;
-    }
-}
+.register-intro { margin:0 0 18px;padding:12px 14px;border-radius:10px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:.88rem;line-height:1.45; }
+.register-notice { margin:-4px 0 18px;padding:9px 11px;border-radius:8px;background:#fffbeb;color:#854d0e;font-size:.8rem; }
+.register-password-wrap { position:relative; }
+.register-password-wrap .form-control { padding-right:45px; }
+.register-password-toggle { position:absolute;right:5px;top:50%;transform:translateY(-50%);width:36px;height:34px;border:0;border-radius:7px;background:transparent;cursor:pointer; }
+.register-password-toggle:hover { background:#f1f5f9; }
+.strength-container { margin-top:7px; }
+.strength-bar { height:6px;background:#e2e8f0;border-radius:999px;overflow:hidden; }
+.strength-fill { height:100%;width:0;border-radius:999px;transition:width .2s ease,background-color .2s ease; }
+.strength-label,.match-message { min-height:18px;margin-top:4px;font-size:.76rem;font-weight:600;color:#64748b; }
+.match-message.match { color:#15803d; }
+.match-message.no-match { color:#b91c1c; }
+.register-security-note { margin:0 0 18px;padding:10px 12px;border-radius:9px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;font-size:.8rem;line-height:1.4; }
+.register-spinner { width:16px;height:16px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:register-spin .7s linear infinite; }
+@keyframes register-spin { to { transform:rotate(360deg); } }
+@media (max-width:640px) { .register-card .form-row { flex-direction:column; } }
 </style>
-
-<script>
-// Password strength
-function updatePasswordStrength() {
-    const password = document.getElementById('password').value;
-    const fill = document.getElementById('strengthFill');
-    const label = document.getElementById('strengthLabel');
-    
-    if (!fill || !label) return;
-
-    let score = 0;
-    if (password.length >= 8) score += 25;
-    if (password.length >= 12) score += 20;
-    if (/[A-Z]/.test(password)) score += 15;
-    if (/[0-9]/.test(password)) score += 15;
-    if (/[^A-Za-z0-9]/.test(password)) score += 25;
-
-    fill.style.width = Math.min(score, 100) + '%';
-
-    let text = 'Faible';
-    let color = '#f87171';
-
-    if (score > 70) {
-        text = 'Excellent';
-        color = '#16a34a';
-    } else if (score > 50) {
-        text = 'Bon';
-        color = '#4ade80';
-    } else if (score > 30) {
-        text = 'Moyen';
-        color = '#fbbf24';
-    }
-
-    fill.style.backgroundColor = color;
-    label.textContent = text;
-    label.style.color = color;
-}
-
-// Password match checker
-function checkPasswordMatch() {
-    const pass = document.getElementById('password').value;
-    const confirm = document.getElementById('confirm_password').value;
-    const msg = document.getElementById('matchMessage');
-
-    if (!msg) return;
-
-    if (confirm.length === 0) {
-        msg.textContent = '';
-        msg.className = 'match-message';
-        return;
-    }
-
-    if (pass === confirm) {
-        msg.textContent = '✓ Les mots de passe correspondent';
-        msg.className = 'match-message match';
-    } else {
-        msg.textContent = '✗ Les mots de passe ne correspondent pas';
-        msg.className = 'match-message no-match';
-    }
-}
-
-// Form handling
-const form = document.getElementById('registerForm');
-const submitBtn = document.getElementById('submitBtn');
-const btnText = document.getElementById('btnText');
-const btnSpinner = document.getElementById('btnSpinner');
-
-form.addEventListener('submit', function(e) {
-    const pass = document.getElementById('password').value;
-    const confirm = document.getElementById('confirm_password').value;
-
-    if (pass !== confirm) {
-        e.preventDefault();
-        alert("Les mots de passe ne correspondent pas !");
-        return;
-    }
-
-    // Loading state
-    submitBtn.disabled = true;
-    btnText.style.display = 'none';
-    btnSpinner.style.display = 'inline-block';
-});
-
-// Keyboard improvements
-document.addEventListener('DOMContentLoaded', function() {
-    const usernameField = document.getElementById('username');
-    if (usernameField) usernameField.focus();
-});
-</script>
 {% endblock %}

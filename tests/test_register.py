@@ -37,6 +37,45 @@ def test_formulaire_creation_affiche_role_et_employes_disponibles(admin_client):
     assert b'value="1"' not in response.data
 
 
+def test_lien_nouvel_utilisateur_ouvre_popup(admin_client):
+    response = admin_client.get('/utilisateurs')
+    assert response.status_code == 200
+    assert b'href="/register" class="js-modal-form btn btn-primary"' in response.data
+    assert b'data-modal-title="Cr\xc3\xa9er un compte utilisateur"' in response.data
+
+
+def test_rendu_modal_ne_contient_pas_navigation(admin_client):
+    response = admin_client.get('/register?modal=1', headers={
+        'X-Requested-With': 'XMLHttpRequest',
+    })
+    assert response.status_code == 200
+    assert b'id="registerForm"' in response.data
+    assert b'<!DOCTYPE html>' not in response.data
+    assert b'class="navbar"' not in response.data
+    assert b'<footer>' not in response.data
+
+
+def test_erreur_validation_reste_dans_layout_modal(admin_client):
+    response = admin_client.post('/register?modal=1', data=_donnees_valides(
+        password='court', confirm_password='court'), headers={
+        'X-Requested-With': 'XMLHttpRequest',
+    })
+    assert response.status_code == 200
+    assert 'entre 8 et 128 caractères'.encode('utf-8') in response.data
+    assert b'id="registerForm"' in response.data
+    assert b'class="navbar"' not in response.data
+
+
+def test_creation_popup_renvoie_redirection_ajax(admin_client):
+    employe_id = _creer_employe_sans_compte()
+    response = admin_client.post('/register?modal=1', data=_donnees_valides(
+        employe_id=str(employe_id)), headers={
+        'X-Requested-With': 'XMLHttpRequest',
+    }, follow_redirects=False)
+    assert response.status_code == 204
+    assert response.headers['X-Redirect-To'].endswith('/utilisateurs')
+
+
 def test_creation_enregistre_role_liaison_audit_et_notification(admin_client):
     employe_id = _creer_employe_sans_compte()
     response = admin_client.post('/register', data=_donnees_valides(

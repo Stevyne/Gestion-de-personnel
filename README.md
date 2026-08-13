@@ -100,7 +100,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Self-service pour les employés (`/self-service` ou `/mon-espace`)
 - Logs d'audit (`/audit`, réservé à `admin`/`rh`)
 - Protection CSRF (Flask-WTF), rate limiting (Flask-Limiter), headers de sécurité (Flask-Talisman)
-- Création de comptes réservée aux admin/RH (`/register`) avec choix immédiat du rôle et de l'employé lié ; seul un administrateur peut créer un autre administrateur
+- Création de comptes réservée aux admin/RH (`/register`) dans une popup depuis la page Utilisateurs, avec repli en page complète sans JavaScript ; choix immédiat du rôle et de l'employé lié, seul un administrateur pouvant créer un autre administrateur
 
 ### 🖥️ Sessions actives & déconnexion forcée
 - Registre des sessions ouvertes en base (`sessions_actives`) : les cookies signés Flask n'étant pas révocables, un identifiant de session est stocké côté serveur
