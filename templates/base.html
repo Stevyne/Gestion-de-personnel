@@ -513,9 +513,9 @@
                     <a href="{{ url_for('self_service') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('self_service') %}active{% endif %}">
                         {{ icon('calendar') }}<span>Mes demandes</span>
                     </a>
-                    <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="nav-notif {% if request.endpoint and request.endpoint.startswith('messagerie.') %}active{% endif %}"
+                    <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('messagerie.') %}active{% endif %}"
                        aria-label="Messages" title="Messages">
-                        {{ icon('message', 19) }}
+                        {{ icon('message', 19) }}<span>Messages</span>
                         {% if messages_non_lus and messages_non_lus > 0 %}
                         <span class="notif-badge">{{ messages_non_lus if messages_non_lus < 100 else '99+' }}</span>
                         {% endif %}
