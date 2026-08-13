@@ -87,13 +87,13 @@
                         {% endif %}
                     </td>
                     <td data-label="Fichier">
-                        <a href="{{ url_for('download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;padding:4px 11px;font-size:0.8rem;">
+                        <a href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;padding:4px 11px;font-size:0.8rem;">
                             📄 Télécharger
                         </a>
                     </td>
                     <td data-label="Actions">
                         {% if current_role in ['admin','rh'] %}
-                        <form method="post" action="{{ url_for('delete_document', doc_id=d.id) }}" style="display:inline;"
+                        <form method="post" action="{{ url_for('documents.delete_document', doc_id=d.id) }}" style="display:inline;"
                                   class="confirm-form"
                                   data-confirm-title="Supprimer ce document ?"
                                   data-confirm-subtitle="Action irréversible"

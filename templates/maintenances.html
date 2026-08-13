@@ -6,7 +6,7 @@
     <div class="card-header">
         <h1>🔧 Maintenance &amp; réparations</h1>
         <div>
-            <a href="{{ url_for('materiels') }}" class="btn btn-secondary">📦 Stock</a>
+            <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">📦 Stock</a>
         </div>
     </div>
 
@@ -54,12 +54,12 @@
         {% if mes_taches.a_traiter %}{{ mes_taches.a_traiter }} réparation(s) qui vous sont assignées{% endif %}
         {% if mes_taches.a_traiter and mes_taches.a_valider_moi %} · {% endif %}
         {% if mes_taches.a_valider_moi %}{{ mes_taches.a_valider_moi }} retour(s) à valider{% endif %}.
-        <a href="{{ url_for('maintenances', portee='moi') }}">Voir mes interventions</a>
+        <a href="{{ url_for('parc.maintenances', portee='moi') }}">Voir mes interventions</a>
     </div>
     {% endif %}
 
     <!-- Filtres -->
-    <form method="get" action="{{ url_for('maintenances') }}" class="materiels-filtres">
+    <form method="get" action="{{ url_for('parc.maintenances') }}" class="materiels-filtres">
         <div class="filtre-champ">
             <label>Portée</label>
             <select name="portee" class="form-control">
@@ -87,7 +87,7 @@
             </select>
         </div>
         <button type="submit" class="btn btn-primary">Filtrer</button>
-        <a href="{{ url_for('maintenances') }}" class="btn btn-secondary">Réinitialiser</a>
+        <a href="{{ url_for('parc.maintenances') }}" class="btn btn-secondary">Réinitialiser</a>
     </form>
 
     <div class="table-container">
@@ -107,7 +107,7 @@
                 {% for m in interventions %}
                 <tr>
                     <td data-label="N° inventaire">
-                        <a href="{{ url_for('view_exemplaire', id=m.exemplaire_id) }}">
+                        <a href="{{ url_for('parc.view_exemplaire', id=m.exemplaire_id) }}">
                             <strong>{{ m.numero_inventaire }}</strong>
                         </a>
                     </td>
@@ -146,7 +146,7 @@
                         {% if m.cout %}{{ '{:,.0f}'.format(m.cout)|replace(',', ' ') }} Ar{% else %}—{% endif %}
                     </td>
                     <td data-label="Action">
-                        <a href="{{ url_for('view_exemplaire', id=m.exemplaire_id) }}"
+                        <a href="{{ url_for('parc.view_exemplaire', id=m.exemplaire_id) }}"
                            class="btn btn-sm btn-primary">
                             {% if m.statut == 'signale' and peut_gerer %}Assigner
                             {%- elif m.statut in ['assigne', 'envoye'] %}Traiter
@@ -166,6 +166,6 @@
         </table>
     </div>
 
-    {{ pagination('maintenances', base_qs, pg, page_items) }}
+    {{ pagination('parc.maintenances', base_qs, pg, page_items) }}
 </div>
 {% endblock %}

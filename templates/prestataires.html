@@ -4,7 +4,7 @@
 <div class="card">
     <div class="card-header">
         <h1>🛠️ Prestataires de réparation</h1>
-        <a href="{{ url_for('maintenances') }}" class="btn btn-secondary">← Maintenance</a>
+        <a href="{{ url_for('parc.maintenances') }}" class="btn btn-secondary">← Maintenance</a>
     </div>
     <p style="color:#64748b; margin:0 0 16px;">
         Ateliers et techniciens externes à qui confier une réparation. Un prestataire
@@ -12,7 +12,7 @@
         d'interventions est conservé.
     </p>
 
-    <form method="POST" action="{{ url_for('prestataires_page') }}" class="materiels-filtres">
+    <form method="POST" action="{{ url_for('parc.prestataires_page') }}" class="materiels-filtres">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="filtre-champ">
             <label>Nom *</label>
@@ -75,7 +75,7 @@
                         {% endif %}
                     </td>
                     <td data-label="Action">
-                        <form method="POST" action="{{ url_for('basculer_prestataire', id=p.id) }}" style="margin:0;">
+                        <form method="POST" action="{{ url_for('parc.basculer_prestataire', id=p.id) }}" style="margin:0;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-secondary btn-sm">
                                 {{ 'Désactiver' if p.actif else 'Réactiver' }}

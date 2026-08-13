@@ -5,7 +5,7 @@
     <div class="card-header">
         <h1>📋 {{ inv.reference or ('INV-' ~ inv.id) }}</h1>
         <div>
-            <a href="{{ url_for('inventaires') }}" class="btn btn-secondary">← Toutes les campagnes</a>
+            <a href="{{ url_for('parc.inventaires') }}" class="btn btn-secondary">← Toutes les campagnes</a>
         </div>
     </div>
 
@@ -95,7 +95,7 @@
                 {% for l in lignes %}
                 <tr>
                     <td data-label="Matériel">
-                        <a href="{{ url_for('view_materiel', id=l.materiel_id) }}">{{ l.materiel_nom }}</a>
+                        <a href="{{ url_for('parc.view_materiel', id=l.materiel_id) }}">{{ l.materiel_nom }}</a>
                         <small style="color:#94a3b8;">({{ l.unite or 'unité' }})</small>
                     </td>
                     <td data-label="Stock théorique"><strong>{{ l.quantite_theorique }}</strong></td>
@@ -125,7 +125,7 @@
                     </td>
                     {% if inv.statut == 'en_cours' and peut_saisir %}
                     <td data-label="Saisie">
-                        <form method="POST" action="{{ url_for('compter_inventaire', id=inv.id) }}" class="inv-saisie">
+                        <form method="POST" action="{{ url_for('parc.compter_inventaire', id=inv.id) }}" class="inv-saisie">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="ligne_id" value="{{ l.id }}">
                             <input type="number" name="quantite_comptee" min="0" step="1"
@@ -155,7 +155,7 @@
 
     {% if inv.statut == 'en_cours' and peut_cloturer %}
     <div class="inv-actions">
-        <form method="POST" action="{{ url_for('cloturer_inventaire', id=inv.id) }}" class="confirm-form"
+        <form method="POST" action="{{ url_for('parc.cloturer_inventaire', id=inv.id) }}" class="confirm-form"
               data-confirm-icon="📋"
               data-confirm-title="Clôturer cette campagne d'inventaire ?"
               data-confirm-subtitle="Le stock théorique sera aligné sur les quantités comptées."
@@ -164,7 +164,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-primary">✓ Clôturer et ajuster le stock</button>
         </form>
-        <form method="POST" action="{{ url_for('annuler_inventaire', id=inv.id) }}" class="confirm-form"
+        <form method="POST" action="{{ url_for('parc.annuler_inventaire', id=inv.id) }}" class="confirm-form"
               data-confirm-icon="🚫"
               data-confirm-title="Annuler cette campagne ?"
               data-confirm-subtitle="Le comptage est conservé pour l'historique."

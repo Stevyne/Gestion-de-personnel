@@ -45,7 +45,7 @@
       <td data-label="Action">
         {% if not a.accuse_reception %}
         <div class="wf-actions">
-          <form method="POST" action="{{ url_for('accuser_attribution', attribution_id=a.id) }}" class="confirm-form"
+          <form method="POST" action="{{ url_for('parc.accuser_attribution', attribution_id=a.id) }}" class="confirm-form"
                 data-confirm-title="Confirmer"
                 data-confirm-message="Confirmez-vous {{ 'avoir restitué' if a.date_retour else 'avoir reçu' }} « {{ a.materiel_nom }} » ?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -53,7 +53,7 @@
             <input type="hidden" name="retour" value="{{ url_for('self_service_materiels') }}">
             <button type="submit" class="btn btn-sm btn-success">✔ Je confirme</button>
           </form>
-          <form method="POST" action="{{ url_for('accuser_attribution', attribution_id=a.id) }}">
+          <form method="POST" action="{{ url_for('parc.accuser_attribution', attribution_id=a.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="contester">
             <input type="hidden" name="retour" value="{{ url_for('self_service_materiels') }}">

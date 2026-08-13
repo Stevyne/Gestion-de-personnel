@@ -314,13 +314,36 @@ pytest
 
 ---
 
+## 🧩 Architecture par Blueprints
+
+`app.py` reste le point de composition (configuration, sécurité, base, schéma et
+services partagés), tandis que les domaines autonomes vivent dans des
+Blueprints Flask :
+
+- `parc.py` : matériels, mouvements, attributions, inventaires, exemplaires,
+  maintenance, prestataires et étiquettes QR ;
+- `documents.py` : dépôt, liste, suppression et téléchargement protégé ;
+- `departements.py` : consultation et administration des départements ;
+- `absence_justifications.py` : workflow confidentiel des justificatifs ;
+- `messagerie.py` : messagerie interne.
+
+Les dépendances communes sont injectées à l'enregistrement des Blueprints : il
+n'existe aucun import circulaire vers `app.py`. Les URLs publiques restent
+inchangées (`/materiels`, `/documents`, `/departements`, etc.) ; seuls les noms
+d'endpoints internes sont préfixés (`parc.*`, `documents.*`, `departements.*`).
+Un test structurel maintient `app.py` sous 5 600 lignes.
+
 ## 📁 Structure du projet
 
 ```
 Gestion-de-personnel/
-├── app.py                  # Application historique et composition des services
+├── app.py                  # Configuration, schéma et composition des Blueprints
 ├── blueprints/
-│   └── absence_justifications.py  # Premier domaine extrait du monolithe
+│   ├── parc.py             # Stock, inventaires, exemplaires et maintenance
+│   ├── documents.py        # Documents RH et contrôle des téléchargements
+│   ├── departements.py     # Gestion des départements
+│   ├── absence_justifications.py
+│   └── messagerie.py
 ├── services/
 │   └── email_outbox.py     # File SMTP persistante, indépendante de Flask
 ├── requirements.txt        # Dépendances production

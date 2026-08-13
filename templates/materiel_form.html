@@ -4,7 +4,7 @@
 <div class="card" style="max-width:720px; margin:0 auto;">
     <div class="card-header">
         <h1>📦 {{ title }}</h1>
-        <a href="{{ url_for('materiels') }}" class="btn btn-secondary">← Retour</a>
+        <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">← Retour</a>
     </div>
 
     <form method="post">
@@ -132,7 +132,7 @@
             <strong style="color:#1e40af;">Stock actuel : {{ materiel.quantite }} {{ materiel.unite }}</strong>
             <div style="font-size:0.85rem; color:#475569; margin-top:4px;">
                 La quantité ne se modifie pas ici : elle évolue via les entrées et sorties,
-                depuis la <a href="{{ url_for('view_materiel', id=materiel.id) }}">fiche du matériel</a>.
+                depuis la <a href="{{ url_for('parc.view_materiel', id=materiel.id) }}">fiche du matériel</a>.
                 Cela garantit un historique fiable.
             </div>
         </div>
@@ -148,7 +148,7 @@
             <button type="submit" class="btn btn-primary">
                 {{ '💾 Enregistrer' if materiel else '+ Créer le matériel' }}
             </button>
-            <a href="{{ url_for('materiels') }}" class="btn btn-secondary">Annuler</a>
+            <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">Annuler</a>
         </div>
     </form>
 </div>

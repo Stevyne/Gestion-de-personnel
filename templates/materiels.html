@@ -7,14 +7,14 @@
         <h1>📦 Gestion des Matériels</h1>
         <div>
             {% if peut_gerer_materiels %}
-            <a data-modal-title="Nouveau matériel" href="{{ url_for('add_materiel') }}" class="js-modal-form btn btn-primary">+ Nouveau matériel</a>
+            <a data-modal-title="Nouveau matériel" href="{{ url_for('parc.add_materiel') }}" class="js-modal-form btn btn-primary">+ Nouveau matériel</a>
             {% endif %}
             {% if filters.departement %}
-            <a href="{{ url_for('etiquettes_departement', id=filters.departement) }}"
+            <a href="{{ url_for('parc.etiquettes_departement', id=filters.departement) }}"
                class="btn btn-secondary" target="_blank">🏷️ Étiquettes du service</a>
             {% endif %}
-            <a href="{{ url_for('inventaires') }}" class="btn btn-secondary">📋 Inventaire</a>
-            <a href="{{ url_for('departements') }}" class="btn btn-secondary">🏢 Départements</a>
+            <a href="{{ url_for('parc.inventaires') }}" class="btn btn-secondary">📋 Inventaire</a>
+            <a href="{{ url_for('departements.departements') }}" class="btn btn-secondary">🏢 Départements</a>
         </div>
     </div>
 
@@ -45,7 +45,7 @@
     </div>
 
     <!-- Filtres -->
-    <form method="get" action="{{ url_for('materiels') }}" class="materiels-filtres">
+    <form method="get" action="{{ url_for('parc.materiels') }}" class="materiels-filtres">
         <div class="filtre-champ">
             <label>🔎 Rechercher</label>
             <input type="text" name="search" value="{{ filters.search }}"
@@ -78,7 +78,7 @@
             </select>
         </div>
         <button type="submit" class="btn btn-primary">Filtrer</button>
-        <a href="{{ url_for('materiels') }}" class="btn btn-secondary">Réinitialiser</a>
+        <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">Réinitialiser</a>
     </form>
 
     <div class="table-container">
@@ -122,14 +122,14 @@
                     </td>
                     <td data-label="Actions">
                         <div class="materiel-actions">
-                            <a href="{{ url_for('view_materiel', id=m.id) }}"
+                            <a href="{{ url_for('parc.view_materiel', id=m.id) }}"
                                class="btn btn-secondary btn-xs">👁️ Détails</a>
                             {% if peut_gerer_materiels %}
-                            <a data-modal-title="Modifier le matériel" href="{{ url_for('edit_materiel', id=m.id) }}"
+                            <a data-modal-title="Modifier le matériel" href="{{ url_for('parc.edit_materiel', id=m.id) }}"
                                class="js-modal-form btn btn-secondary btn-xs">✏️ Modifier</a>
                             {% endif %}
                             {% if current_role in ['admin', 'rh'] %}
-                            <form action="{{ url_for('delete_materiel', id=m.id) }}" method="post"
+                            <form action="{{ url_for('parc.delete_materiel', id=m.id) }}" method="post"
                                   style="display:inline;"
                                   onsubmit="return confirm('Supprimer « {{ m.nom }} » ainsi que son historique ?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -145,7 +145,7 @@
                     <td colspan="7" style="text-align:center; color:#94a3b8; padding:28px;">
                         Aucun matériel enregistré.
                         {% if peut_gerer_materiels %}
-                        <a data-modal-title="Nouveau matériel" class="js-modal-form" href="{{ url_for('add_materiel') }}">Ajouter le premier</a>.
+                        <a data-modal-title="Nouveau matériel" class="js-modal-form" href="{{ url_for('parc.add_materiel') }}">Ajouter le premier</a>.
                         {% endif %}
                     </td>
                 </tr>
@@ -154,6 +154,6 @@
         </table>
     </div>
 
-    {{ pagination('materiels', base_qs, pg, page_items) }}
+    {{ pagination('parc.materiels', base_qs, pg, page_items) }}
 </div>
 {% endblock %}

@@ -223,7 +223,7 @@
                 </div>
 
                 {% if current_role in ['admin', 'rh'] %}
-                <form method="post" action="{{ url_for('add_employee_document', id=employee.id) }}"
+                <form method="post" action="{{ url_for('documents.add_employee_document', id=employee.id) }}"
                       enctype="multipart/form-data" style="background:#f8fafc; padding:16px; border-radius:12px; margin-bottom:16px;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="form-row">
@@ -263,7 +263,7 @@
                                 {% endif %}
                             </div>
                         </div>
-                        <a href="{{ url_for('download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;">📄</a>
+                        <a href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;">📄</a>
                     </div>
                     {% endfor %}
                 </div>

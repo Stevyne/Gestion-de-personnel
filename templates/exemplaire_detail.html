@@ -5,7 +5,7 @@
     <div class="card-header">
         <h1>🏷️ {{ ex.numero_inventaire }}</h1>
         <div>
-            <a href="{{ url_for('view_materiel', id=ex.materiel_id) }}" class="btn btn-secondary">← Fiche article</a>
+            <a href="{{ url_for('parc.view_materiel', id=ex.materiel_id) }}" class="btn btn-secondary">← Fiche article</a>
         </div>
     </div>
 
@@ -115,7 +115,7 @@
 
         {# --- Étape 2 : assignation (gestionnaires) --- #}
         {% if droits.peut_assigner %}
-        <form method="POST" action="{{ url_for('assigner_maintenance', id=intervention.id) }}"
+        <form method="POST" action="{{ url_for('parc.assigner_maintenance', id=intervention.id) }}"
               class="materiels-filtres" style="margin:14px 0 0;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="filtre-champ">
@@ -143,7 +143,7 @@
                     <option value="{{ p.id }}">{{ p.nom }}{% if p.specialite %} — {{ p.specialite }}{% endif %}</option>
                     {% endfor %}
                 </select>
-                <a href="{{ url_for('prestataires_page') }}" style="font-size:0.8rem;">Gérer les prestataires</a>
+                <a href="{{ url_for('parc.prestataires_page') }}" style="font-size:0.8rem;">Gérer les prestataires</a>
             </div>
             {% endif %}
             <button type="submit" class="btn btn-primary">
@@ -154,7 +154,7 @@
 
         {# --- Étape 3a : démarrer la réparation (exécutant) --- #}
         {% if droits.peut_demarrer %}
-        <form method="POST" action="{{ url_for('envoyer_maintenance', id=intervention.id) }}"
+        <form method="POST" action="{{ url_for('parc.envoyer_maintenance', id=intervention.id) }}"
               class="materiels-filtres" style="margin:14px 0 0;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="filtre-champ">
@@ -167,7 +167,7 @@
 
         {# --- Étape 3b : retour d'atelier (exécutant) --- #}
         {% if droits.peut_executer %}
-        <form method="POST" action="{{ url_for('cloturer_maintenance', id=intervention.id) }}"
+        <form method="POST" action="{{ url_for('parc.cloturer_maintenance', id=intervention.id) }}"
               class="materiels-filtres" style="margin:14px 0 0;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="filtre-champ">
@@ -216,7 +216,7 @@
                     ({{ intervention.signale_par }}) — validation automatique sous {{ validation_jours }} jours.
                 {% endif %}
             </p>
-            <form method="POST" action="{{ url_for('valider_maintenance', id=intervention.id) }}"
+            <form method="POST" action="{{ url_for('parc.valider_maintenance', id=intervention.id) }}"
                   class="materiels-filtres" style="margin:0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="decision" value="valider">
@@ -225,7 +225,7 @@
                 </button>
             </form>
             {% if droits.peut_valider %}
-            <form method="POST" action="{{ url_for('valider_maintenance', id=intervention.id) }}"
+            <form method="POST" action="{{ url_for('parc.valider_maintenance', id=intervention.id) }}"
                   class="materiels-filtres" style="margin:10px 0 0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="decision" value="refuser">
@@ -255,7 +255,7 @@
         {% endif %}
 
         {% if droits.peut_annuler %}
-        <form method="POST" action="{{ url_for('annuler_maintenance', id=intervention.id) }}"
+        <form method="POST" action="{{ url_for('parc.annuler_maintenance', id=intervention.id) }}"
               class="confirm-form" style="margin-top:10px;"
               data-confirm-icon="🚫"
               data-confirm-title="Annuler cette intervention ?"
@@ -278,7 +278,7 @@
         Aucune intervention en cours. Signalez une panne si ce matériel ne fonctionne pas :
         il sera immédiatement marqué indisponible.
     </p>
-    <form method="POST" action="{{ url_for('signaler_panne', id=ex.id) }}"
+    <form method="POST" action="{{ url_for('parc.signaler_panne', id=ex.id) }}"
           class="materiels-filtres" style="margin-bottom:0;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="filtre-champ" style="flex:1 1 320px;">
@@ -342,7 +342,7 @@
 {% if peut_gerer_materiels %}
 <div class="card">
     <h3 style="margin-bottom:12px;">✏️ Modifier cet exemplaire</h3>
-    <form method="POST" action="{{ url_for('edit_exemplaire', id=ex.id) }}">
+    <form method="POST" action="{{ url_for('parc.edit_exemplaire', id=ex.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-row">
             <div class="form-group">
@@ -407,7 +407,7 @@
     </form>
 
     {% if session.get('role') in ['admin', 'rh'] %}
-    <form id="formSuppression" method="POST" action="{{ url_for('delete_exemplaire', id=ex.id) }}"
+    <form id="formSuppression" method="POST" action="{{ url_for('parc.delete_exemplaire', id=ex.id) }}"
           class="confirm-form" style="display:none;"
           data-confirm-icon="🗑️"
           data-confirm-title="Supprimer {{ ex.numero_inventaire }} ?"

@@ -272,7 +272,7 @@
 
                 {# --- Personnel : employés + départements --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements','add_employee','edit_employee','employee_detail','add_departement','edit_departement'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('users') }}<span>Personnel</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
@@ -280,7 +280,7 @@
                             {{ icon('users', 17) }}<span>Employés</span>
                         </a>
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                        <a href="{{ url_for('departements') }}" class="nav-dropdown-link {% if request.endpoint == 'departements' %}active{% endif %}">
+                        <a href="{{ url_for('departements.departements') }}" class="nav-dropdown-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">
                             {{ icon('building', 17) }}<span>Départements</span>
                         </a>
                         {% endif %}
@@ -332,21 +332,21 @@
 
                 {# --- Matériels : stock et inventaire physique --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['materiels','add_materiel','edit_materiel','view_materiel','materiels_departement','inventaires','add_inventaire','view_inventaire','maintenances','view_exemplaire','etiquettes_materiel','etiquettes_departement','prestataires_page'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['parc.materiels','parc.add_materiel','parc.edit_materiel','parc.view_materiel','parc.materiels_departement','parc.inventaires','parc.add_inventaire','parc.view_inventaire','parc.maintenances','parc.view_exemplaire','parc.etiquettes_materiel','parc.etiquettes_departement','parc.prestataires_page'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('box') }}<span>Matériels</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
-                        <a href="{{ url_for('materiels') }}" class="nav-dropdown-link {% if request.endpoint in ['materiels', 'add_materiel', 'edit_materiel', 'view_materiel', 'materiels_departement'] %}active{% endif %}">
+                        <a href="{{ url_for('parc.materiels') }}" class="nav-dropdown-link {% if request.endpoint in ['parc.materiels', 'parc.add_materiel', 'parc.edit_materiel', 'parc.view_materiel', 'parc.materiels_departement'] %}active{% endif %}">
                             {{ icon('box', 17) }}<span>Stock</span>
                         </a>
-                        <a href="{{ url_for('inventaires') }}" class="nav-dropdown-link {% if request.endpoint in ['inventaires', 'add_inventaire', 'view_inventaire'] %}active{% endif %}">
+                        <a href="{{ url_for('parc.inventaires') }}" class="nav-dropdown-link {% if request.endpoint in ['parc.inventaires', 'parc.add_inventaire', 'parc.view_inventaire'] %}active{% endif %}">
                             {{ icon('clipboard', 17) }}<span>Inventaire</span>
                         </a>
-                        <a href="{{ url_for('maintenances') }}" class="nav-dropdown-link {% if request.endpoint in ['maintenances', 'view_exemplaire'] %}active{% endif %}">
+                        <a href="{{ url_for('parc.maintenances') }}" class="nav-dropdown-link {% if request.endpoint in ['parc.maintenances', 'parc.view_exemplaire'] %}active{% endif %}">
                             {{ icon('wrench', 17) }}<span>Maintenance</span>
                         </a>
                         {% if session.get('role') in ['admin', 'rh'] %}
-                        <a href="{{ url_for('prestataires_page') }}" class="nav-dropdown-link {% if request.endpoint == 'prestataires_page' %}active{% endif %}">
+                        <a href="{{ url_for('parc.prestataires_page') }}" class="nav-dropdown-link {% if request.endpoint == 'parc.prestataires_page' %}active{% endif %}">
                             {{ icon('building', 17) }}<span>Prestataires</span>
                         </a>
                         {% endif %}
@@ -484,7 +484,7 @@
                 <p class="drawer-section">Personnel</p>
                 <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">{{ icon('users') }}<span>Employés</span></a>
                 {%  if session.get('role') in ['admin', 'rh', 'manager'] %}
-                <a href="{{ url_for('departements') }}" class="nav-link {% if request.endpoint == 'departements' %}active{% endif %}">{{ icon('building') }}<span>Départements</span></a>
+                <a href="{{ url_for('departements.departements') }}" class="nav-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">{{ icon('building') }}<span>Départements</span></a>
                 {% endif %}
 
                 <p class="drawer-section">Temps</p>
@@ -503,9 +503,9 @@
                 {% endif %}
 
                 <p class="drawer-section">Ressources</p>
-                <a href="{{ url_for('materiels') }}" class="nav-link {% if request.endpoint in ['materiels', 'add_materiel', 'edit_materiel', 'view_materiel', 'materiels_departement'] %}active{% endif %}">{{ icon('box') }}<span>Matériels</span></a>
-                <a href="{{ url_for('inventaires') }}" class="nav-link {% if request.endpoint in ['inventaires', 'add_inventaire', 'view_inventaire'] %}active{% endif %}">{{ icon('clipboard') }}<span>Inventaire</span></a>
-                <a href="{{ url_for('maintenances') }}" class="nav-link {% if request.endpoint in ['maintenances', 'view_exemplaire'] %}active{% endif %}">{{ icon('wrench') }}<span>Maintenance</span></a>
+                <a href="{{ url_for('parc.materiels') }}" class="nav-link {% if request.endpoint in ['parc.materiels', 'parc.add_materiel', 'parc.edit_materiel', 'parc.view_materiel', 'parc.materiels_departement'] %}active{% endif %}">{{ icon('box') }}<span>Matériels</span></a>
+                <a href="{{ url_for('parc.inventaires') }}" class="nav-link {% if request.endpoint in ['parc.inventaires', 'parc.add_inventaire', 'parc.view_inventaire'] %}active{% endif %}">{{ icon('clipboard') }}<span>Inventaire</span></a>
+                <a href="{{ url_for('parc.maintenances') }}" class="nav-link {% if request.endpoint in ['parc.maintenances', 'parc.view_exemplaire'] %}active{% endif %}">{{ icon('wrench') }}<span>Maintenance</span></a>
                 {% if session.get('role') in ['admin', 'rh'] %}
                 <a href="{{ url_for('utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs_page', 'register'] %}active{% endif %}">{{ icon('shield') }}<span>Utilisateurs</span></a>
                 {% endif %}

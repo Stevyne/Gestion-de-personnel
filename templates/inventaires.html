@@ -8,9 +8,9 @@
         <div>
             {% if peut_saisir %}
             <a data-modal-title="Nouvelle campagne d'inventaire"
-               href="{{ url_for('add_inventaire') }}" class="js-modal-form btn btn-primary">+ Nouvelle campagne</a>
+               href="{{ url_for('parc.add_inventaire') }}" class="js-modal-form btn btn-primary">+ Nouvelle campagne</a>
             {% endif %}
-            <a href="{{ url_for('materiels') }}" class="btn btn-secondary">📦 Stock</a>
+            <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">📦 Stock</a>
         </div>
     </div>
 
@@ -37,7 +37,7 @@
     </div>
 
     <!-- Filtres -->
-    <form method="get" action="{{ url_for('inventaires') }}" class="materiels-filtres">
+    <form method="get" action="{{ url_for('parc.inventaires') }}" class="materiels-filtres">
         <div class="filtre-champ">
             <label>Département</label>
             <select name="departement" class="form-control">
@@ -57,7 +57,7 @@
             </select>
         </div>
         <button type="submit" class="btn btn-primary">Filtrer</button>
-        <a href="{{ url_for('inventaires') }}" class="btn btn-secondary">Réinitialiser</a>
+        <a href="{{ url_for('parc.inventaires') }}" class="btn btn-secondary">Réinitialiser</a>
     </form>
 
     <div class="table-container">
@@ -103,7 +103,7 @@
                         <small>{{ c.date_creation.strftime('%d/%m/%Y %H:%M') if c.date_creation.strftime is defined else c.date_creation }}</small>
                     </td>
                     <td data-label="Actions">
-                        <a href="{{ url_for('view_inventaire', id=c.id) }}" class="btn btn-sm btn-primary">
+                        <a href="{{ url_for('parc.view_inventaire', id=c.id) }}" class="btn btn-sm btn-primary">
                             {% if c.statut == 'en_cours' and peut_saisir %}Compter{% else %}Consulter{% endif %}
                         </a>
                     </td>
@@ -119,6 +119,6 @@
         </table>
     </div>
 
-    {{ pagination('inventaires', base_qs, pg, page_items) }}
+    {{ pagination('parc.inventaires', base_qs, pg, page_items) }}
 </div>
 {% endblock %}
