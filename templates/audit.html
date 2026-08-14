@@ -5,7 +5,7 @@
     <div class="card-header">
         <h1>📋 Journal d'Audit (Audit Logs)</h1>
         <div>
-            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Retour</a>
+            <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Retour</a>
             <form method="get" action="{{ url_for('audit') }}" style="display:inline; margin-left:10px;">
                 <button type="submit" name="clear" value="1" class="btn btn-danger" 
                         onclick="event.preventDefault(); 

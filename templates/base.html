@@ -251,7 +251,7 @@
 <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
-                <a href="{{ url_for('dashboard') }}">
+                <a href="{{ url_for('dashboard.dashboard') }}">
                     <span class="logo"><img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
                 </a>    
                 <span class="brand-text"><img src="{{ url_for('static', filename='nom.png') }}" alt="Gestion du Personnel" class="brand-text-img"></span>
@@ -268,7 +268,7 @@
                  Les rubriques proches sont regroupées en menus déroulants, ce qui
                  tient sur une seule ligne même sur un écran d'ordinateur portable. -->
             <div class="nav-links desktop-nav">
-                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                <a href="{{ url_for('dashboard.dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}">
                     {{ icon('dashboard') }}<span>Tableau de bord</span>
                 </a>
 
@@ -307,7 +307,7 @@
                             {{ icon('history', 17) }}<span>Historique</span>
                         </a>
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                        <a href="{{ url_for('absences') }}" class="nav-dropdown-link {% if request.endpoint == 'absences' %}active{% endif %}">
+                        <a href="{{ url_for('absences.absences') }}" class="nav-dropdown-link {% if request.endpoint == 'absences.absences' %}active{% endif %}">
                             {{ icon('user-x', 17) }}<span>Absences</span>
                         </a>
                         {% endif %}
@@ -320,7 +320,7 @@
                         {{ icon('palm') }}<span>Congés</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
-                        <a href="{{ url_for('conges') }}" class="nav-dropdown-link {% if request.endpoint == 'conges' %}active{% endif %}">
+                        <a href="{{ url_for('conges.conges') }}" class="nav-dropdown-link {% if request.endpoint == 'conges.conges' %}active{% endif %}">
                             {{ icon('palm', 17) }}<span>Congés</span>
                         </a>
                         <a href="{{ url_for('permissions') }}" class="nav-dropdown-link {% if request.endpoint == 'permissions' %}active{% endif %}">
@@ -373,7 +373,7 @@
             <div class="nav-user-section desktop-nav">
                 {# --- Recherche globale : aperçu instantané + page de résultats --- #}
                 <div class="nav-search" id="navSearch">
-                    <form action="{{ url_for('recherche_page') }}" method="get" role="search" autocomplete="off">
+                    <form action="{{ url_for('recherche.recherche_page') }}" method="get" role="search" autocomplete="off">
                         <span class="nav-search-ico">{{ icon('search', 17) }}</span>
                         <input type="search" name="q" id="globalSearchInput" class="nav-search-input"
                                placeholder="Rechercher…" aria-label="Recherche globale"
@@ -391,7 +391,7 @@
                     {% endif %}
                 </a>
 
-                <a href="{{ url_for('notifications') }}" class="nav-notif {% if request.endpoint == 'notifications' %}active{% endif %}"
+                <a href="{{ url_for('notifications.notifications') }}" class="nav-notif {% if request.endpoint == 'notifications.notifications' %}active{% endif %}"
                    aria-label="Notifications" title="Notifications">
                     {{ icon('bell', 19) }}
                     {% if unread_notifications and unread_notifications > 0 %}
@@ -431,7 +431,7 @@
                         <a href="{{ url_for('self_service') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('self_service') %}active{% endif %}">
                             {{ icon('calendar', 17) }}<span>Mes demandes</span>
                         </a>
-                        <a href="{{ url_for('notifications') }}" class="nav-dropdown-link">
+                        <a href="{{ url_for('notifications.notifications') }}" class="nav-dropdown-link">
                             {{ icon('bell', 17) }}<span>Notifications</span>
                             {% if unread_notifications and unread_notifications > 0 %}
                             <span class="menu-count">{{ unread_notifications }}</span>
@@ -487,9 +487,9 @@
                 </a>
 
                 {# La barre de recherche n'existe pas en mobile : on y accède par ce lien #}
-                <a href="{{ url_for('recherche_page') }}" class="nav-link {% if request.endpoint == 'recherche_page' %}active{% endif %}">{{ icon('search') }}<span>Rechercher</span></a>
+                <a href="{{ url_for('recherche.recherche_page') }}" class="nav-link {% if request.endpoint == 'recherche.recherche_page' %}active{% endif %}">{{ icon('search') }}<span>Rechercher</span></a>
 
-                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">{{ icon('dashboard') }}<span>Tableau de bord</span></a>
+                <a href="{{ url_for('dashboard.dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}">{{ icon('dashboard') }}<span>Tableau de bord</span></a>
 
                 <p class="drawer-section">Personnel</p>
                 <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">{{ icon('users') }}<span>Employés</span></a>
@@ -504,11 +504,11 @@
                 <a href="{{ url_for('presences.presences') }}" class="nav-link {% if request.endpoint == 'presences.presences' %}active{% endif %}">{{ icon('clock') }}<span>Présences</span></a>
                 <a href="{{ url_for('presences.historique') }}" class="nav-link {% if request.endpoint == 'presences.historique' %}active{% endif %}">{{ icon('history') }}<span>Historique</span></a>
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                <a href="{{ url_for('absences') }}" class="nav-link {% if request.endpoint == 'absences' %}active{% endif %}">{{ icon('user-x') }}<span>Absences</span></a>
+                <a href="{{ url_for('absences.absences') }}" class="nav-link {% if request.endpoint == 'absences.absences' %}active{% endif %}">{{ icon('user-x') }}<span>Absences</span></a>
                 {% endif %}
 
                 <p class="drawer-section">Congés</p>
-                <a href="{{ url_for('conges') }}" class="nav-link {% if request.endpoint == 'conges' %}active{% endif %}">{{ icon('palm') }}<span>Congés</span></a>
+                <a href="{{ url_for('conges.conges') }}" class="nav-link {% if request.endpoint == 'conges.conges' %}active{% endif %}">{{ icon('palm') }}<span>Congés</span></a>
                 <a href="{{ url_for('permissions') }}" class="nav-link {% if request.endpoint == 'permissions' %}active{% endif %}">{{ icon('file') }}<span>Permissions</span></a>
                 <a href="{{ url_for('calendrier_conges') }}" class="nav-link {% if request.endpoint == 'calendrier_conges' %}active{% endif %}">{{ icon('calendar') }}<span>Calendrier</span></a>
                 <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">{{ icon('file') }}<span>Contrats</span></a>
@@ -538,7 +538,7 @@
                         <span class="notif-badge">{{ messages_non_lus if messages_non_lus < 100 else '99+' }}</span>
                         {% endif %}
                     </a>
-                    <a href="{{ url_for('notifications') }}" class="nav-link {% if request.endpoint == 'notifications' %}active{% endif %}">
+                    <a href="{{ url_for('notifications.notifications') }}" class="nav-link {% if request.endpoint == 'notifications.notifications' %}active{% endif %}">
                         {{ icon('bell') }}<span>Notifications</span>
                         {% if unread_notifications and unread_notifications > 0 %}
                         <span class="menu-count">{{ unread_notifications }}</span>
@@ -1112,8 +1112,8 @@
         if (!wrap) return;
         const input = document.getElementById('globalSearchInput');
         const panel = document.getElementById('globalSearchPanel');
-        const urlApi = "{{ url_for('api_recherche') }}";
-        const urlPage = "{{ url_for('recherche_page') }}";
+        const urlApi = "{{ url_for('recherche.api_recherche') }}";
+        const urlPage = "{{ url_for('recherche.recherche_page') }}";
 
         let debounce = null;      // évite une requête à chaque frappe
         let requeteEnCours = null;

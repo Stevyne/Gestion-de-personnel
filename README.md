@@ -463,9 +463,9 @@ compile les modules puis exécute `pytest -q` sur chaque push et pull request ve
 
 ## 🧩 Architecture par Blueprints
 
-`app.py` reste le point de composition (configuration, sécurité, base, schéma et
-services partagés), tandis que les domaines autonomes vivent dans des
-Blueprints Flask :
+`app.py` est désormais principalement un point de composition. La configuration,
+la sécurité HTTP, PostgreSQL, le schéma et les services partagés sont isolés dans
+`services/`, tandis que les domaines autonomes vivent dans des Blueprints Flask :
 
 - `parc.py` : matériels, mouvements, attributions, inventaires, exemplaires,
   maintenance, prestataires et étiquettes QR ;
@@ -477,7 +477,11 @@ Blueprints Flask :
 - `departs.py` : préparation et finalisation des départs ;
 - `contrats.py` : contrats, versions, fichiers et alertes ;
 - `rapports_parc.py` : exports PDF/Excel du matériel ;
-- `dashboards_roles.py` : tableaux RH, Parc et Direction ;
+- `dashboard.py` et `dashboards_roles.py` : tableau général et tableaux RH, Parc, Direction ;
+- `recherche.py` : recherche multi-domaine et palette de navigation ;
+- `conges.py` : dépôt, avis manager, décision RH et annulation ;
+- `absences.py` : consultation, saisie et synchronisation ;
+- `notifications.py` : centre de notifications et marquage comme lu ;
 - `absence_justifications.py` : workflow confidentiel des justificatifs ;
 - `messagerie.py` : messagerie interne.
 
@@ -485,14 +489,19 @@ Les dépendances communes sont injectées à l'enregistrement des Blueprints : i
 n'existe aucun import circulaire vers `app.py`. Les URLs publiques restent
 inchangées (`/materiels`, `/documents`, `/departements`, `/presences`, `/login`,
 etc.) ; seuls les noms d'endpoints internes sont préfixés par leur domaine.
-Un test structurel maintient désormais `app.py` sous 4 700 lignes.
+Un test structurel maintient désormais `app.py` sous 3 200 lignes.
 
 ## 📁 Structure du projet
 
 ```
 Gestion-de-personnel/
-├── app.py                  # Configuration, schéma et composition des Blueprints
+├── app.py                  # Composition des extensions, services et Blueprints
 ├── blueprints/
+│   ├── dashboard.py        # Tableau de bord général cloisonné
+│   ├── recherche.py        # Recherche globale
+│   ├── conges.py           # Workflow des congés
+│   ├── absences.py         # Gestion des absences
+│   ├── notifications.py    # Centre de notifications
 │   ├── parc.py             # Stock, inventaires, exemplaires et maintenance
 │   ├── documents.py        # Documents RH et contrôle des téléchargements
 │   ├── departements.py     # Gestion des départements
@@ -506,11 +515,17 @@ Gestion-de-personnel/
 │   ├── absence_justifications.py
 │   └── messagerie.py
 ├── services/
+│   ├── configuration.py    # Variables d'environnement, SQLAlchemy, SMTP, proxy
+│   ├── security.py         # CSRF, Redis rate limit et Talisman
+│   ├── database.py         # Connexions et context manager PostgreSQL
+│   ├── migrations.py       # Initialisation Flask-Migrate/Alembic
+│   ├── schema.py           # Bootstrap idempotent du schéma historique
+│   ├── common.py           # Pagination, retards et calculs partagés
+│   ├── notifications.py    # Persistance des notifications
 │   ├── email_outbox.py     # File SMTP persistante, indépendante de Flask
 │   ├── roles.py            # Référentiel officiel des rôles
-│   ├── phase1_schema.py    # Contraintes, triggers et migrations d'intégrité
-│   ├── phase2_schema.py    # Départs, SLA et contrats
-│   └── phase3_schema.py    # Contexte messagerie/maintenance
+│   └── phase*_schema.py    # Contraintes et migrations métier
+├── migrations/             # Révisions Alembic / Flask-Migrate
 ├── .github/workflows/
 │   └── tests.yml           # PostgreSQL 17 + pytest sur push/PR
 ├── requirements.txt        # Dépendances runtime directes, minimales

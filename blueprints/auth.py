@@ -31,7 +31,7 @@ def creer_blueprint_auth(deps):
     @bp.route('/login', methods=['GET','POST'])
     @limiter.limit(login_rate_limit, methods=['POST'], override_defaults=False)
     def login():
-        if 'user_id' in session: return redirect(url_for('dashboard'))
+        if 'user_id' in session: return redirect(url_for('dashboard.dashboard'))
         if request.method == 'POST':
             u = request.form.get('username','').strip()
             p = request.form.get('password','')
@@ -48,7 +48,7 @@ def creer_blueprint_auth(deps):
                 session['sid'] = enregistrer_session(user['id'], user['username'])
                 log_action(user_id=user['id'], username=user['username'], action="LOGIN")
                 flash(f'Bienvenue, {user["username"]} !', 'success')
-                return redirect(url_for('dashboard'))
+                return redirect(url_for('dashboard.dashboard'))
             flash('Identifiants ou mot de passe incorrects.', 'danger')
         return render_template('login.html')
 

@@ -20,7 +20,7 @@
     <h1>🏖️ Mes congés et permissions</h1>
     <div>
       <a href="{{ url_for('self_service') }}" class="btn btn-secondary">← Retour</a>
-      <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('add_conge') }}" class="js-modal-form btn btn-primary">+ Demander un congé</a>
+      <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('conges.add_conge') }}" class="js-modal-form btn btn-primary">+ Demander un congé</a>
       <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">+ Demander une permission</a>
       <a href="{{ url_for('export_conges_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;">📄 PDF</a>
       <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn" style="background:#15803d;color:white;">📊 Excel</a>
@@ -50,7 +50,7 @@
       <td data-label="Suivi">{{ etat(c) }}</td>
       <td data-label="Action">
         {% if c.statut in ouvertes %}
-        <form method="POST" action="{{ url_for('annuler_conge', id=c.id) }}" class="confirm-form"
+        <form method="POST" action="{{ url_for('conges.annuler_conge', id=c.id) }}" class="confirm-form"
               data-confirm-title="Annuler la demande"
               data-confirm-message="Retirer cette demande de congé ? Elle ne sera plus soumise aux RH.">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

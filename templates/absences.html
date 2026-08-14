@@ -9,11 +9,11 @@
           <p style="color:#64748b;margin:5px 0 0;">Suivi de la détection à la décision RH. Les justificatifs médicaux sont visibles uniquement par l'employé concerné et les RH.</p>
         </div>
         <div>
-            <form action="{{ url_for('synchroniser_absences') }}" method="post" style="display:inline;">
+            <form action="{{ url_for('absences.synchroniser_absences') }}" method="post" style="display:inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-secondary">🔄 Synchroniser</button>
             </form>
-            <a data-modal-title="Enregistrer une absence" href="{{ url_for('add_absence') }}" class="js-modal-form btn btn-primary">+ Enregistrer une absence</a>
+            <a data-modal-title="Enregistrer une absence" href="{{ url_for('absences.add_absence') }}" class="js-modal-form btn btn-primary">+ Enregistrer une absence</a>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
         </div>
     </div>
@@ -22,13 +22,13 @@
         <strong>{{ absences|length }}</strong> dossier(s) affiché(s) sur <strong>{{ nb_total }}</strong>. Chaque jour ouvré passé sans présence est détecté, sauf congé ou <a href="{{ url_for('permissions') }}">permission</a> approuvé(e).
     </p>
 
-    <form method="get" action="{{ url_for('absences') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;background:#f8fafc;padding:14px 16px;border-radius:12px;margin-bottom:18px;border:1px solid #e2e8f0;">
+    <form method="get" action="{{ url_for('absences.absences') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;background:#f8fafc;padding:14px 16px;border-radius:12px;margin-bottom:18px;border:1px solid #e2e8f0;">
       <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">🔎 Rechercher</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Nom ou prénom..." class="form-control" style="min-width:190px;"></div>
       <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">Employé</label><select name="employe_id" class="form-control"><option value="">Tous</option>{% for emp in employees %}<option value="{{ emp.id }}" {{ 'selected' if filters.employe_id == emp.id|string }}>{{ emp.prenom }} {{ emp.nom }}</option>{% endfor %}</select></div>
       <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">Statut</label><select name="statut" class="form-control"><option value="">Tous</option>{% for code, label in statut_labels.items() %}<option value="{{ code }}" {{ 'selected' if filters.statut == code }}>{{ label }}</option>{% endfor %}</select></div>
       <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">Du</label><input type="date" name="date_debut" value="{{ filters.date_debut }}" class="form-control"></div>
       <div style="display:flex;flex-direction:column;gap:3px;"><label style="font-size:.72rem;color:#475569;">Au</label><input type="date" name="date_fin" value="{{ filters.date_fin }}" class="form-control"></div>
-      <button type="submit" class="btn btn-primary">Filtrer</button><a href="{{ url_for('absences') }}" class="btn btn-secondary">Réinitialiser</a>
+      <button type="submit" class="btn btn-primary">Filtrer</button><a href="{{ url_for('absences.absences') }}" class="btn btn-secondary">Réinitialiser</a>
     </form>
 
     <div class="table-container">
@@ -64,7 +64,7 @@
                           <button name="decision" value="refuser" class="btn btn-danger" type="submit">Refuser</button>
                         </form>
                       {% elif session.get('role') in ['admin','rh'] and a.statut != 'acceptee' %}
-                        <form action="{{ url_for('delete_absence', id=a.id) }}" method="post" style="display:inline;" class="confirm-form" data-confirm-title="Supprimer cette absence ?" data-confirm-subtitle="Action irréversible" data-confirm-icon="🚫">
+                        <form action="{{ url_for('absences.delete_absence', id=a.id) }}" method="post" style="display:inline;" class="confirm-form" data-confirm-title="Supprimer cette absence ?" data-confirm-subtitle="Action irréversible" data-confirm-icon="🚫">
                           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-danger" style="padding:4px 7px;font-size:.7rem;">🗑️</button>
                         </form>
                       {% else %}<span style="color:#94a3b8;">—</span>{% endif %}

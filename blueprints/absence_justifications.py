@@ -227,10 +227,10 @@ def creer_blueprint_justifications(deps):
         motif_refus = (request.form.get('motif_refus') or '').strip()
         if decision not in ('accepter', 'refuser'):
             flash("Décision invalide.", 'danger')
-            return redirect(url_for('absences'))
+            return redirect(url_for('absences.absences'))
         if decision == 'refuser' and not motif_refus:
             flash("Le motif du refus est obligatoire.", 'danger')
-            return redirect(url_for('absences'))
+            return redirect(url_for('absences.absences'))
 
         cible = None
         with db_cursor(commit=True) as (conn, cur):
@@ -241,7 +241,7 @@ def creer_blueprint_justifications(deps):
                 abort(404)
             if absence['statut'] != ABSENCE_JUSTIFICATIF_DEPOSE:
                 flash("Ce justificatif a déjà été traité ou n'a pas été déposé.", 'warning')
-                return redirect(url_for('absences'))
+                return redirect(url_for('absences.absences'))
 
             cible = _cible_employe(cur, absence['employe_id'])
             if decision == 'accepter':
@@ -302,6 +302,6 @@ def creer_blueprint_justifications(deps):
               if decision == 'accepter'
               else "Justificatif refusé : l'employé a été informé.",
               'success' if decision == 'accepter' else 'info')
-        return redirect(url_for('absences'))
+        return redirect(url_for('absences.absences'))
 
     return bp

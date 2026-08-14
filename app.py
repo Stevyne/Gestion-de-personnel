@@ -1,12 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, jsonify, g
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_talisman import Talisman
-from flask_wtf.csrf import CSRFProtect
-from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
-import psycopg2
-from psycopg2.extras import RealDictCursor, execute_values
+from psycopg2.extras import execute_values
 import os
 import secrets
 import logging
@@ -21,27 +15,38 @@ load_dotenv()   # charge .env avant la configuration des services
 from flask_mail import Mail, Message
 
 from extensions import db, migrate
-from services.bootstrap_seed import appliquer_seed_initial
+from services.configuration import configurer_application
+from services.database import creer_acces_postgres
+from services.migrations import configurer_migrations
+from services.security import configurer_securite_http
+from services.common import (
+    calculer_jours_acquis_prorata, calculer_retard, page_list, pagination_info,
+)
 from services.email_outbox import ajouter_email, traiter_outbox
 from services.object_storage import object_storage
 from services.observability import configure_logging, init_sentry, register_observability
+from services.notifications import creer_service_notifications
 from services.roles import GLOBAL_DATA_ROLES, ROLE_LABELS
-from services.phase1_schema import appliquer_contraintes_phase1
-from services.phase2_schema import appliquer_schema_phase2
-from services.phase3_schema import appliquer_schema_phase3
-from services.phase4_schema import appliquer_schema_phase4
+from services.schema import initialiser_schema
 from blueprints.absence_justifications import (
     ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
 )
+from blueprints.absences import creer_blueprint_absences
 from blueprints.messagerie import creer_blueprint_messagerie
+from blueprints.notifications import creer_blueprint_notifications
+from blueprints.recherche import (
+    RECHERCHE_PAGES, creer_blueprint_recherche,  # noqa: F401 — réexport public
+)
 from blueprints.documents import creer_blueprint_documents
 from blueprints.departements import creer_blueprint_departements
 from blueprints.presences import creer_blueprint_presences
 from blueprints.utilisateurs import creer_blueprint_utilisateurs
 from blueprints.departs import creer_blueprint_departs
 from blueprints.contrats import creer_blueprint_contrats
+from blueprints.conges import creer_blueprint_conges
 from blueprints.rapports_parc import creer_blueprint_rapports_parc
 from blueprints.dashboards_roles import creer_blueprint_dashboards_roles
+from blueprints.dashboard import creer_blueprint_dashboard
 from blueprints.auth import creer_blueprint_auth
 from blueprints.parc import (
     MAINTENANCE_OUVERTS,  # réexport de compatibilité pour les tests/plug-ins  # noqa: F401
@@ -67,71 +72,10 @@ from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 
-# === CONFIGURATION SÉCURITÉ ===
-SECRET_KEY = os.environ.get('SECRET_KEY')
-if not SECRET_KEY:
-    if os.environ.get('FLASK_ENV') == 'production':
-        raise RuntimeError(
-            "SECRET_KEY doit être défini dans l'environnement en production. "
-            "Générez-en une avec: python -c \"import secrets; print(secrets.token_hex(32))\""
-        )
-    # Fallback uniquement pour le développement local
-    SECRET_KEY = 'dev-only-insecure-key-do-not-use-in-production'
-    logger.warning("SECRET_KEY absente de l'environnement, utilisation d'une clé de dev non sécurisée.")
-
-app.secret_key = SECRET_KEY
-app.config['SECRET_KEY'] = app.secret_key
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
-app.config['PERMANENT_SESSION_LIFETIME'] = int(os.environ.get('PERMANENT_SESSION_LIFETIME', 3600))
-
-# Limite globale configurable ; les modules gardent leurs limites métier plus
-# strictes (par exemple 8 Mo pour justificatifs et pièces jointes).
-app.config['MAX_CONTENT_LENGTH'] = int(
-    os.environ.get('MAX_CONTENT_LENGTH', str(16 * 1024 * 1024))
-)
-
-DATABASE_URL = os.environ.get('DATABASE_URL')
-if not DATABASE_URL:
-    if os.environ.get('FLASK_ENV') == 'production':
-        raise RuntimeError(
-            "DATABASE_URL doit être défini dans l'environnement en production. "
-            "Exemple: postgresql://utilisateur:motdepasse@hote:5432/gestion_personnel"
-        )
-    # Fallback de développement local — aucun mot de passe sensible codé en dur
-    DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/gestion_personnel'
-    logger.warning("DATABASE_URL absente de l'environnement, utilisation du fallback de dev local (postgres/postgres).")
-
-# Proxy de confiance explicitement configuré (Render : 1).
-try:
-    trusted_proxies = max(0, int(os.environ.get('TRUSTED_PROXY_COUNT', '0')))
-except ValueError as exc:
-    raise RuntimeError("TRUSTED_PROXY_COUNT doit être un entier.") from exc
-if trusted_proxies:
-    app.wsgi_app = ProxyFix(
-        app.wsgi_app,
-        x_for=trusted_proxies,
-        x_proto=trusted_proxies,
-        x_host=trusted_proxies,
-    )
-
-# Alembic versionne le schéma ; le métier reste en psycopg2.
-sqlalchemy_url = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = sqlalchemy_url
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,
-    'pool_recycle': int(os.environ.get('SQLALCHEMY_POOL_RECYCLE', '300')),
-}
-db.init_app(app)
-migrate.init_app(app, db, directory='migrations')
-
-# Bootstrap automatique seulement en développement/tests.
-app.config['AUTO_INIT_DB'] = os.environ.get(
-    'AUTO_INIT_DB',
-    'false' if os.environ.get('FLASK_ENV') == 'production' else 'true',
-).lower() == 'true'
+# ==================== CONFIGURATION / DB ====================
+DATABASE_URL = configurer_application(app, logger)
+configurer_migrations(app, db, migrate, DATABASE_URL)
+get_db, db_cursor, get_cursor = creer_acces_postgres(DATABASE_URL)
 
 # ==================== UPLOADS (Documents) ====================
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
@@ -201,21 +145,6 @@ def detect_file_type(fichier):
     return declared if declared in candidates else None
 
 
-app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'gestion.personnel@entreprise.fr')
-app.config['ADMIN_EMAIL'] = os.environ.get('ADMIN_EMAIL', 'admin@entreprise.fr')
-# Aucun SMTP n'est contacté sans activation explicite. En développement et
-# pendant les tests, les événements restent couverts par les notifications
-# internes, sans erreur ni tentative réseau.
-app.config['EMAIL_ENABLED'] = os.environ.get('EMAIL_ENABLED', 'false').lower() == 'true'
-app.config['EMAIL_BATCH_SIZE'] = int(os.environ.get('EMAIL_BATCH_SIZE', 20))
-app.config['EMAIL_MAX_ATTEMPTS'] = int(os.environ.get('EMAIL_MAX_ATTEMPTS', 5))
-app.config['EMAIL_POLL_SECONDS'] = int(os.environ.get('EMAIL_POLL_SECONDS', 60))
-
 def get_admin_email():
     try:
         conn = get_db()
@@ -280,58 +209,8 @@ def _send_outbox_message(message):
     mail.send(msg)
 
 
-# === INITIALISATION SÉCURITÉ ===
-csrf = CSRFProtect(app)
-
-# Rate limiter partagé entre tous les workers Gunicorn via Redis. Le stockage
-# mémoire reste uniquement un repli de développement explicite.
-app.config['RATELIMIT_ENABLED'] = os.environ.get(
-    'RATELIMIT_ENABLED', 'true').lower() == 'true'
-ratelimit_storage_uri = (
-    os.environ.get('RATELIMIT_STORAGE_URI')
-    or os.environ.get('REDIS_URL')
-    or 'memory://'
-)
-if (os.environ.get('FLASK_ENV') == 'production'
-        and app.config['RATELIMIT_ENABLED']
-        and ratelimit_storage_uri == 'memory://'
-        and os.environ.get('REQUIRE_REDIS_RATE_LIMIT', 'true').lower() == 'true'):
-    raise RuntimeError(
-        "REDIS_URL (ou RATELIMIT_STORAGE_URI) est obligatoire pour le rate "
-        "limiting multi-worker en production."
-    )
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri=ratelimit_storage_uri,
-    storage_options={"socket_connect_timeout": 2, "socket_timeout": 2}
-        if ratelimit_storage_uri.startswith(('redis://', 'rediss://')) else None,
-    enabled=app.config['RATELIMIT_ENABLED'],
-    in_memory_fallback_enabled=False,
-    key_prefix=os.environ.get('RATELIMIT_KEY_PREFIX', 'gestion-personnel'),
-)
-
-# Headers de sécurité (Talisman)
-csp = {
-    'default-src': "'self'",
-    'script-src': ["'self'", "'unsafe-inline'"],  # pour les scripts inline actuels
-    'style-src': ["'self'", "'unsafe-inline'"],
-    'img-src': ["'self'", "data:"],
-}
-talisman = Talisman(
-    app,
-    force_https=os.environ.get(
-        'FORCE_HTTPS',
-        'true' if os.environ.get('FLASK_ENV') == 'production' else 'false',
-    ).lower() == 'true',
-    frame_options='DENY',
-    content_security_policy=csp,
-    referrer_policy='strict-origin-when-cross-origin',
-    session_cookie_secure=app.config['SESSION_COOKIE_SECURE']
-)
-logger.info("Sécurité activée : CSRF + RateLimit + Talisman")
-
+# ==================== SÉCURITÉ HTTP ====================
+csrf, limiter, talisman = configurer_securite_http(app, logger)
 
 
 # ==================== HTML EMAIL ====================
@@ -454,7 +333,7 @@ def role_required(*allowed_roles):
             if role == 'admin' or role in allowed_roles:
                 return f(*args, **kwargs)
             flash('Accès refusé.', 'danger')
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('dashboard.dashboard'))
         return decorated
     return decorator
 
@@ -548,10 +427,10 @@ def department_id_in_scope(cur, departement_id):
 def _department_access_denied():
     logger.warning("Accès inter-département refusé: user=%s endpoint=%s",
                    session.get('username'), request.endpoint)
-    if request.endpoint == 'api_recherche':
+    if request.endpoint == 'recherche.api_recherche':
         return jsonify({'erreur': True, 'message': 'Accès refusé'}), 403
     flash("Accès refusé : cette donnée n'appartient pas à votre département.", "danger")
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('dashboard.dashboard'))
 
 
 # Ressources identifiées par l'URL. Le SELECT renvoie toujours une colonne
@@ -565,15 +444,15 @@ DEPARTMENT_RESOURCE_GUARDS = {
     'presences.clock_out': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
     'update_solde_conges': ("SELECT departement FROM employes WHERE id = %s", 'employe_id'),
     'presences.delete_presence': ("SELECT e.departement FROM presences p JOIN employes e ON e.id=p.employe_id WHERE p.id=%s", 'id'),
-    'avis_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
-    'update_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
-    'annuler_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
-    'delete_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'conges.avis_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'conges.update_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'conges.annuler_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'conges.delete_conge': ("SELECT e.departement FROM conges x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
     'avis_permission': ("SELECT e.departement FROM permissions x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
     'update_permission': ("SELECT e.departement FROM permissions x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
     'annuler_permission': ("SELECT e.departement FROM permissions x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
     'delete_permission': ("SELECT e.departement FROM permissions x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
-    'delete_absence': ("SELECT e.departement FROM absences x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
+    'absences.delete_absence': ("SELECT e.departement FROM absences x JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'id'),
     'documents.download_document': ("SELECT e.departement FROM documents x LEFT JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'doc_id'),
     'documents.delete_document': ("SELECT e.departement FROM documents x LEFT JOIN employes e ON e.id=x.employe_id WHERE x.id=%s", 'doc_id'),
     'parc.edit_materiel': ("SELECT d.nom AS departement FROM materiels x LEFT JOIN departements d ON d.id=x.departement_id WHERE x.id=%s", 'id'),
@@ -609,8 +488,8 @@ DEPARTMENT_RESOURCE_GUARDS = {
 
 FORM_EMPLOYEE_SCOPE_FIELDS = {
     'presences.presences': 'quick_employe_id', 'presences.add_presence': 'employe_id',
-    'add_conge': 'employe_id', 'add_permission': 'employe_id',
-    'add_absence': 'employe_id', 'documents.documents': 'employe_id',
+    'conges.add_conge': 'employe_id', 'add_permission': 'employe_id',
+    'absences.add_absence': 'employe_id', 'documents.documents': 'employe_id',
     'parc.attribuer_materiel': 'employe_id', 'parc.add_mouvement_materiel': 'employe_id',
     'parc.edit_exemplaire': 'employe_id',
 }
@@ -677,98 +556,10 @@ def enforce_department_resource_scope():
 
 
 # ==================== NOTIFICATIONS (Base de données - support multi-utilisateur réel) ====================
-def create_notification(user_id, title, message, type_="info", cur=None):
-    """Crée une notification persistante.
+# ==================== NOTIFICATIONS ====================
+(create_notification, get_unread_notifications, mark_all_read,
+ get_all_notifications) = creer_service_notifications(db_cursor, logger)
 
-    ``cur`` permet de rattacher la notification à la transaction métier : pas
-    de notification fantôme si l'enregistrement principal est annulé.
-    """
-    try:
-        if cur is not None:
-            # Même garantie que pour l'outbox : une notification invalide ou
-            # une indisponibilité ponctuelle ne fait pas échouer le workflow.
-            cur.execute("SAVEPOINT ajout_notification")
-            try:
-                cur.execute("""
-                    INSERT INTO notifications (user_id, title, message, type, is_read)
-                    VALUES (%s, %s, %s, %s, FALSE)
-                """, (user_id, title, message, type_))
-            except Exception:
-                cur.execute("ROLLBACK TO SAVEPOINT ajout_notification")
-                cur.execute("RELEASE SAVEPOINT ajout_notification")
-                raise
-            cur.execute("RELEASE SAVEPOINT ajout_notification")
-            return True
-        with db_cursor(commit=True) as (conn, notification_cur):
-            notification_cur.execute("""
-                INSERT INTO notifications (user_id, title, message, type, is_read)
-                VALUES (%s, %s, %s, %s, FALSE)
-            """, (user_id, title, message, type_))
-        return True
-    except Exception as e:
-        logger.error("Erreur create_notification DB: %s", e, exc_info=True)
-        return False
-
-def get_unread_notifications(user_id=None):
-    """Retourne les notifications non lues depuis PostgreSQL"""
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        if user_id is not None:
-            cur.execute("""
-                SELECT * FROM notifications 
-                WHERE user_id = %s AND is_read = FALSE 
-                ORDER BY timestamp DESC LIMIT 50
-            """, (user_id,))
-        else:
-            cur.execute("""
-                SELECT * FROM notifications 
-                WHERE is_read = FALSE 
-                ORDER BY timestamp DESC LIMIT 50
-            """)
-        notifs = cur.fetchall()
-        cur.close()
-        conn.close()
-        return notifs
-    except Exception as e:
-        logger.error("Erreur get_unread_notifications: %s", e, exc_info=True)
-        return []
-
-def mark_all_read(user_id=None):
-    """Marque les notifications comme lues"""
-    try:
-        with db_cursor(commit=True) as (conn, cur):
-            if user_id is not None:
-                cur.execute("UPDATE notifications SET is_read = TRUE WHERE user_id = %s", (user_id,))
-            else:
-                cur.execute("UPDATE notifications SET is_read = TRUE")
-        return True
-    except Exception as e:
-        logger.error("Erreur mark_all_read: %s", e, exc_info=True)
-        return False
-
-def get_all_notifications(user_id=None, limit=30):
-    try:
-        conn = get_db()
-        cur = get_cursor(conn)
-        if user_id is not None:
-            cur.execute("""
-                SELECT * FROM notifications 
-                WHERE user_id = %s 
-                ORDER BY timestamp DESC LIMIT %s
-            """, (user_id, limit))
-        else:
-            cur.execute("""
-                SELECT * FROM notifications 
-                ORDER BY timestamp DESC LIMIT %s
-            """, (limit,))
-        notifs = cur.fetchall()
-        cur.close()
-        conn.close()
-        return notifs
-    except Exception as e:
-        logger.error("Erreur get_all_notifications: %s", e, exc_info=True)
-        return []
 
 @app.after_request
 def modal_redirect_passthrough(response):
@@ -856,60 +647,7 @@ def send_retard_email(employee_name, employee_email, retard_minutes, date_str, h
         logger.error("Erreur mise en file e-mail retard: %s", e, exc_info=True)
         return False
 
-# ==================== DB ====================
-def get_db():
-    conn = psycopg2.connect(DATABASE_URL)
-    cur = conn.cursor()
-    cur.execute("SET timezone TO 'Indian/Antananarivo'")
-    cur.close()
-    return conn
-
-from contextlib import contextmanager
-
-@contextmanager
-def db_cursor(commit=False):
-    """
-    Fournit (conn, cur) et garantit leur fermeture, même en cas d'exception
-    ou de `return` anticipé dans le bloc `with`. Utiliser commit=True pour
-    les opérations d'écriture (INSERT/UPDATE/DELETE).
-    """
-    conn = get_db()
-    cur = get_cursor(conn)
-    try:
-        yield conn, cur
-        if commit:
-            conn.commit()
-    finally:
-        cur.close()
-        conn.close()
-
-def get_cursor(conn):
-    return conn.cursor(cursor_factory=RealDictCursor)
-
-
-# ==================== PAGINATION ====================
-def pagination_info(total, page, per_page=10):
-    """Calcule les infos de pagination (page bornée dans [1, pages])."""
-    pages = max(1, (total + per_page - 1) // per_page) if per_page else 1
-    page = max(1, min(page, pages))
-    return {'page': page, 'per_page': per_page, 'total': total, 'pages': pages,
-            'has_prev': page > 1, 'has_next': page < pages}
-
-
-def page_list(page, pages):
-    """Liste de numéros de pages à afficher (avec '...' pour les trous)."""
-    if pages <= 9:
-        return list(range(1, pages + 1))
-    items = [1]
-    lo, hi = max(2, page - 1), min(pages - 1, page + 1)
-    if lo > 2:
-        items.append('...')
-    items += list(range(lo, hi + 1))
-    if hi < pages - 1:
-        items.append('...')
-    items.append(pages)
-    return items
-
+# Services de pagination extraits dans services/common.py.
 def log_action(user_id=None, username=None, action="", entity_type=None, entity_id=None, details=None):
     try:
         conn = get_db()
@@ -933,18 +671,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-def calculer_retard(h):
-    if not h: return 0
-    try:
-        if isinstance(h, str):
-            hh, mm = map(int, h.split(':')[:2])
-        else:
-            hh, mm = h.hour, h.minute
-        ha, ma = map(int, HEURE_ARRIVEE_ATTENDUE.split(':'))
-        return max(0, (hh*60 + mm) - (ha*60 + ma))
-    except:
-        return 0
-
+# calculer_retard est réexporté depuis services/common.py.
 def get_current_user_row():
     """Renvoie la ligne `users` du compte connecté (identifiant, rôle, photo…)."""
     if 'user_id' not in session:
@@ -1157,34 +884,7 @@ def _libelle_employe(cur, employe_id):
 
 # ==================== SOLDES DE CONGÉS (Phase 2) ====================
 
-TAUX_ACQUISITION_CONGES_PAR_MOIS = 25 / 12  # ≈ 2.0833 j/mois (25 j/an, convention jours ouvrés)
-
-
-def calculer_jours_acquis_prorata(date_embauche, annee):
-    """Accumulation mensuelle des congés : ~2,08 jour(s) acquis par mois
-    complet travaillé, proratisé sur l'année d'embauche. Pour une année déjà
-    terminée, retourne le total complet (jusqu'à 25). Pour l'année en cours,
-    retourne seulement ce qui est acquis à ce jour (pas les mois futurs).
-    """
-    debut_annee = date(annee, 1, 1)
-    fin_annee = date(annee, 12, 31)
-    aujourd_hui = date.today()
-
-    if date_embauche and date_embauche > debut_annee:
-        debut_calcul = date_embauche.replace(day=1)
-        if debut_calcul < debut_annee:
-            debut_calcul = debut_annee
-    else:
-        debut_calcul = debut_annee
-
-    fin_calcul = min(aujourd_hui, fin_annee)
-    if fin_calcul < debut_calcul:
-        return 0.0
-
-    mois_acquis = (fin_calcul.year - debut_calcul.year) * 12 + (fin_calcul.month - debut_calcul.month) + 1
-    mois_acquis = max(0, min(12, mois_acquis))
-    return round(mois_acquis * TAUX_ACQUISITION_CONGES_PAR_MOIS, 1)
-
+# Calcul proratisé réexporté depuis services/common.py.
 
 def get_solde_conges(employe_id, annee=None):
     """Retourne le solde de congés d'un employé (jours acquis, utilisés, restants)"""
@@ -1300,827 +1000,15 @@ def recalculer_solde(employe_id, annee=None, cur=None):
 
 
 def init_db():
-    conn = get_db()
-    cur = get_cursor(conn)
-    cur.execute("SELECT pg_advisory_xact_lock(hashtext('gestion_personnel_init_db'))")
-
-    cur.execute('''CREATE TABLE IF NOT EXISTS departements (
-        id SERIAL PRIMARY KEY,
-        nom VARCHAR(100) UNIQUE,
-        description TEXT,
-        responsable VARCHAR(150)
-    )''')
-    # Migration : ajoute les colonnes si la table existait déjà sans elles
-    cur.execute("ALTER TABLE departements ADD COLUMN IF NOT EXISTS description TEXT")
-    cur.execute("ALTER TABLE departements ADD COLUMN IF NOT EXISTS responsable VARCHAR(150)")
-    cur.execute('''CREATE TABLE IF NOT EXISTS employes (id SERIAL PRIMARY KEY, nom VARCHAR(100) NOT NULL, prenom VARCHAR(100) NOT NULL, poste VARCHAR(150), departement VARCHAR(100), email VARCHAR(150), telephone VARCHAR(20), date_embauche DATE, salaire NUMERIC(10,2))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS presences (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), date DATE, heure_arrivee TIME, heure_depart TIME, statut VARCHAR(30) DEFAULT 'présent', commentaire TEXT, UNIQUE(employe_id, date))''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS conges (id SERIAL PRIMARY KEY, employe_id INTEGER REFERENCES employes(id), type_conge VARCHAR(50), date_debut DATE, date_fin DATE, nombre_jours INTEGER, motif TEXT, statut VARCHAR(20) DEFAULT 'en attente', date_demande DATE DEFAULT CURRENT_DATE)''')
-
-    # ==================== TABLE SOLDES_CONGES (CRITIQUE) ====================
-    cur.execute('''CREATE TABLE IF NOT EXISTS soldes_conges (
-        id SERIAL PRIMARY KEY,
-        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
-        annee INTEGER NOT NULL,
-        jours_acquis NUMERIC(5,1) DEFAULT 25,
-        jours_utilises NUMERIC(5,1) DEFAULT 0,
-        UNIQUE(employe_id, annee)
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_soldes_employe_annee ON soldes_conges(employe_id, annee)")
-    # Si RH fixe manuellement jours_acquis (ex: jours de congé exceptionnels
-    # accordés), le job de recalcul mensuel automatique ne doit PAS l'écraser.
-    cur.execute("ALTER TABLE soldes_conges ADD COLUMN IF NOT EXISTS jours_acquis_manuel BOOLEAN DEFAULT FALSE")
-
-    cur.execute('''CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username VARCHAR(80) UNIQUE, password_hash VARCHAR(255), role VARCHAR(20) DEFAULT 'employe', employe_id INTEGER REFERENCES employes(id))''')
-    # Absences non justifiées : jours d'absence qui ne relèvent ni d'un congé
-    # ni d'une permission approuvés (ex. absence non signalée, no-show).
-    cur.execute('''CREATE TABLE IF NOT EXISTS absences (
-        id SERIAL PRIMARY KEY,
-        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
-        date DATE NOT NULL,
-        motif TEXT,
-        enregistre_par INTEGER REFERENCES users(id),
-        date_enregistrement TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(employe_id, date)
-    )''')
-    # Circuit de justification : les anciennes lignes deviennent explicitement
-    # « non justifiées ». Le binaire reste en BYTEA, comme les documents RH et
-    # avatars, afin de survivre aux redémarrages du disque éphémère Render.
-    for col, typ in (
-        ('statut', 'VARCHAR(30) DEFAULT \'non_justifiee\''),
-        ('justificatif_nom', 'VARCHAR(255)'),
-        ('justificatif_type', 'VARCHAR(20)'),
-        ('justificatif_taille', 'INTEGER'),
-        ('justificatif_contenu', 'BYTEA'),
-        ('date_depot_justificatif', 'TIMESTAMP'),
-        ('justification_commentaire', 'TEXT'),
-        ('decide_par', 'INTEGER REFERENCES users(id) ON DELETE SET NULL'),
-        ('decide_le', 'TIMESTAMP'),
-        ('motif_refus', 'TEXT'),
-        ('conge_id', 'INTEGER REFERENCES conges(id) ON DELETE SET NULL'),
-    ):
-        cur.execute(f"ALTER TABLE absences ADD COLUMN IF NOT EXISTS {col} {typ}")
-    cur.execute("UPDATE absences SET statut = 'non_justifiee' WHERE statut IS NULL")
-    cur.execute("ALTER TABLE absences ALTER COLUMN statut SET DEFAULT 'non_justifiee'")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_absences_statut ON absences(statut)")
-    # Absences supprimées manuellement : on mémorise les couples (employe_id, date)
-    # à NE PAS régénérer automatiquement. Sans cela, la génération auto recréerait
-    # immédiatement toute absence supprimée (le jour reste sans présence) et la
-    # suppression semblait ne pas fonctionner.
-    cur.execute('''CREATE TABLE IF NOT EXISTS absences_exclues (
-        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
-        date DATE NOT NULL,
-        PRIMARY KEY (employe_id, date)
-    )''')
-    # Garde-fou d'idempotence pour les jobs planifiés (scheduler) : empêche un
-    # job de tourner deux fois le même jour (redémarrage du dyno, plusieurs
-    # workers gunicorn...).
-    cur.execute('''CREATE TABLE IF NOT EXISTS scheduler_runs (
-        job_name VARCHAR(100) NOT NULL,
-        run_date DATE NOT NULL,
-        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (job_name, run_date)
-    )''')
-    # ==================== TABLE PERMISSIONS (MODULE SÉPARÉ) ====================
-    # Une permission fonctionne COMME un congé (demande → approbation/refus),
-    # mais c'est une entité à part entière : elle NE fait PAS partie des congés
-    # et ne déduit JAMAIS de jours du solde de congés (soldes_conges).
-    cur.execute('''CREATE TABLE IF NOT EXISTS permissions (
-        id SERIAL PRIMARY KEY,
-        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
-        motif TEXT,
-        date_debut DATE NOT NULL,
-        date_fin DATE NOT NULL,
-        nombre_jours INTEGER NOT NULL DEFAULT 1,
-        statut VARCHAR(20) DEFAULT 'en attente',
-        date_demande DATE DEFAULT CURRENT_DATE
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_permissions_employe ON permissions(employe_id)")
-
-    # ==================== WORKFLOWS RH (validation à deux niveaux) ==========
-    # Congés et permissions suivent le même circuit : l'employé dépose sa
-    # demande, le manager de son département donne un avis, le RH tranche.
-    # Colonnes nullables : les demandes déjà en base restent valides.
-    for table in ('conges', 'permissions'):
-        for col, typ in [
-            ('demande_par_id',   'INTEGER'),      # qui a déposé (self-service)
-            ('avis_manager',     'VARCHAR(15)'),  # favorable / defavorable
-            ('avis_manager_par', 'VARCHAR(80)'),
-            ('avis_manager_le',  'DATE'),
-            ('avis_commentaire', 'TEXT'),
-            ('decide_par',       'VARCHAR(80)'),  # décision finale RH
-            ('decide_le',        'DATE'),
-            ('motif_refus',      'TEXT'),         # refus expliqué
-            ('annule_par',       'VARCHAR(80)'),
-        ]:
-            cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typ}")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_conges_statut ON conges(statut)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_conges_demandeur ON conges(demande_par_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_perms_statut ON permissions(statut)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_perms_demandeur ON permissions(demande_par_id)")
-    cur.execute('''CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id INTEGER, username VARCHAR(80), action VARCHAR(100), entity_type VARCHAR(50), entity_id INTEGER, details TEXT, ip_address VARCHAR(45), timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs(timestamp DESC)")
-
-    # ---- Registre des sessions actives -------------------------------------
-    # Flask stocke la session dans un cookie signé côté navigateur : le serveur
-    # ne sait donc pas qui est connecté et ne peut pas « reprendre » un cookie
-    # déjà émis. Ce registre comble ce manque : chaque connexion y inscrit un
-    # identifiant de session, que l'on peut révoquer à distance. Chaque requête
-    # vérifie que la session présentée est toujours valide (voir session_active).
-    cur.execute('''CREATE TABLE IF NOT EXISTS sessions_actives (
-        id SERIAL PRIMARY KEY,
-        sid VARCHAR(64) UNIQUE NOT NULL,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        username VARCHAR(80),
-        ip_address VARCHAR(45),
-        user_agent VARCHAR(300),
-        login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        revoked_at TIMESTAMP,
-        revoked_by VARCHAR(80)
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions_actives(user_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_sessions_seen ON sessions_actives(last_seen DESC)")
-
-    # Table documents
-    cur.execute('''CREATE TABLE IF NOT EXISTS documents (
-        id SERIAL PRIMARY KEY,
-        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
-        titre VARCHAR(255) NOT NULL,
-        nom_fichier VARCHAR(255) NOT NULL,
-        chemin_fichier VARCHAR(500) NOT NULL,
-        type_fichier VARCHAR(50),
-        taille INTEGER,
-        date_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        description TEXT
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_employe ON documents(employe_id)")
-    # Date d'expiration optionnelle (CDD, visa, certification, contrat...) pour
-    # les alertes automatiques avant échéance.
-    cur.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS date_expiration DATE")
-    # Le contenu du fichier est stocké EN BASE (persistant), pas sur le disque
-    # local du service (éphémère sur Render : perdu après une inactivité
-    # prolongée ou un redéploiement). Les documents uploadés avant ce
-    # correctif n'ont pas de `contenu` (colonne NULL) : leur fichier disque
-    # est probablement déjà perdu, voir download_document().
-    cur.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS contenu BYTEA")
-    # Photo de profil : portée par le COMPTE et non par la fiche employé, afin
-    # que les comptes sans employé lié puissent aussi en avoir une.
-    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS photo VARCHAR(255)")
-    # Contenu de la photo stocké EN BASE (persistant), pas sur le disque local
-    # du service (éphémère sur Render : perdu après une inactivité prolongée
-    # ou un redéploiement — c'était la cause des photos cassées).
-    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_contenu BYTEA")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_expiration ON documents(date_expiration)")
-    # Empêche de renvoyer la même alerte d'expiration chaque jour : une seule
-    # notif/email par document et par type d'alerte ('bientot' / 'expire').
-    cur.execute('''CREATE TABLE IF NOT EXISTS documents_alertes (
-        document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
-        type_alerte VARCHAR(20) NOT NULL,
-        envoye_le DATE DEFAULT CURRENT_DATE,
-        PRIMARY KEY (document_id, type_alerte)
-    )''')
-
-    # Table notifications (multi-utilisateur)
-    cur.execute('''CREATE TABLE IF NOT EXISTS notifications (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER,
-        title VARCHAR(200) NOT NULL,
-        message TEXT,
-        type VARCHAR(30) DEFAULT 'info',
-        is_read BOOLEAN DEFAULT FALSE,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_notif_unread ON notifications(user_id, is_read)")
-
-    # Outbox SMTP persistante : la requête web ne dépend jamais de la latence
-    # du fournisseur e-mail. Une clé d'événement optionnelle évite les doublons.
-    cur.execute('''CREATE TABLE IF NOT EXISTS email_outbox (
-        id SERIAL PRIMARY KEY,
-        destinataire VARCHAR(320) NOT NULL,
-        sujet VARCHAR(255) NOT NULL,
-        corps_texte TEXT,
-        corps_html TEXT,
-        cle_evenement VARCHAR(200) UNIQUE,
-        statut VARCHAR(20) NOT NULL DEFAULT 'en_attente',
-        tentatives INTEGER NOT NULL DEFAULT 0,
-        disponible_le TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        verrouille_le TIMESTAMP,
-        date_creation TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        envoye_le TIMESTAMP,
-        derniere_erreur TEXT
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_outbox_a_envoyer ON email_outbox(statut, disponible_le)")
-
-    # ==================== MATÉRIELS (stock par département) ====================
-    # Un matériel appartient à un département (papiers, stylos, classeurs...).
-    # `quantite` = stock actuel, recalculé à partir des mouvements.
-    cur.execute('''CREATE TABLE IF NOT EXISTS materiels (
-        id SERIAL PRIMARY KEY,
-        nom VARCHAR(150) NOT NULL,
-        categorie VARCHAR(50) DEFAULT 'fourniture',
-        departement_id INTEGER REFERENCES departements(id) ON DELETE CASCADE,
-        quantite INTEGER NOT NULL DEFAULT 0,
-        seuil_alerte INTEGER NOT NULL DEFAULT 0,
-        unite VARCHAR(30) DEFAULT 'unité',
-        description TEXT,
-        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_materiels_dept ON materiels(departement_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_materiels_nom ON materiels(nom)")
-
-    # Historique des mouvements : toute entrée/sortie est tracée (auditable).
-    # type_mouvement : 'entree' (approvisionnement) | 'sortie' (consommation)
-    cur.execute('''CREATE TABLE IF NOT EXISTS materiels_mouvements (
-        id SERIAL PRIMARY KEY,
-        materiel_id INTEGER REFERENCES materiels(id) ON DELETE CASCADE,
-        type_mouvement VARCHAR(10) NOT NULL,
-        quantite INTEGER NOT NULL,
-        employe_id INTEGER REFERENCES employes(id) ON DELETE SET NULL,
-        motif TEXT,
-        user_id INTEGER,
-        username VARCHAR(80),
-        date_mouvement TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_mvt_materiel ON materiels_mouvements(materiel_id, date_mouvement DESC)")
-
-    # Attributions durables (PC, téléphone, clés...) : remise à un employé
-    # puis retour éventuel. Une attribution active a date_retour IS NULL.
-    cur.execute('''CREATE TABLE IF NOT EXISTS materiels_attributions (
-        id SERIAL PRIMARY KEY,
-        materiel_id INTEGER REFERENCES materiels(id) ON DELETE CASCADE,
-        employe_id INTEGER REFERENCES employes(id) ON DELETE CASCADE,
-        quantite INTEGER NOT NULL DEFAULT 1,
-        date_attribution DATE DEFAULT CURRENT_DATE,
-        date_retour DATE,
-        commentaire TEXT
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_attrib_materiel ON materiels_attributions(materiel_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_attrib_employe ON materiels_attributions(employe_id)")
-    # Accusé de réception : l'employé confirme avoir reçu le matériel, ce qui
-    # évite les « je n'ai jamais eu ce PC » lors des inventaires ou des soldes
-    # de tout compte.
-    for col, typ in [
-        ('accuse_reception', 'BOOLEAN DEFAULT FALSE'),
-        ('accuse_le',        'DATE'),
-        ('accuse_par',       'VARCHAR(80)'),
-        ('conteste_motif',   'TEXT'),
-        ('attribue_par',     'VARCHAR(80)'),
-    ]:
-        cur.execute(f"ALTER TABLE materiels_attributions ADD COLUMN IF NOT EXISTS {col} {typ}")
-    # Évite de renvoyer l'alerte de stock bas en boucle : une seule notif tant
-    # que le stock n'est pas repassé au-dessus du seuil (remis à FALSE alors).
-    cur.execute("ALTER TABLE materiels ADD COLUMN IF NOT EXISTS alerte_envoyee BOOLEAN DEFAULT FALSE")
-
-    # --- Inventaire physique -------------------------------------------------
-    # Une campagne fige, à un instant T, la liste des articles d'un département
-    # et leur stock théorique ; on y saisit ensuite le comptage réel. Le stock
-    # n'est corrigé qu'à la clôture, via un mouvement d'ajustement tracé.
-    # statut : 'en_cours' | 'cloture' | 'annule'
-    cur.execute('''CREATE TABLE IF NOT EXISTS inventaires (
-        id SERIAL PRIMARY KEY,
-        reference VARCHAR(40),
-        departement_id INTEGER REFERENCES departements(id) ON DELETE CASCADE,
-        statut VARCHAR(15) NOT NULL DEFAULT 'en_cours',
-        commentaire TEXT,
-        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        date_cloture TIMESTAMP,
-        cree_par INTEGER,
-        cree_par_nom VARCHAR(80),
-        cloture_par INTEGER,
-        cloture_par_nom VARCHAR(80)
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_inventaires_dept ON inventaires(departement_id, date_creation DESC)")
-
-    # Une ligne par article inventorié. quantite_theorique est figée à
-    # l'ouverture (photo du stock) ; quantite_comptee est NULL tant que
-    # l'article n'a pas été compté — un écart de 0 n'est PAS la même chose
-    # qu'un article non compté.
-    cur.execute('''CREATE TABLE IF NOT EXISTS inventaire_lignes (
-        id SERIAL PRIMARY KEY,
-        inventaire_id INTEGER REFERENCES inventaires(id) ON DELETE CASCADE,
-        materiel_id INTEGER REFERENCES materiels(id) ON DELETE CASCADE,
-        quantite_theorique INTEGER NOT NULL DEFAULT 0,
-        quantite_comptee INTEGER,
-        commentaire TEXT,
-        date_comptage TIMESTAMP,
-        compte_par_nom VARCHAR(80),
-        UNIQUE (inventaire_id, materiel_id)
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_inv_lignes_inv ON inventaire_lignes(inventaire_id)")
-    # Permet de distinguer, dans l'historique d'un matériel, une entrée/sortie
-    # saisie à la main d'un ajustement issu d'un inventaire physique.
-    cur.execute("ALTER TABLE materiels_mouvements ADD COLUMN IF NOT EXISTS origine VARCHAR(20) DEFAULT 'manuel'")
-
-    # --- Gestion de parc : patrimoine, exemplaires, maintenance --------------
-    # Informations patrimoniales portées par l'ARTICLE (valables pour tout le
-    # lot : marque, modèle, fournisseur...). Ce qui est propre à une unité
-    # précise (n° de série, garantie, état) vit dans `materiel_exemplaires`.
-    for col, typ in (
-        ('marque',            'VARCHAR(80)'),
-        ('modele',            'VARCHAR(120)'),
-        ('fournisseur',       'VARCHAR(150)'),
-        ('prix_acquisition',  'NUMERIC(14,2)'),
-        ('date_acquisition',  'DATE'),
-        ('duree_garantie_mois', 'INTEGER'),
-        # Un article « suivi à l'unité » génère des exemplaires numérotés
-        # (PC, mobilier) ; les consommables restent gérés en quantité.
-        ('suivi_unitaire',    'BOOLEAN DEFAULT FALSE'),
-        ('prefixe_inventaire', 'VARCHAR(12)'),
-    ):
-        cur.execute(f"ALTER TABLE materiels ADD COLUMN IF NOT EXISTS {col} {typ}")
-
-    # Un exemplaire = une unité physique identifiable, étiquetable, réparable.
-    # etat : 'bon' | 'usage' | 'panne' | 'reparation' | 'rebut'
-    cur.execute('''CREATE TABLE IF NOT EXISTS materiel_exemplaires (
-        id SERIAL PRIMARY KEY,
-        materiel_id INTEGER REFERENCES materiels(id) ON DELETE CASCADE,
-        numero_inventaire VARCHAR(40) UNIQUE NOT NULL,
-        numero_serie VARCHAR(120),
-        etat VARCHAR(15) NOT NULL DEFAULT 'bon',
-        employe_id INTEGER REFERENCES employes(id) ON DELETE SET NULL,
-        date_acquisition DATE,
-        prix_acquisition NUMERIC(14,2),
-        fournisseur VARCHAR(150),
-        garantie_fin DATE,
-        emplacement VARCHAR(150),
-        commentaire TEXT,
-        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_exemplaires_materiel ON materiel_exemplaires(materiel_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_exemplaires_num ON materiel_exemplaires(numero_inventaire)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_exemplaires_etat ON materiel_exemplaires(etat)")
-
-    # Circuit de réparation : panne → envoi → retour (réparé ou irréparable).
-    # statut : 'signale' | 'envoye' | 'repare' | 'irreparable' | 'annule'
-    cur.execute('''CREATE TABLE IF NOT EXISTS materiel_maintenances (
-        id SERIAL PRIMARY KEY,
-        exemplaire_id INTEGER REFERENCES materiel_exemplaires(id) ON DELETE CASCADE,
-        statut VARCHAR(15) NOT NULL DEFAULT 'signale',
-        panne TEXT NOT NULL,
-        technicien VARCHAR(150),
-        date_signalement DATE DEFAULT CURRENT_DATE,
-        date_envoi DATE,
-        date_retour DATE,
-        cout NUMERIC(14,2),
-        diagnostic TEXT,
-        signale_par VARCHAR(80),
-        cloture_par VARCHAR(80),
-        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_exemplaire ON materiel_maintenances(exemplaire_id, date_creation DESC)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_statut ON materiel_maintenances(statut)")
-
-    # --- Workflow d'assignation à 4 acteurs -------------------------------
-    # Ajouté après coup : les colonnes sont nullables pour que les
-    # interventions déjà enregistrées restent valides sans reprise de données.
-    for col, typ in [
-        # Qui a signalé : on garde l'id en plus du username, pour pouvoir
-        # notifier le demandeur et lui demander de valider le retour.
-        ('signale_par_id',    'INTEGER'),
-        # Assignation : soit un utilisateur interne, soit un prestataire.
-        ('assigne_user_id',   'INTEGER'),
-        ('prestataire_id',    'INTEGER'),
-        ('date_assignation',  'DATE'),
-        ('assigne_par',       'VARCHAR(80)'),
-        # Retour d'atelier saisi par l'exécutant, avant validation.
-        ('date_execution',    'DATE'),
-        ('execute_par',       'VARCHAR(80)'),
-        # Validation par le demandeur.
-        ('valide_par',        'VARCHAR(80)'),
-        ('date_validation',   'DATE'),
-        ('motif_refus',       'TEXT'),
-        ('validation_forcee', 'BOOLEAN DEFAULT FALSE'),
-    ]:
-        cur.execute(f"ALTER TABLE materiel_maintenances ADD COLUMN IF NOT EXISTS {col} {typ}")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_assigne ON materiel_maintenances(assigne_user_id, statut)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_maint_demandeur ON materiel_maintenances(signale_par_id, statut)")
-
-    # Annuaire des prestataires externes : remplace le champ texte libre, pour
-    # que « Atelier Info+ » soit la même entité d'une intervention à l'autre.
-    cur.execute('''CREATE TABLE IF NOT EXISTS prestataires (
-        id SERIAL PRIMARY KEY,
-        nom VARCHAR(150) NOT NULL,
-        contact VARCHAR(150),
-        telephone VARCHAR(40),
-        email VARCHAR(150),
-        specialite VARCHAR(100),
-        actif BOOLEAN DEFAULT TRUE,
-        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-
-    # Compteurs des numéros d'inventaire : une séquence par préfixe et par
-    # année (PC-2026-001, PC-2026-002...). Table dédiée plutôt que MAX()+1,
-    # qui réattribuerait un numéro après suppression d'un exemplaire.
-    cur.execute('''CREATE TABLE IF NOT EXISTS materiel_compteurs (
-        prefixe VARCHAR(12) NOT NULL,
-        annee INTEGER NOT NULL,
-        dernier INTEGER NOT NULL DEFAULT 0,
-        PRIMARY KEY (prefixe, annee)
-    )''')
-
-    # ==================== MESSAGERIE INTERNE ====================
-    # Messages privés, discussions de groupe, annonces RH. Voir
-    # blueprints/messagerie.py pour la logique.
-    cur.execute('''CREATE TABLE IF NOT EXISTS conversations (
-        id SERIAL PRIMARY KEY,
-        type VARCHAR(20) NOT NULL DEFAULT 'prive',
-        titre VARCHAR(200),
-        cible_role VARCHAR(20),
-        cree_par INTEGER REFERENCES users(id),
-        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS conversation_membres (
-        conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        dernier_message_lu_id INTEGER,
-        date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (conversation_id, user_id)
-    )''')
-    # Colonne BYTEA historique ; la Phase 4 ajoute les clés S3 hybrides.
-    # Aucun upload récent ne dépend du disque local éphémère.
-    cur.execute('''CREATE TABLE IF NOT EXISTS messages (
-        id SERIAL PRIMARY KEY,
-        conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
-        sender_id INTEGER REFERENCES users(id),
-        contenu TEXT,
-        piece_jointe_nom VARCHAR(255),
-        piece_jointe_type VARCHAR(50),
-        piece_jointe_taille INTEGER,
-        piece_jointe_contenu BYTEA,
-        date_envoi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, id)")
-    # La suppression d'un compte ne doit pas casser toute la gestion des
-    # utilisateurs dès qu'il a écrit un message. On conserve l'historique en
-    # anonymisant l'auteur (SET NULL) ; membres et lectures, eux, sont supprimés
-    # par leurs clés étrangères CASCADE.
-    cur.execute("""
-        DO $$ BEGIN
-          IF EXISTS (
-              SELECT 1 FROM pg_constraint
-               WHERE conname='conversations_cree_par_fkey' AND confdeltype <> 'n'
-          ) THEN
-            ALTER TABLE conversations DROP CONSTRAINT conversations_cree_par_fkey;
-            ALTER TABLE conversations ADD CONSTRAINT conversations_cree_par_fkey
-              FOREIGN KEY (cree_par) REFERENCES users(id) ON DELETE SET NULL;
-          END IF;
-          IF EXISTS (
-              SELECT 1 FROM pg_constraint
-               WHERE conname='messages_sender_id_fkey' AND confdeltype <> 'n'
-          ) THEN
-            ALTER TABLE messages DROP CONSTRAINT messages_sender_id_fkey;
-            ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey
-              FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL;
-          END IF;
-        END $$;
-    """)
-    # Suivi de lecture des annonces : pas de ligne de membre par destinataire
-    # potentiel (pourrait être tous les employés), juste une marque de lecture.
-    cur.execute('''CREATE TABLE IF NOT EXISTS annonce_lues (
-        conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        lu_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (conversation_id, user_id)
-    )''')
-
-    appliquer_contraintes_phase1(cur, logger)
-    appliquer_schema_phase2(cur)
-    appliquer_schema_phase3(cur)
-    appliquer_schema_phase4(cur)
-
-    # Les identifiants publics de démonstration sont strictement réservés au
-    # développement/tests ; la production exige un secret de bootstrap.
-    appliquer_seed_initial(cur, conn)
-
-    # Seed soldes congés (maintenant possible car la table existe)
-    annee_courante = datetime.now().year
-    cur.execute("SELECT COUNT(*) FROM soldes_conges WHERE annee = %s", (annee_courante,))
-    if cur.fetchone()['count'] == 0:
-        cur.execute("SELECT id, date_embauche FROM employes")
-        for emp in cur.fetchall():
-            acquis_initial = calculer_jours_acquis_prorata(emp.get('date_embauche'), annee_courante)
-            cur.execute("""
-                INSERT INTO soldes_conges (employe_id, annee, jours_acquis, jours_utilises)
-                VALUES (%s, %s, %s, 0)
-                ON CONFLICT (employe_id, annee) DO NOTHING
-            """, (emp['id'], annee_courante, acquis_initial))
-
-    conn.commit()
-    cur.close()
-    conn.close()
-    logger.info("Base PostgreSQL initialisée (Self-Service + Exports + Emails HTML + Soldes Congés)")
+    """Réexport de compatibilité du bootstrap déplacé dans services/schema.py."""
+    return initialiser_schema(
+        get_db, get_cursor, logger, calculer_jours_acquis_prorata
+    )
 # ==================== AUTH ====================
 # ==================== AUTHENTIFICATION ======================================
 # Routes extraites dans blueprints/auth.py.
 
-# ==================== RECHERCHE GLOBALE ====================
-# Une seule fonction sert l'aperçu instantané (JSON) et la page de résultats :
-# les deux voient donc exactement la même chose, y compris les règles d'accès.
-
-# Qui a le droit de voir quel type de résultat. La règle reproduit celle des
-# pages correspondantes : un employé n'a rien à faire dans la liste des comptes.
-# `None` = accessible à tous les rôles connectés.
-RECHERCHE_ACCES = {
-    'employe':     None,
-    'departement': None,
-    'materiel':    None,
-    'exemplaire':  None,
-    'conge':       ('admin', 'rh', 'manager'),
-    'absence':     ('admin', 'rh', 'manager'),
-    'document':    None,
-    'utilisateur': ('admin', 'rh'),
-    'page':        None,
-}
-
-# Pages de l'application atteignables depuis la recherche : taper « congé »
-# doit proposer d'aller sur la page des congés, pas seulement lister des demandes.
-RECHERCHE_PAGES = [
-    ('Tableau de bord',        'dashboard',            None,                        'dashboard'),
-    ('Employés',               'index',                None,                        'users'),
-    ('Départements',           'departements.departements', None,                    'building'),
-    ('Matériels',              'parc.materiels',       None,                        'box'),
-    ('Inventaire physique',    'parc.inventaires',     None,                        'box'),
-    ('Maintenance',            'parc.maintenances',    None,                        'box'),
-    ('Présences',              'presences.presences',  None,                        'clock'),
-    ('Historique',             'presences.historique', None,                        'history'),
-    ('Absences',               'absences',             ('admin', 'rh', 'manager'),  'user-x'),
-    ('Congés',                 'conges',               None,                        'palm'),
-    ('Calendrier des congés',  'calendrier_conges',    None,                        'calendar'),
-    ('Soldes de congés',       'soldes_conges_page',   None,                        'wallet'),
-    ('Permissions',            'permissions',          None,                        'file'),
-    ('Documents',              'documents.documents',  None,                        'file'),
-    ('Contrats',               'contrats.contrats_liste', None,                      'file'),
-    ('Départs',                'departs.departs_liste', ('admin', 'rh'),             'logout'),
-    ('Utilisateurs',           'utilisateurs.utilisateurs_page', ('admin', 'rh'),            'shield'),
-    ('Notifications',          'notifications',        None,                        'bell'),
-    ('Mon espace',             'auth.mon_profil',      None,                        'user'),
-]
-
-
-def _date_courte(valeur):
-    """Formate une date pour l'affichage des résultats (tolère None)."""
-    try:
-        return valeur.strftime('%d/%m/%Y')
-    except Exception:
-        return str(valeur or '')
-
-
-def _total_exact(lignes, defaut=0):
-    """Total réel renvoyé par COUNT(*) OVER() (calculé avant le LIMIT)."""
-    return lignes[0]['_total'] if lignes else defaut
-
-
-def _recherche_autorise(categorie, role):
-    """Le rôle a-t-il le droit de voir cette catégorie ? (admin voit tout)"""
-    roles = RECHERCHE_ACCES.get(categorie)
-    return roles is None or role == 'admin' or role in roles
-
-
-def recherche_globale(terme, role, limite_par_categorie=5):
-    """Cherche `terme` dans tout le contenu métier visible par `role`.
-
-    Renvoie une liste de groupes [{categorie, libelle, icone, resultats[], total}].
-    Chaque résultat porte un titre, un sous-titre et une URL de destination.
-    """
-    terme = (terme or '').strip()
-    if len(terme) < 2:          # en dessous, le bruit dépasse l'utilité
-        return []
-
-    # LIKE insensible à la casse. On échappe les jokers SQL pour qu'un terme
-    # contenant % ou _ soit cherché littéralement au lieu de tout retourner.
-    motif = '%' + terme.lower().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
-    groupes = []
-
-    def ajouter(categorie, libelle, icone, lignes, total, url_liste=None):
-        if lignes:
-            groupes.append({
-                'categorie': categorie, 'libelle': libelle, 'icone': icone,
-                'resultats': lignes, 'total': total, 'url_liste': url_liste,
-            })
-
-    with db_cursor() as (conn, cur):
-        employee_scope, employee_scope_params = department_scope_sql('e', cur=cur)
-        department_scope, department_scope_params = department_scope_sql('d', 'nom', cur)
-        # ---- Employés ----
-        if _recherche_autorise('employe', role):
-            cur.execute(f"""
-                SELECT COUNT(*) OVER() AS _total,
-                       e.id, e.nom, e.prenom, e.poste, e.departement, e.email, (
-                    SELECT u.photo FROM users u
-                     WHERE u.employe_id = e.id AND u.photo IS NOT NULL
-                     ORDER BY u.id LIMIT 1
-                ) AS photo
-                  FROM employes e
-                 WHERE (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s
-                    OR LOWER(e.nom || ' ' || e.prenom) LIKE %s
-                    OR LOWER(e.prenom || ' ' || e.nom) LIKE %s
-                    OR LOWER(COALESCE(e.poste, '')) LIKE %s
-                    OR LOWER(COALESCE(e.email, '')) LIKE %s
-                    OR LOWER(COALESCE(e.telephone, '')) LIKE %s)
-                   AND {employee_scope}
-                 ORDER BY e.nom, e.prenom LIMIT %s
-            """, [motif] * 7 + employee_scope_params + [limite_par_categorie + 1])
-            lignes = cur.fetchall()
-            total = _total_exact(lignes)
-            ajouter('employe', 'Employés', 'users', [{
-                'titre': f"{r['prenom']} {r['nom']}",
-                'sous_titre': ' · '.join(x for x in [r.get('poste'), r.get('departement')] if x) or r.get('email') or '',
-                'url': url_for('view_employee', id=r['id']),
-                'photo': r.get('photo'),
-            } for r in lignes[:limite_par_categorie]], total, url_for('index', search=terme))
-
-        # ---- Départements ----
-        if _recherche_autorise('departement', role):
-            cur.execute(f"""
-                SELECT COUNT(*) OVER() AS _total, d.id, d.nom, d.description, d.responsable
-                  FROM departements d
-                 WHERE (LOWER(COALESCE(d.nom, '')) LIKE %s
-                    OR LOWER(COALESCE(d.description, '')) LIKE %s
-                    OR LOWER(COALESCE(d.responsable, '')) LIKE %s)
-                   AND {department_scope}
-                 ORDER BY d.nom LIMIT %s
-            """, [motif, motif, motif] + department_scope_params +
-                  [limite_par_categorie + 1])
-            lignes = cur.fetchall()
-            ajouter('departement', 'Départements', 'building', [{
-                'titre': r['nom'],
-                'sous_titre': (f"Responsable : {r['responsable']}" if r.get('responsable') else (r.get('description') or '')),
-                'url': url_for('parc.materiels_departement', id=r['id']),
-            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('departements.departements'))
-
-        # ---- Matériels ----
-        if _recherche_autorise('materiel', role):
-            cur.execute(f"""
-                SELECT COUNT(*) OVER() AS _total,
-                       m.id, m.nom, m.categorie, m.quantite, m.unite, m.departement_id, d.nom AS dept
-                  FROM materiels m LEFT JOIN departements d ON d.id = m.departement_id
-                 WHERE (LOWER(m.nom) LIKE %s
-                    OR LOWER(COALESCE(m.description, '')) LIKE %s
-                    OR LOWER(COALESCE(m.categorie, '')) LIKE %s)
-                   AND {department_scope}
-                 ORDER BY m.nom LIMIT %s
-            """, [motif, motif, motif] + department_scope_params +
-                  [limite_par_categorie + 1])
-            lignes = cur.fetchall()
-            ajouter('materiel', 'Matériels', 'box', [{
-                'titre': r['nom'],
-                'sous_titre': ' · '.join(x for x in [
-                    r.get('dept'), f"{r['quantite']} {r.get('unite') or ''}".strip()] if x),
-                'url': (url_for('parc.materiels_departement', id=r['departement_id'])
-                        if r.get('departement_id') else url_for('parc.materiels')),
-            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('parc.materiels'))
-
-        # ---- Exemplaires / numéros d'inventaire ----
-        if _recherche_autorise('exemplaire', role):
-            cur.execute(f"""SELECT COUNT(*) OVER() AS _total,
-                       ex.id,ex.numero_inventaire,ex.numero_serie,ex.etat,
-                       m.nom AS materiel_nom,d.nom AS departement
-                  FROM materiel_exemplaires ex JOIN materiels m ON m.id=ex.materiel_id
-                  LEFT JOIN departements d ON d.id=m.departement_id
-                 WHERE (LOWER(ex.numero_inventaire) LIKE %s
-                    OR LOWER(COALESCE(ex.numero_serie,'')) LIKE %s
-                    OR LOWER(m.nom) LIKE %s) AND {department_scope}
-                 ORDER BY ex.numero_inventaire LIMIT %s""",
-                        [motif,motif,motif] + department_scope_params + [limite_par_categorie+1])
-            lignes = cur.fetchall()
-            ajouter('exemplaire','Exemplaires','box',[{
-                'titre': r['numero_inventaire'],
-                'sous_titre': ' · '.join(x for x in [r['materiel_nom'],r.get('departement'),r.get('etat')] if x),
-                'url': url_for('parc.view_exemplaire', id=r['id']),
-            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('parc.materiels', search=terme))
-
-        # ---- Congés ----
-        if _recherche_autorise('conge', role):
-            cur.execute(f"""
-                SELECT COUNT(*) OVER() AS _total,
-                       c.id, c.type_conge, c.statut, c.date_debut, c.date_fin, c.motif,
-                       e.nom, e.prenom
-                  FROM conges c JOIN employes e ON c.employe_id = e.id
-                 WHERE (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s
-                    OR LOWER(COALESCE(c.motif, '')) LIKE %s
-                    OR LOWER(COALESCE(c.type_conge, '')) LIKE %s
-                    OR LOWER(COALESCE(c.statut, '')) LIKE %s)
-                   AND {employee_scope}
-                 ORDER BY c.date_debut DESC LIMIT %s
-            """, [motif] * 5 + employee_scope_params + [limite_par_categorie + 1])
-            lignes = cur.fetchall()
-            ajouter('conge', 'Congés', 'palm', [{
-                'titre': f"{r['prenom']} {r['nom']} — {r.get('type_conge') or 'congé'}",
-                'sous_titre': f"{_date_courte(r['date_debut'])} → {_date_courte(r['date_fin'])} · {r.get('statut') or ''}",
-                'url': url_for('conges', search=f"{r['prenom']} {r['nom']}"),
-            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('conges', search=terme))
-
-        # ---- Absences ----
-        if _recherche_autorise('absence', role):
-            cur.execute(f"""
-                SELECT COUNT(*) OVER() AS _total, a.id, a.date, a.motif, e.nom, e.prenom
-                  FROM absences a JOIN employes e ON a.employe_id = e.id
-                 WHERE (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s
-                    OR LOWER(COALESCE(a.motif, '')) LIKE %s)
-                   AND {employee_scope}
-                 ORDER BY a.date DESC LIMIT %s
-            """, [motif, motif, motif] + employee_scope_params +
-                  [limite_par_categorie + 1])
-            lignes = cur.fetchall()
-            ajouter('absence', 'Absences', 'user-x', [{
-                'titre': f"{r['prenom']} {r['nom']}",
-                'sous_titre': f"{_date_courte(r['date'])}" + (f" · {r['motif']}" if r.get('motif') else ''),
-                'url': url_for('absences', search=f"{r['prenom']} {r['nom']}"),
-            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('absences', search=terme))
-
-        # ---- Documents ----
-        if _recherche_autorise('document', role):
-            cur.execute(f"""
-                SELECT COUNT(*) OVER() AS _total, d.id, d.titre, d.nom_fichier, d.description, e.nom, e.prenom
-                  FROM documents d LEFT JOIN employes e ON d.employe_id = e.id
-                 WHERE (LOWER(d.titre) LIKE %s
-                    OR LOWER(COALESCE(d.description, '')) LIKE %s
-                    OR LOWER(COALESCE(d.nom_fichier, '')) LIKE %s)
-                   AND {employee_scope}
-                 ORDER BY d.date_upload DESC LIMIT %s
-            """, [motif, motif, motif] + employee_scope_params +
-                  [limite_par_categorie + 1])
-            lignes = cur.fetchall()
-            ajouter('document', 'Documents', 'file', [{
-                'titre': r['titre'],
-                'sous_titre': (f"{r['prenom']} {r['nom']}" if r.get('nom') else (r.get('nom_fichier') or '')),
-                'url': url_for('documents.documents'),
-            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('documents.documents'))
-
-        # ---- Comptes utilisateurs ----
-        if _recherche_autorise('utilisateur', role):
-            cur.execute("""
-                SELECT COUNT(*) OVER() AS _total, u.id, u.username, u.role, u.photo, e.nom, e.prenom
-                  FROM users u LEFT JOIN employes e ON u.employe_id = e.id
-                 WHERE LOWER(u.username) LIKE %s
-                    OR LOWER(COALESCE(e.nom, '')) LIKE %s
-                    OR LOWER(COALESCE(e.prenom, '')) LIKE %s
-                 ORDER BY u.username LIMIT %s
-            """, [motif, motif, motif, limite_par_categorie + 1])
-            lignes = cur.fetchall()
-            ajouter('utilisateur', 'Comptes', 'shield', [{
-                'titre': r['username'],
-                'sous_titre': ' · '.join(x for x in [
-                    get_role_label(r.get('role')),
-                    (f"{r['prenom']} {r['nom']}" if r.get('nom') else None)] if x),
-                'url': url_for('utilisateurs.utilisateurs_page'),
-                'photo': r.get('photo'),
-            } for r in lignes[:limite_par_categorie]], _total_exact(lignes), url_for('utilisateurs.utilisateurs_page'))
-
-    # ---- Pages de l'application ----
-    terme_bas = terme.lower()
-    pages = []
-    for libelle, endpoint, roles, icone in RECHERCHE_PAGES:
-        if roles and role != 'admin' and role not in roles:
-            continue
-        if terme_bas in libelle.lower():
-            try:
-                pages.append({'titre': libelle, 'sous_titre': 'Aller à la page',
-                              'url': url_for(endpoint)})
-            except Exception:
-                continue        # endpoint absent : on ignore la page
-    if pages:
-        groupes.append({'categorie': 'page', 'libelle': 'Navigation', 'icone': 'dashboard',
-                        'resultats': pages[:limite_par_categorie], 'total': len(pages),
-                        'url_liste': None})
-
-    return groupes
-
-
-@app.route('/api/recherche')
-@login_required
-def api_recherche():
-    """Aperçu instantané : renvoie les résultats en JSON pour le panneau déroulant."""
-    terme = request.args.get('q', '').strip()
-    role = session.get('role', 'employe')
-    if len(terme) < 2:
-        return jsonify({'terme': terme, 'groupes': [], 'total': 0})
-    try:
-        groupes = recherche_globale(terme, role, limite_par_categorie=4)
-    except Exception as e:
-        logger.error("Erreur de recherche globale : %s", e, exc_info=True)
-        return jsonify({'terme': terme, 'groupes': [], 'total': 0, 'erreur': True}), 200
-    total = sum(g['total'] for g in groupes)
-    return jsonify({'terme': terme, 'groupes': groupes, 'total': total})
-
-
-@app.route('/recherche')
-@login_required
-def recherche_page():
-    """Page listant tous les résultats, groupés par catégorie."""
-    terme = request.args.get('q', '').strip()
-    role = session.get('role', 'employe')
-    groupes = []
-    if len(terme) >= 2:
-        try:
-            groupes = recherche_globale(terme, role, limite_par_categorie=20)
-        except Exception as e:
-            logger.error("Erreur de recherche globale : %s", e, exc_info=True)
-            flash("La recherche a échoué. Réessayez.", "danger")
-    total = sum(g['total'] for g in groupes)
-    return render_template('recherche.html', terme=terme, groupes=groupes, total=total)
+# Recherche globale extraite dans blueprints/recherche.py.
 
 # ==================== ESPACE PERSONNEL =====================================
 # Routes extraites dans blueprints/auth.py.
@@ -2445,677 +1333,12 @@ def export_conges_excel():
     return resp
 
 # ==================== BASIC ROUTES ====================
-@app.route('/')
-@login_required
-def dashboard():
-    """Tableau de bord global pour admin/RH, départemental pour les autres.
-
-    Le cloisonnement est appliqué dans CHAQUE requête SQL. Un compte non
-    privilégié sans fiche employé ou sans département voit volontairement des
-    compteurs vides : il ne doit jamais basculer implicitement sur la vue
-    globale.
-    """
-    with db_cursor() as (conn, cur):
-        data_scope = get_department_scope(cur)
-        vue_globale = data_scope['is_global']
-        departement = data_scope.get('department')
-        scope_vide = data_scope['is_empty']
-        dashboard_scope = {
-            **data_scope,
-            'label': "Toute l'entreprise" if vue_globale else
-                     (departement or 'Aucun département rattaché'),
-        }
-
-        def scope_employe(alias='e'):
-            return department_scope_sql(alias, 'departement', cur)
-
-        def scope_departement(alias='d'):
-            return department_scope_sql(alias, 'nom', cur)
-
-        today = date.today()
-        annee = today.year
-        emp_where, emp_params = scope_employe('e')
-
-        # === Personnel ======================================================
-        cur.execute(f"""
-            SELECT COUNT(*) AS total,
-                   COALESCE(AVG(e.salaire), 0) AS salaire_moyen,
-                   COALESCE(AVG(CURRENT_DATE - e.date_embauche), 0) AS anciennete_jours
-              FROM employes e WHERE {emp_where} AND e.actif
-        """, emp_params)
-        personnel = cur.fetchone()
-        total_employes = personnel['total'] or 0
-        salaire_moyen = personnel['salaire_moyen'] or 0
-        anciennete_moyenne = round(float(personnel['anciennete_jours'] or 0) / 365.25, 1)
-
-        if vue_globale:
-            cur.execute("""
-                SELECT COUNT(*) AS total FROM (
-                    SELECT nom FROM departements WHERE nom IS NOT NULL
-                    UNION
-                    SELECT departement FROM employes
-                     WHERE departement IS NOT NULL AND departement <> ''
-                ) x
-            """)
-            total_departements = cur.fetchone()['total'] or 0
-        else:
-            total_departements = 0 if scope_vide else 1
-
-        # === Présences et temps ============================================
-        cur.execute(f"""
-            SELECT p.*, e.nom, e.prenom
-              FROM presences p JOIN employes e ON e.id = p.employe_id
-             WHERE p.date = %s AND {emp_where} AND e.actif
-        """, [today] + emp_params)
-        presences_today = cur.fetchall()
-        teletravail = 0
-        presents = 0
-        retards_aujourdhui = []
-        total_retards_minutes = 0
-        for presence in presences_today:
-            statut = (presence.get('statut') or 'présent').lower()
-            if statut == 'télétravail':
-                teletravail += 1
-            elif statut != 'absent':
-                presents += 1
-            retard = calculer_retard(presence.get('heure_arrivee'))
-            if retard > 0 and statut != 'télétravail':
-                presence['retard_minutes'] = retard
-                retards_aujourdhui.append(presence)
-                total_retards_minutes += retard
-
-        total_presences_aujourdhui = presents + teletravail
-        presences_stat = {
-            'present': presents,
-            'absent': max(0, total_employes - presents - teletravail),
-            'teletravail': teletravail,
-        }
-        taux_presence = round(
-            total_presences_aujourdhui / total_employes * 100, 1
-        ) if total_employes else 0
-
-        cur.execute(f"""
-            SELECT COALESCE(SUM(EXTRACT(EPOCH FROM
-                       (p.heure_depart - p.heure_arrivee)) / 3600), 0) AS heures
-              FROM presences p JOIN employes e ON e.id = p.employe_id
-             WHERE p.heure_arrivee IS NOT NULL AND p.heure_depart IS NOT NULL
-               AND DATE_TRUNC('month', p.date) = DATE_TRUNC('month', CURRENT_DATE)
-               AND {emp_where} AND e.actif
-        """, emp_params)
-        heures_totales = round(float(cur.fetchone()['heures'] or 0), 1)
-
-        # === Congés, permissions et soldes ================================
-        cur.execute(f"""
-            SELECT COUNT(*) FILTER (WHERE c.statut IN ('en attente','en_attente','avis rendu')) AS en_attente,
-                   COUNT(*) FILTER (WHERE c.statut = 'approuvé'
-                         AND EXTRACT(YEAR FROM c.date_debut) = %s) AS approuve,
-                   COUNT(*) FILTER (WHERE c.statut = 'refusé'
-                         AND EXTRACT(YEAR FROM c.date_debut) = %s) AS refuse,
-                   COALESCE(SUM(c.nombre_jours) FILTER (WHERE c.statut = 'approuvé'
-                         AND EXTRACT(YEAR FROM c.date_debut) = %s), 0) AS jours_approuves
-              FROM conges c JOIN employes e ON e.id = c.employe_id
-             WHERE {emp_where} AND e.actif
-        """, [annee, annee, annee] + emp_params)
-        conges_row = cur.fetchone()
-        conges_stat = {
-            'en_attente': conges_row['en_attente'] or 0,
-            'approuve': conges_row['approuve'] or 0,
-            'refuse': conges_row['refuse'] or 0,
-            'jours_approuves': float(conges_row['jours_approuves'] or 0),
-        }
-
-        cur.execute(f"""
-            SELECT COUNT(*) FILTER (WHERE p.statut IN ('en attente','en_attente','avis rendu')) AS en_attente,
-                   COUNT(*) FILTER (WHERE p.statut = 'approuvé'
-                         AND EXTRACT(YEAR FROM p.date_debut) = %s) AS approuve,
-                   COUNT(*) FILTER (WHERE p.statut = 'refusé'
-                         AND EXTRACT(YEAR FROM p.date_debut) = %s) AS refuse
-              FROM permissions p JOIN employes e ON e.id = p.employe_id
-             WHERE {emp_where} AND e.actif
-        """, [annee, annee] + emp_params)
-        permission_row = cur.fetchone()
-        permissions_stat = {
-            'en_attente': permission_row['en_attente'] or 0,
-            'approuve': permission_row['approuve'] or 0,
-            'refuse': permission_row['refuse'] or 0,
-        }
-
-        cur.execute(f"""
-            SELECT COALESCE(SUM(s.jours_acquis - s.jours_utilises), 0) AS restant
-              FROM soldes_conges s JOIN employes e ON e.id = s.employe_id
-             WHERE s.annee = %s AND {emp_where} AND e.actif
-        """, [annee] + emp_params)
-        solde_conges_restant = round(float(cur.fetchone()['restant'] or 0), 1)
-
-        # === Absences et justificatifs =====================================
-        cur.execute(f"""
-            SELECT COUNT(*) FILTER (WHERE EXTRACT(YEAR FROM a.date) = %s) AS total,
-                   COUNT(*) FILTER (WHERE EXTRACT(YEAR FROM a.date) = %s
-                       AND COALESCE(a.statut,'non_justifiee') IN ('non_justifiee','refusee')) AS a_regulariser,
-                   COUNT(*) FILTER (WHERE a.statut = 'justificatif_depose') AS justificatifs_attente,
-                   COUNT(*) FILTER (WHERE EXTRACT(YEAR FROM a.date) = %s
-                       AND a.statut = 'acceptee') AS acceptees
-              FROM absences a JOIN employes e ON e.id = a.employe_id
-             WHERE {emp_where} AND e.actif
-        """, [annee, annee, annee] + emp_params)
-        absence_row = cur.fetchone()
-        absences_stat = {
-            'total': absence_row['total'] or 0,
-            'a_regulariser': absence_row['a_regulariser'] or 0,
-            'justificatifs_attente': absence_row['justificatifs_attente'] or 0,
-            'acceptees': absence_row['acceptees'] or 0,
-        }
-
-        # === Documents =====================================================
-        cur.execute(f"""
-            SELECT COUNT(*) AS total,
-                   COUNT(*) FILTER (WHERE d.date_expiration < CURRENT_DATE) AS expires,
-                   COUNT(*) FILTER (WHERE d.date_expiration BETWEEN CURRENT_DATE
-                                      AND CURRENT_DATE + INTERVAL '30 days') AS expirent_bientot
-              FROM documents d LEFT JOIN employes e ON e.id = d.employe_id
-             WHERE {emp_where} AND e.actif
-        """, emp_params)
-        document_row = cur.fetchone()
-        documents_stat = {
-            'total': document_row['total'] or 0,
-            'expires': document_row['expires'] or 0,
-            'expirent_bientot': document_row['expirent_bientot'] or 0,
-        }
-
-        # === Matériels, parc et attributions ===============================
-        dept_where, dept_params = scope_departement('d')
-        cur.execute(f"""
-            SELECT COUNT(*) AS articles,
-                   COALESCE(SUM(m.quantite), 0) AS stock_total,
-                   COUNT(*) FILTER (WHERE m.seuil_alerte > 0
-                                      AND m.quantite <= m.seuil_alerte) AS alertes_stock,
-                   COALESCE(SUM(
-                     CASE WHEN COALESCE(m.suivi_unitaire, FALSE) THEN
-                       COALESCE((SELECT SUM(COALESCE(ex.prix_acquisition,
-                                                    m.prix_acquisition, 0))
-                                   FROM materiel_exemplaires ex
-                                  WHERE ex.materiel_id = m.id AND ex.etat <> 'rebut'), 0)
-                     ELSE COALESCE(m.prix_acquisition, 0) * m.quantite END
-                   ), 0) AS valeur_parc
-              FROM materiels m LEFT JOIN departements d ON d.id = m.departement_id
-             WHERE {dept_where}
-        """, dept_params)
-        materiel_row = cur.fetchone()
-        cur.execute(f"""
-            SELECT COUNT(*) AS total
-              FROM materiels_attributions a
-              JOIN materiels m ON m.id = a.materiel_id
-              LEFT JOIN departements d ON d.id = m.departement_id
-             WHERE a.date_retour IS NULL AND {dept_where}
-        """, dept_params)
-        attributions_actives = cur.fetchone()['total'] or 0
-        materiels_stat = {
-            'articles': materiel_row['articles'] or 0,
-            'stock_total': materiel_row['stock_total'] or 0,
-            'alertes_stock': materiel_row['alertes_stock'] or 0,
-            'valeur_parc': float(materiel_row['valeur_parc'] or 0),
-            'attributions_actives': attributions_actives,
-        }
-
-        # === Maintenance ===================================================
-        cur.execute(f"""
-            SELECT COUNT(*) FILTER (WHERE mt.statut IN ('signale','assigne','envoye','a_valider')) AS ouvertes,
-                   COUNT(*) FILTER (WHERE mt.statut = 'a_valider') AS a_valider,
-                   COALESCE(SUM(mt.cout) FILTER (
-                       WHERE EXTRACT(YEAR FROM mt.date_signalement) = %s), 0) AS cout_annee
-              FROM materiel_maintenances mt
-              JOIN materiel_exemplaires ex ON ex.id = mt.exemplaire_id
-              JOIN materiels m ON m.id = ex.materiel_id
-              LEFT JOIN departements d ON d.id = m.departement_id
-             WHERE {dept_where}
-        """, [annee] + dept_params)
-        maintenance_row = cur.fetchone()
-        maintenances_stat = {
-            'ouvertes': maintenance_row['ouvertes'] or 0,
-            'a_valider': maintenance_row['a_valider'] or 0,
-            'cout_annee': float(maintenance_row['cout_annee'] or 0),
-        }
-
-        # === Inventaires ===================================================
-        cur.execute(f"""
-            SELECT COUNT(DISTINCT i.id) FILTER (WHERE i.statut = 'en_cours') AS en_cours,
-                   COUNT(il.id) FILTER (WHERE il.quantite_comptee IS NOT NULL
-                       AND il.quantite_comptee <> il.quantite_theorique) AS ecarts
-              FROM inventaires i
-              LEFT JOIN inventaire_lignes il ON il.inventaire_id = i.id
-              LEFT JOIN departements d ON d.id = i.departement_id
-             WHERE {dept_where}
-        """, dept_params)
-        inventaire_row = cur.fetchone()
-        inventaires_stat = {
-            'en_cours': inventaire_row['en_cours'] or 0,
-            'ecarts': inventaire_row['ecarts'] or 0,
-        }
-
-        # === Accès, audit et messagerie (vue globale uniquement) ===========
-        systeme_stat = None
-        if vue_globale:
-            cur.execute("""
-                SELECT (SELECT COUNT(*) FROM users) AS utilisateurs,
-                       (SELECT COUNT(*) FROM sessions_actives
-                         WHERE revoked_at IS NULL
-                           AND last_seen > CURRENT_TIMESTAMP - INTERVAL '1 hour') AS sessions_actives,
-                       (SELECT COUNT(*) FROM audit_logs
-                         WHERE timestamp::date = CURRENT_DATE) AS actions_audit,
-                       (SELECT COUNT(*) FROM notifications
-                         WHERE is_read = FALSE) AS notifications_non_lues,
-                       (SELECT COUNT(*) FROM email_outbox
-                         WHERE statut = 'en_attente') AS emails_attente,
-                       (SELECT COUNT(*) FROM email_outbox
-                         WHERE statut = 'echec') AS emails_echec
-            """)
-            systeme_stat = cur.fetchone()
-
-        # === Répartition et activité récente ===============================
-        cur.execute(f"""
-            SELECT COALESCE(NULLIF(e.departement,''), 'Sans département') AS nom,
-                   COUNT(*) AS nb_employes
-              FROM employes e WHERE {emp_where} AND e.actif
-             GROUP BY COALESCE(NULLIF(e.departement,''), 'Sans département')
-             ORDER BY nb_employes DESC LIMIT 8
-        """, emp_params)
-        dept_stats = []
-        for row in cur.fetchall():
-            pct = round(row['nb_employes'] / total_employes * 100, 1) if total_employes else 0
-            dept_stats.append({'nom': row['nom'], 'nb_employes': row['nb_employes'],
-                               'pourcentage': pct})
-
-        cur.execute(f"""
-            SELECT p.*, e.nom, e.prenom FROM presences p
-            JOIN employes e ON e.id = p.employe_id
-            WHERE {emp_where} AND e.actif ORDER BY p.date DESC, p.id DESC LIMIT 5
-        """, emp_params)
-        recent_presences = cur.fetchall()
-        cur.execute(f"""
-            SELECT c.*, e.nom, e.prenom FROM conges c
-            JOIN employes e ON e.id = c.employe_id
-            WHERE {emp_where} AND e.actif ORDER BY c.date_demande DESC, c.id DESC LIMIT 5
-        """, emp_params)
-        recent_conges = cur.fetchall()
-
-        # === Graphiques ====================================================
-        if vue_globale:
-            tendance_expr, tendance_params = 'COUNT(p.id)', []
-        elif scope_vide:
-            tendance_expr, tendance_params = '0', []
-        else:
-            tendance_expr = 'COUNT(p.id) FILTER (WHERE e.departement = %s)'
-            tendance_params = [departement]
-        cur.execute(f"""
-            SELECT serie::date AS jour, {tendance_expr} AS nb
-              FROM generate_series(CURRENT_DATE - INTERVAL '29 days', CURRENT_DATE,
-                                   INTERVAL '1 day') AS serie
-              LEFT JOIN presences p ON p.date = serie::date
-              LEFT JOIN employes e ON e.id = p.employe_id
-             GROUP BY serie ORDER BY serie
-        """, tendance_params)
-        tendance_rows = cur.fetchall()
-
-    chart_tendance = {
-        'labels': [r['jour'].strftime('%d/%m') for r in tendance_rows],
-        'valeurs': [r['nb'] for r in tendance_rows],
-    }
-    chart_presences_jour = {
-        'labels': ['Présent', 'Absent', 'Télétravail'],
-        'valeurs': [presences_stat['present'], presences_stat['absent'],
-                    presences_stat['teletravail']],
-    }
-    chart_conges = {
-        'labels': ['En attente', 'Approuvés', 'Refusés'],
-        'valeurs': [conges_stat['en_attente'], conges_stat['approuve'],
-                    conges_stat['refuse']],
-    }
-    chart_departements = {
-        'labels': [d['nom'] for d in dept_stats],
-        'valeurs': [d['nb_employes'] for d in dept_stats],
-    }
-
-    return render_template(
-        'dashboard.html', dashboard_scope=dashboard_scope,
-        peut_voir_salaires=vue_globale, total_employes=total_employes,
-        total_departements=total_departements, salaire_moyen=salaire_moyen,
-        anciennete_moyenne=anciennete_moyenne,
-        total_presences_aujourdhui=total_presences_aujourdhui,
-        today=today, presences_stat=presences_stat, taux_presence=taux_presence,
-        retards_aujourdhui=retards_aujourdhui, nb_retards=len(retards_aujourdhui),
-        total_retards_minutes=total_retards_minutes, heures_totales=heures_totales,
-        conges_stat=conges_stat, permissions_stat=permissions_stat,
-        solde_conges_restant=solde_conges_restant, absences_stat=absences_stat,
-        documents_stat=documents_stat, materiels_stat=materiels_stat,
-        maintenances_stat=maintenances_stat, inventaires_stat=inventaires_stat,
-        systeme_stat=systeme_stat,
-        dept_stats=dept_stats, recent_presences=recent_presences,
-        recent_conges=recent_conges, chart_tendance=chart_tendance,
-        chart_presences_jour=chart_presences_jour, chart_conges=chart_conges,
-        chart_departements=chart_departements,
-        modules_couverts=12 if vue_globale else 9,
-    )
+# Tableau de bord général extrait dans blueprints/dashboard.py.
 
 # ==================== PRÉSENCES ==============================================
 # Routes extraites dans blueprints/presences.py.
 
-@app.route('/conges')
-@login_required
-def conges():
-    conn = get_db()
-    cur = get_cursor(conn)
-    scope_where, scope_params = department_scope_sql('e', cur=cur)
-
-    search = request.args.get('search', '').strip()
-    statut = request.args.get('statut', '').strip()
-    type_conge = request.args.get('type_conge', '').strip()
-    date_debut = request.args.get('date_debut', '').strip()
-    date_fin = request.args.get('date_fin', '').strip()
-    page = max(1, request.args.get('page', 1, type=int))
-    per_page = 10
-
-    where = f" AND {scope_where}"
-    params = list(scope_params)
-    if search:
-        where += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
-        params += [f"%{search.lower()}%", f"%{search.lower()}%"]
-    if statut:
-        where += " AND c.statut = %s"; params.append(statut)
-    if type_conge:
-        where += " AND c.type_conge = %s"; params.append(type_conge)
-    if date_debut:
-        where += " AND c.date_debut >= %s"; params.append(date_debut)
-    if date_fin:
-        where += " AND c.date_fin <= %s"; params.append(date_fin)
-
-    from_ = "conges c JOIN employes e ON c.employe_id = e.id"
-    cur.execute(f"SELECT COUNT(*) AS nb FROM {from_} WHERE 1=1{where}", params)
-    total = cur.fetchone()['nb']
-    pg = pagination_info(total, page, per_page)
-    offset = (pg['page'] - 1) * per_page
-    cur.execute(f"SELECT c.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY c.date_demande DESC LIMIT %s OFFSET %s", params + [per_page, offset])
-    conges_list = cur.fetchall()
-
-    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
-                scope_params)
-    employees = cur.fetchall()
-
-    soldes = {}
-    annee_courante = datetime.now().year
-    if session.get('role') in ['admin', 'rh', 'manager']:
-        for emp in employees:
-            s = get_solde_conges(emp['id'], annee_courante)
-            s['nom'] = f"{emp['prenom']} {emp['nom']}"
-            soldes[emp['id']] = s
-
-    cur.execute(f"""SELECT DISTINCT c.type_conge FROM conges c
-                    JOIN employes e ON e.id = c.employe_id
-                    WHERE c.type_conge IS NOT NULL AND {scope_where}
-                    ORDER BY c.type_conge""", scope_params)
-    types = [r['type_conge'] for r in cur.fetchall()]
-
-    cur.close()
-    conn.close()
-    filters = {'search': search, 'statut': statut, 'type_conge': type_conge, 'date_debut': date_debut, 'date_fin': date_fin}
-    return render_template('conges.html', conges=conges_list, employees=employees, soldes=soldes,
-                           annee_courante=annee_courante, types=types, filters=filters,
-                           libelles=DEMANDE_LIBELLES, ouvertes=DEMANDE_OUVERTES,
-                           peut_decider=_peut_decider_rh(), peut_avis=_peut_donner_avis(),
-                           pg=pg, page_items=page_list(pg['page'], pg['pages']),
-                           base_qs=urlencode({k: v for k, v in filters.items() if v}))
-
-@app.route('/conges/add', methods=['GET', 'POST'])
-@login_required
-def add_conge():
-    """Dépôt d'une demande de congé.
-
-    Un employé ne peut déposer que pour lui-même ; un gestionnaire peut saisir
-    pour n'importe qui (cas des demandes transmises sur papier).
-    """
-    moi = get_current_employee()
-    gestionnaire = session.get('role') in ('admin', 'rh', 'manager')
-
-    with db_cursor(commit=True) as (conn, cur):
-        scope_where, scope_params = department_scope_sql('e', cur=cur)
-        if request.method == 'POST':
-            employe_id = request.form.get('employe_id', type=int)
-            type_conge = request.form.get('type_conge')
-            date_debut = request.form.get('date_debut')
-            date_fin = request.form.get('date_fin')
-            motif = request.form.get('motif', '')
-
-            # Un non-gestionnaire ne dépose que pour lui-même : on ignore
-            # l'employe_id transmis, qui pourrait être falsifié.
-            if not gestionnaire:
-                if not moi:
-                    flash("Aucun employé n'est lié à votre compte : "
-                          "contactez les RH.", "warning")
-                    return redirect(url_for('self_service'))
-                employe_id = moi['id']
-
-            if employe_id and type_conge and date_debut and date_fin:
-                d1 = datetime.strptime(date_debut, '%Y-%m-%d')
-                d2 = datetime.strptime(date_fin, '%Y-%m-%d')
-                if d2 < d1:
-                    flash("La date de fin ne peut pas être avant la date de début", "danger")
-                    cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
-                    return render_template('conge_form.html', employees=cur.fetchall(),
-                                           moi=moi, gestionnaire=gestionnaire)
-                nombre_jours = (d2 - d1).days + 1
-
-                # Contrôle du solde : on prévient avant d'engager le circuit,
-                # plutôt que de faire refuser la demande trois jours plus tard.
-                annee = d1.year
-                cur.execute(Q_SOLDE, (employe_id, annee))
-                solde = cur.fetchone()
-                # Seuls les congés payés sont décomptés du solde (cf. recalculer_solde).
-                if solde and type_conge == 'congé payé':
-                    restant = float(solde['jours_acquis'] or 0) - float(solde['jours_utilises'] or 0)
-                    if nombre_jours > restant:
-                        flash("Solde insuffisant : %s jour(s) demandé(s) pour %.1f restant(s) en %s."
-                              % (nombre_jours, restant, annee), "danger")
-                        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
-                        return render_template('conge_form.html', employees=cur.fetchall(),
-                                               moi=moi, gestionnaire=gestionnaire)
-
-                cur.execute("""
-                    INSERT INTO conges (employe_id, type_conge, date_debut, date_fin,
-                                        nombre_jours, motif, statut, demande_par_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
-                """, (employe_id, type_conge, date_debut, date_fin, nombre_jours,
-                      motif, DEMANDE_EN_ATTENTE, session.get('user_id')))
-                cid = cur.fetchone()['id']
-
-                # Étape 1 : router vers le manager du département.
-                nom, dept = _libelle_employe(cur, employe_id)
-                titre = "Demande de congé : %s" % nom
-                corps = ("%s jour(s) du %s au %s. Votre avis est attendu."
-                         % (nombre_jours, d1.strftime('%d/%m/%Y'), d2.strftime('%d/%m/%Y')))
-                managers = _managers_du_departement(cur, dept)
-                for m in managers:
-                    create_notification(m['id'], titre, corps, 'info', cur=cur)
-                    queue_email(m.get('email'), titre, corps, cur=cur,
-                                event_key=f"conge-a-traiter:{cid}:{m['id']}")
-                if not managers:
-                    # Aucun manager sur ce département : le RH traite directement.
-                    message_rh = corps + " (aucun manager sur ce département)"
-                    _notifier_roles(cur, ('admin', 'rh'), titre, message_rh,
-                                    'info', sauf=session.get('user_id'))
-                    _envoyer_roles(cur, ('admin', 'rh'), titre, message_rh,
-                                   f"conge-a-traiter:{cid}")
-
-                log_action(session.get('user_id'), session.get('username'),
-                           "Demande de congé", "conge", cid, f"{nombre_jours} j")
-                flash("Demande de congé soumise. Vous serez notifié à chaque étape.", "success")
-                return redirect(url_for('self_service_conges') if not gestionnaire
-                                else url_for('conges'))
-            else:
-                flash("Veuillez remplir tous les champs obligatoires", "danger")
-
-        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
-        employees = cur.fetchall()
-    return render_template('conge_form.html', employees=employees,
-                           moi=moi, gestionnaire=gestionnaire)
-
-
-@app.route('/conges/avis/<int:id>', methods=['POST'])
-@login_required
-@role_required('admin', 'rh', 'manager')
-def avis_conge(id):
-    """Étape 2 : le manager du département rend son avis (non décisionnel)."""
-    avis = (request.form.get('avis') or '').strip()
-    commentaire = (request.form.get('commentaire') or '').strip()
-    if avis not in ('favorable', 'defavorable'):
-        flash("Avis invalide.", "danger")
-        return redirect(url_for('conges'))
-    if avis == 'defavorable' and not commentaire:
-        flash("Merci de motiver un avis défavorable.", "danger")
-        return redirect(url_for('conges'))
-
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("SELECT * FROM conges WHERE id = %s", (id,))
-        c = cur.fetchone()
-        if not c:
-            flash("Demande introuvable.", "danger")
-            return redirect(url_for('conges'))
-        if c['statut'] not in DEMANDE_OUVERTES:
-            flash("Cette demande est déjà tranchée.", "warning")
-            return redirect(url_for('conges'))
-
-        cur.execute("""UPDATE conges SET statut = %s, avis_manager = %s,
-                          avis_manager_par = %s, avis_manager_le = CURRENT_DATE,
-                          avis_commentaire = %s
-                       WHERE id = %s""",
-                    (DEMANDE_AVIS_RENDU, avis, session.get('username'),
-                     commentaire or None, id))
-
-        nom, _ = _libelle_employe(cur, c['employe_id'])
-        sujet_rh = "Congé à décider : %s" % nom
-        message_rh = ("Avis %s du manager %s. %s"
-                      % (avis, session.get('username'), commentaire[:120]))
-        _notifier_roles(cur, ('admin', 'rh'), sujet_rh, message_rh,
-                        'info', sauf=session.get('user_id'))
-        _envoyer_roles(cur, ('admin', 'rh'), sujet_rh, message_rh,
-                       f"conge-a-decider:{id}")
-        uid = _user_id_de_employe(cur, c['employe_id'])
-        if uid:
-            create_notification(uid, "Votre demande de congé avance",
-                                "Votre manager a rendu un avis %s. "
-                                "La décision RH suit." % avis, 'info')
-
-    log_action(session.get('user_id'), session.get('username'),
-               "Avis manager congé", "conge", id, avis)
-    flash("Avis enregistré : les RH vont trancher.", "success")
-    return redirect(url_for('conges'))
-
-
-@app.route('/conges/update/<int:id>', methods=['POST'])
-@login_required
-@role_required('admin', 'rh')
-def update_conge(id):
-    """Étape 3 : décision finale des RH (approbation ou refus motivé)."""
-    action = request.form.get('action')
-    motif_refus = (request.form.get('motif_refus') or '').strip()
-    if action == 'refuser' and not motif_refus:
-        flash("Merci d'indiquer le motif du refus : l'employé en sera informé.", "danger")
-        return redirect(url_for('conges'))
-
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("SELECT * FROM conges WHERE id = %s", (id,))
-        c = cur.fetchone()
-        if not c:
-            flash("Demande introuvable.", "danger")
-            return redirect(url_for('conges'))
-        if c['statut'] not in DEMANDE_OUVERTES:
-            flash("Cette demande est déjà tranchée.", "warning")
-            return redirect(url_for('conges'))
-
-        annee = datetime.strptime(str(c['date_debut']), '%Y-%m-%d').year
-
-        if action == 'approuver':
-            cur.execute("""UPDATE conges SET statut = %s, decide_par = %s,
-                              decide_le = CURRENT_DATE, motif_refus = NULL
-                           WHERE id = %s""",
-                        (DEMANDE_APPROUVEE, session.get('username'), id))
-            recalculer_solde(c['employe_id'], annee, cur=cur)
-            _notifier_employe_evenement(
-                cur, c['employe_id'], "Congé approuvé",
-                "Votre congé du %s au %s est approuvé."
-                % (c['date_debut'], c['date_fin']), 'success',
-                cle_evenement=f"conge-decision:{id}:approuve",
-            )
-            flash("Congé approuvé et solde mis à jour", "success")
-        elif action == 'refuser':
-            cur.execute("""UPDATE conges SET statut = %s, decide_par = %s,
-                              decide_le = CURRENT_DATE, motif_refus = %s
-                           WHERE id = %s""",
-                        (DEMANDE_REFUSEE, session.get('username'), motif_refus, id))
-            recalculer_solde(c['employe_id'], annee, cur=cur)
-            _notifier_employe_evenement(
-                cur, c['employe_id'], "Congé refusé",
-                "Votre demande du %s au %s a été refusée : %s"
-                % (c['date_debut'], c['date_fin'], motif_refus), 'danger',
-                cle_evenement=f"conge-decision:{id}:refuse",
-            )
-            flash("Congé refusé : l'employé est informé du motif.", "info")
-        else:
-            flash("Action inconnue.", "danger")
-            return redirect(url_for('conges'))
-
-    log_action(session.get('user_id'), session.get('username'),
-               "Décision congé", "conge", id, action)
-    return redirect(url_for('conges'))
-
-
-@app.route('/conges/<int:id>/annuler', methods=['POST'])
-@login_required
-def annuler_conge(id):
-    """L'employé retire sa demande tant qu'elle n'est pas tranchée."""
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("SELECT * FROM conges WHERE id = %s", (id,))
-        c = cur.fetchone()
-        if not c:
-            flash("Demande introuvable.", "danger")
-            return redirect(url_for('self_service_conges'))
-        moi = get_current_employee()
-        est_le_mien = moi and moi['id'] == c['employe_id']
-        if not (est_le_mien or _peut_decider_rh()):
-            flash("Vous ne pouvez annuler que vos propres demandes.", "danger")
-            return redirect(url_for('self_service_conges'))
-        if c['statut'] not in DEMANDE_OUVERTES:
-            flash("Cette demande est déjà tranchée : elle ne peut plus être annulée.",
-                  "warning")
-            return redirect(url_for('self_service_conges') if est_le_mien
-                            else url_for('conges'))
-
-        cur.execute("""UPDATE conges SET statut = %s, annule_par = %s
-                       WHERE id = %s""",
-                    (DEMANDE_ANNULEE, session.get('username'), id))
-        nom, dept = _libelle_employe(cur, c['employe_id'])
-        for m in _managers_du_departement(cur, dept):
-            create_notification(m['id'], "Demande de congé annulée",
-                                "%s a retiré sa demande du %s au %s."
-                                % (nom, c['date_debut'], c['date_fin']), 'info')
-
-    log_action(session.get('user_id'), session.get('username'),
-               "Annulation congé", "conge", id, None)
-    flash("Demande annulée.", "success")
-    return redirect(url_for('self_service_conges') if est_le_mien else url_for('conges'))
-
-
-@app.route('/conges/delete/<int:id>', methods=['POST'])
-@login_required
-@role_required('admin', 'rh', 'manager')
-def delete_conge(id):
-    with db_cursor(commit=True) as (conn, cur):
-        cur.execute("SELECT id FROM absences WHERE conge_id = %s", (id,))
-        if cur.fetchone():
-            flash("Ce congé maladie provient d'un justificatif accepté et ne peut pas être supprimé.",
-                  "warning")
-            return redirect(url_for('conges'))
-        cur.execute("DELETE FROM conges WHERE id = %s", (id,))
-    flash("Demande de congé supprimée", "success")
-    return redirect(url_for('conges'))
+# Congés extraits dans blueprints/conges.py.
 
 
 # ==================== ABSENCES NON JUSTIFIÉES ====================
@@ -3589,139 +1812,7 @@ def demarrer_scheduler():
     return scheduler
 
 
-@app.route('/absences')
-@login_required
-@role_required('admin', 'rh', 'manager')
-def absences():
-    # NOTE : la génération automatique se faisait ici, à CHAQUE affichage de la
-    # page. Conséquence : supprimer une absence "aucune présence enregistrée"
-    # ne servait à rien, puisque la condition (toujours aucune présence ce
-    # jour-là) redevenait vraie au rechargement suivant et la ligne était
-    # aussitôt recréée. La génération se fait maintenant uniquement via le
-    # bouton "Synchroniser" (route /absences/synchroniser), de façon explicite.
-
-    search = request.args.get('search', '').strip()
-    employe_id = request.args.get('employe_id', '').strip()
-    date_debut = request.args.get('date_debut', '').strip()
-    date_fin = request.args.get('date_fin', '').strip()
-    statut = request.args.get('statut', '').strip()
-    page = max(1, request.args.get('page', 1, type=int))
-    per_page = 10
-
-    where = ""
-    params = []
-    if search:
-        where += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
-        params += [f"%{search.lower()}%", f"%{search.lower()}%"]
-    if employe_id and employe_id.isdigit():
-        where += " AND a.employe_id = %s"; params.append(int(employe_id))
-    if date_debut:
-        where += " AND a.date >= %s"; params.append(date_debut)
-    if date_fin:
-        where += " AND a.date <= %s"; params.append(date_fin)
-    if statut in ABSENCE_STATUT_LABELS:
-        where += " AND a.statut = %s"; params.append(statut)
-
-    with db_cursor() as (conn, cur):
-        scope_where, scope_params = department_scope_sql('e', cur=cur)
-        where += f" AND {scope_where}"
-        params += scope_params
-        from_ = "absences a JOIN employes e ON a.employe_id = e.id"
-        cur.execute(f"SELECT COUNT(*) AS nb FROM {from_} WHERE 1=1{where}", params)
-        total = cur.fetchone()['nb']
-        pg = pagination_info(total, page, per_page)
-        offset = (pg['page'] - 1) * per_page
-        cur.execute(f"SELECT a.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY a.date DESC LIMIT %s OFFSET %s", params + [per_page, offset])
-        absences_list = cur.fetchall()
-        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
-                    scope_params)
-        employees = cur.fetchall()
-    filters = {'search': search, 'employe_id': employe_id, 'date_debut': date_debut,
-               'date_fin': date_fin, 'statut': statut}
-    return render_template('absences.html', absences=absences_list, employees=employees,
-                           nb_total=total, filters=filters,
-                           statut_labels=ABSENCE_STATUT_LABELS,
-                           pg=pg, page_items=page_list(pg['page'], pg['pages']),
-                           base_qs=urlencode({k: v for k, v in filters.items() if v}))
-
-
-@app.route('/absences/add', methods=['GET', 'POST'])
-@login_required
-@role_required('admin', 'rh', 'manager')
-def add_absence():
-    if request.method == 'POST':
-        employe_id = request.form.get('employe_id')
-        date_val = request.form.get('date')
-        motif = request.form.get('motif', '')
-        if employe_id and date_val:
-            with db_cursor(commit=True) as (conn, cur):
-                cur.execute("""
-                    INSERT INTO absences (employe_id, date, motif, enregistre_par)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (employe_id, date) DO UPDATE SET
-                        motif = EXCLUDED.motif,
-                        enregistre_par = EXCLUDED.enregistre_par
-                """, (employe_id, date_val, motif, session.get('user_id')))
-                message = (f"Une absence non justifiée a été enregistrée pour le {date_val}. "
-                           "Vous pouvez déposer un justificatif depuis votre espace employé.")
-                _notifier_employe_evenement(
-                    cur, int(employe_id), "Absence enregistrée", message, 'warning',
-                    cle_evenement=f"absence-manuelle:{employe_id}:{date_val}",
-                )
-            flash("Absence non justifiée enregistrée et employé informé", "success")
-            return redirect(url_for('absences'))
-        flash("Employé et date requis", "danger")
-    with db_cursor() as (conn, cur):
-        scope_where, scope_params = department_scope_sql('e', cur=cur)
-        cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
-                    scope_params)
-        employees = cur.fetchall()
-    return render_template('absence_form.html', employees=employees)
-
-
-@app.route('/absences/delete/<int:id>', methods=['POST'])
-@login_required
-@role_required('admin', 'rh')
-def delete_absence(id):
-    with db_cursor(commit=True) as (conn, cur):
-        # On mémorise la date supprimée pour empêcher la génération automatique
-        # de la recréer immédiatement (sinon elle réapparaît au prochain affichage).
-        cur.execute("SELECT employe_id, date, statut, conge_id FROM absences WHERE id = %s", (id,))
-        row = cur.fetchone()
-        if row and row.get('statut') == ABSENCE_ACCEPTEE:
-            flash("Une absence déjà requalifiée en congé maladie ne peut pas être supprimée.",
-                  "warning")
-            return redirect(url_for('absences'))
-        if row:
-            cur.execute("""
-                INSERT INTO absences_exclues (employe_id, date) VALUES (%s, %s)
-                ON CONFLICT (employe_id, date) DO NOTHING
-            """, (row['employe_id'], row['date']))
-        cur.execute("DELETE FROM absences WHERE id = %s", (id,))
-    flash("Absence supprimée", "success")
-    return redirect(url_for('absences'))
-
-
-@app.route('/absences/synchroniser', methods=['POST'])
-@login_required
-@role_required('admin', 'rh', 'manager')
-def synchroniser_absences():
-    """Recalcule explicitement toutes les absences (depuis la date d'embauche
-    jusqu'à la veille) et renvoie le nombre d'absences nouvellement créées."""
-    with db_cursor(commit=True) as (conn, cur):
-        scope = get_department_scope(cur)
-        if scope['is_global']:
-            nb = generer_absences_automatiques(cur)
-        elif scope['is_empty']:
-            nb = 0
-        else:
-            nb = generer_absences_automatiques(cur,
-                                               departement=scope['department'])
-    if nb > 0:
-        flash(f"{nb} absence(s) générée(s) automatiquement.", "success")
-    else:
-        flash("Les absences sont déjà à jour.", "info")
-    return redirect(url_for('absences'))
+# Routes absences extraites dans blueprints/absences.py.
 
 
 # ==================== PERMISSIONS (MODULE SÉPARÉ, COMME LES CONGÉS) ====================
@@ -4063,19 +2154,6 @@ def audit():
         logs = cur.fetchall()
     return render_template('audit.html', logs=logs)
 
-@app.route('/notifications')
-@login_required
-def notifications():
-    user_id = session.get('user_id')
-    notifs = get_all_notifications(user_id, limit=30)
-    return render_template('notifications.html', notifications=notifs)
-@app.route('/notifications/mark-read', methods=['POST'])
-@login_required
-def mark_notifications_read():
-    user_id = session.get('user_id')
-    mark_all_read(user_id)
-    flash('Notifications marquées comme lues.', 'success')
-    return redirect(url_for('notifications'))
 
 
 @app.route('/employes')
@@ -4512,6 +2590,33 @@ def add_employee_alt():
 
 # Blueprints métier : dépendances partagées injectées explicitement pour éviter
 # les imports circulaires avec l'application historique.
+app.register_blueprint(creer_blueprint_conges({
+    'get_db': get_db, 'get_cursor': get_cursor, 'db_cursor': db_cursor,
+    'login_required': login_required, 'role_required': role_required,
+    'department_scope_sql': department_scope_sql,
+    'get_solde_conges': get_solde_conges,
+    'get_current_employee': get_current_employee,
+    'pagination_info': pagination_info, 'page_list': page_list,
+    'peut_decider_rh': _peut_decider_rh,
+    'peut_donner_avis': _peut_donner_avis,
+    'envoyer_roles': _envoyer_roles,
+    'libelle_employe': _libelle_employe,
+    'managers_du_departement': _managers_du_departement,
+    'notifier_roles': _notifier_roles,
+    'user_id_de_employe': _user_id_de_employe,
+    'notifier_employe_evenement': _notifier_employe_evenement,
+    'create_notification': create_notification, 'queue_email': queue_email,
+    'log_action': log_action, 'recalculer_solde': recalculer_solde,
+    'DEMANDE_LIBELLES': DEMANDE_LIBELLES,
+    'DEMANDE_OUVERTES': DEMANDE_OUVERTES,
+    'DEMANDE_EN_ATTENTE': DEMANDE_EN_ATTENTE,
+    'DEMANDE_AVIS_RENDU': DEMANDE_AVIS_RENDU,
+    'DEMANDE_APPROUVEE': DEMANDE_APPROUVEE,
+    'DEMANDE_REFUSEE': DEMANDE_REFUSEE,
+    'DEMANDE_ANNULEE': DEMANDE_ANNULEE,
+    'Q_SOLDE': Q_SOLDE,
+}))
+
 contrats_bp, contrats_api = creer_blueprint_contrats({
     'db_cursor': db_cursor,
     'login_required': login_required,
@@ -4525,6 +2630,14 @@ contrats_bp, contrats_api = creer_blueprint_contrats({
 })
 job_alertes_contrats = contrats_api['job_alertes_contrats']
 app.register_blueprint(contrats_bp)
+
+app.register_blueprint(creer_blueprint_dashboard({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'get_department_scope': get_department_scope,
+    'department_scope_sql': department_scope_sql,
+    'calculer_retard': calculer_retard,
+}))
 
 app.register_blueprint(creer_blueprint_dashboards_roles({
     'db_cursor': db_cursor,
@@ -4636,6 +2749,34 @@ parc_bp, parc_api = creer_blueprint_parc({
 # Compatibilité des tests et des jobs qui appelaient ce helper depuis app.py.
 _notifier_stock_bas = parc_api['notifier_stock_bas']
 app.register_blueprint(parc_bp)
+
+recherche_bp, recherche_api = creer_blueprint_recherche({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'department_scope_sql': department_scope_sql,
+    'get_role_label': get_role_label,
+    'logger': logger,
+})
+recherche_globale = recherche_api['recherche_globale']
+app.register_blueprint(recherche_bp)
+
+app.register_blueprint(creer_blueprint_notifications({
+    'login_required': login_required,
+    'get_all_notifications': get_all_notifications,
+    'mark_all_read': mark_all_read,
+}))
+
+app.register_blueprint(creer_blueprint_absences({
+    'db_cursor': db_cursor, 'login_required': login_required,
+    'role_required': role_required,
+    'department_scope_sql': department_scope_sql,
+    'pagination_info': pagination_info, 'page_list': page_list,
+    'notifier_employe_evenement': _notifier_employe_evenement,
+    'generer_absences_automatiques': generer_absences_automatiques,
+    'get_department_scope': get_department_scope,
+    'ABSENCE_STATUT_LABELS': ABSENCE_STATUT_LABELS,
+    'ABSENCE_ACCEPTEE': ABSENCE_ACCEPTEE,
+}))
 
 app.register_blueprint(creer_blueprint_justifications({
     'db_cursor': db_cursor,

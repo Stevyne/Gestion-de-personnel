@@ -9,7 +9,7 @@
     </div>
 
     {# Le champ est repris ici : on peut affiner sa recherche sans remonter à la barre #}
-    <form action="{{ url_for('recherche_page') }}" method="get" class="recherche-page-form card">
+    <form action="{{ url_for('recherche.recherche_page') }}" method="get" class="recherche-page-form card">
         <input type="search" name="q" value="{{ terme }}" autofocus
                class="recherche-page-input" placeholder="Employé, département, matériel, congé, document…"
                aria-label="Termes de recherche">

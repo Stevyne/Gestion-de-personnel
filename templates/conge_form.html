@@ -59,7 +59,7 @@
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Soumettre la demande</button>
-            <a href="{{ url_for('conges') if gestionnaire else url_for('self_service_conges') }}" class="btn btn-secondary">Annuler</a>
+            <a href="{{ url_for('conges.conges') if gestionnaire else url_for('self_service_conges') }}" class="btn btn-secondary">Annuler</a>
         </div>
     </form>
 </div>

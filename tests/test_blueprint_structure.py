@@ -8,14 +8,15 @@ import app as application
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_app_py_reste_sous_4700_lignes():
+def test_app_py_reste_sous_3200_lignes():
     lignes = (ROOT / 'app.py').read_text(encoding='utf-8').count('\n') + 1
-    assert lignes < 4700, f'app.py est remonté à {lignes} lignes'
+    assert lignes < 3200, f'app.py est remonté à {lignes} lignes'
 
 
 def test_blueprints_metier_sont_enregistres(app):
     assert {'parc', 'documents', 'departements', 'presences', 'utilisateurs',
             'auth', 'departs', 'contrats', 'rapports_parc', 'dashboards_roles',
+            'dashboard', 'recherche', 'conges', 'absences', 'notifications',
             'absence_justifications', 'messagerie'} <= set(app.blueprints)
 
 
@@ -31,6 +32,12 @@ def test_urls_publiques_des_modules_extraits_sont_inchangees(app):
         '/utilisateurs': 'utilisateurs.utilisateurs_page',
         '/login': 'auth.login',
         '/mon-profil': 'auth.mon_profil',
+        '/': 'dashboard.dashboard',
+        '/recherche': 'recherche.recherche_page',
+        '/api/recherche': 'recherche.api_recherche',
+        '/conges': 'conges.conges',
+        '/absences': 'absences.absences',
+        '/notifications': 'notifications.notifications',
         '/departs': 'departs.departs_liste',
         '/contrats': 'contrats.contrats_liste',
         '/export/materiels/pdf': 'rapports_parc.export_materiels_pdf',
@@ -49,13 +56,32 @@ def test_routes_extraites_ne_sont_plus_definies_dans_app_py():
                        'def maintenances():', 'def documents():',
                        'def departements():', 'def presences():',
                        'def historique():', 'def utilisateurs_page():',
-                       'def register():', 'def login():', 'def mon_profil():'):
+                       'def register():', 'def login():', 'def mon_profil():',
+                       'def dashboard():', 'def recherche_globale(',
+                       'def conges():', 'def add_conge():', 'def absences():',
+                       'def notifications():'):
         assert definition not in source
 
 
 def test_palette_de_recherche_reference_des_endpoints_existants(app):
     for _libelle, endpoint, _roles, _icone in application.RECHERCHE_PAGES:
         assert endpoint in app.view_functions, endpoint
+
+
+def test_configuration_et_services_communs_sont_decouples():
+    attendus = {
+        'services/configuration.py', 'services/security.py',
+        'services/database.py', 'services/schema.py', 'services/common.py',
+        'services/migrations.py', 'services/notifications.py', 'migrations/env.py',
+        'migrations/versions/20260813_phase4_production.py',
+    }
+    assert all((ROOT / chemin).exists() for chemin in attendus)
+    source = (ROOT / 'app.py').read_text(encoding='utf-8')
+    assert 'def get_db():' not in source
+    assert 'def get_cursor(' not in source
+    assert 'def pagination_info(' not in source
+    assert 'def create_notification(' not in source
+    assert 'CREATE TABLE IF NOT EXISTS departements' not in source
 
 
 def test_valeurs_metier_ne_sont_pas_renommees_comme_des_endpoints():
