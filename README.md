@@ -365,15 +365,20 @@ Tester périodiquement la restauration sur une base isolée. Ne pointez jamais
 
 ### CI/CD
 
-`.github/workflows/tests.yml` vérifie Ruff, compile le code, applique Alembic,
-lance les tests PostgreSQL/Redis et construit l'image de backup. Les services
-Render utilisent `autoDeployTrigger: checksPass` : ils se déploient uniquement
-après la réussite de cette CI sur `master`.
+`.github/workflows/tests.yml` exécute la suite complète **tous les 10 pushes**
+sur `master`. Un contrôle léger compte chaque exécution `push` via l'API GitHub ;
+au dixième, il lance PostgreSQL 17, Redis 8, Ruff, Alembic, `pytest -q` et la
+construction de l'image de backup.
 
-Aucun deploy hook, secret GitHub ou variable `RENDER_HEALTHCHECK_URL` n'est
-nécessaire. Le workflow de déploiement qui échouait quand ces secrets étaient
-absents a été supprimé. Render valide directement `/health/ready` avant la
-bascule vers la nouvelle version.
+Les pull requests et les lancements manuels exécutent toujours la suite complète.
+En cas d'erreur de l'API de comptage, le workflow choisit également de tester
+(fonctionnement sécurisé par défaut). Le dixième test n'est pas annulé si un
+onzième push arrive pendant son exécution.
+
+Comme neuf commits sur dix n'ont pas de suite complète, les déploiements
+automatiques Render sont désactivés (`autoDeployTrigger: off`). Déployez
+manuellement uniquement un commit dont le job **Suite complète PostgreSQL /
+Redis** est vert. Aucun deploy hook ni secret GitHub n'est requis.
 
 ---
 

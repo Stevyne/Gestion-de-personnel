@@ -8,14 +8,87 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
+
+env:
+  # 14 exécutions push existaient avant l'activation de cette cadence.
+  # Le patch qui l'active devient donc le push 1 de la première série.
+  PUSH_COUNT_BASELINE: "14"
 
 concurrency:
   group: tests-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Ne jamais annuler le 10e push pendant sa suite complète si un 11e arrive.
+  cancel-in-progress: false
 
 jobs:
+  cadence:
+    name: Cadence des tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      run_tests: ${{ steps.decision.outputs.run_tests }}
+      reason: ${{ steps.decision.outputs.reason }}
+
+    steps:
+      - name: Décider si la suite complète doit être exécutée
+        id: decision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" != "push" ]]; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "reason=Pull request ou lancement manuel" >> "$GITHUB_OUTPUT"
+            echo "### ✅ Suite complète : pull request ou lancement manuel" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          api_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/tests.yml/runs?event=push&branch=master&per_page=1"
+          if ! response=$(curl --fail --silent --show-error --retry 3 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$api_url"); then
+            # En cas d'indisponibilité de l'API, on teste plutôt que de prendre
+            # le risque de sauter une validation importante.
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "reason=API GitHub indisponible : exécution de sécurité" >> "$GITHUB_OUTPUT"
+            echo "### ⚠️ Suite complète par sécurité (API indisponible)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          total=$(printf '%s' "$response" | python -c \
+            'import json,sys; print(json.load(sys.stdin)["total_count"])')
+          position=$((total - PUSH_COUNT_BASELINE))
+
+          if (( position <= 0 )); then
+            run_tests=true
+            reason="Compteur incohérent : exécution de sécurité"
+          elif (( position % 10 == 0 )); then
+            run_tests=true
+            reason="Push ${position} : fin d'une série de 10"
+          else
+            run_tests=false
+            remaining=$((10 - (position % 10)))
+            reason="Push ${position} : encore ${remaining} avant la suite complète"
+          fi
+
+          echo "run_tests=${run_tests}" >> "$GITHUB_OUTPUT"
+          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
+          if [[ "$run_tests" == "true" ]]; then
+            echo "### ✅ ${reason}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ⏭️ ${reason}" >> "$GITHUB_STEP_SUMMARY"
+            echo "La suite reste exécutable à tout moment via **Run workflow**." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   pytest:
+    name: Suite complète PostgreSQL / Redis
+    needs: cadence
+    if: needs.cadence.outputs.run_tests == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

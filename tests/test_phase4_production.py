@@ -234,8 +234,15 @@ def test_configuration_production_versionnee_sans_blocage_cd():
     assert 'Flask-SQLAlchemy==3.1.1' in requirements
     assert '\x00' not in requirements
     assert 'flask bootstrap-db && flask db upgrade' in render
-    assert render.count('autoDeployTrigger: checksPass') == 2
-    assert "autoDeployTrigger: 'off'" not in render
+    assert render.count("autoDeployTrigger: 'off'") == 2
+    assert 'autoDeployTrigger: checksPass' not in render
+    assert 'PUSH_COUNT_BASELINE: "14"' in workflow
+    assert 'position % 10 == 0' in workflow
+    assert "needs.cadence.outputs.run_tests == 'true'" in workflow
+    assert 'GITHUB_EVENT_NAME' in workflow
+    assert 'cancel-in-progress: false' in workflow
+    assert 'workflow_dispatch:' in workflow
+    assert 'pull_request:' in workflow
     assert 'sync: false' not in env_group
     assert 'BOOTSTRAP_ADMIN_PASSWORD\n        sync: false' in render
     assert not (ROOT / '.github/workflows/deploy-render.yml').exists()
