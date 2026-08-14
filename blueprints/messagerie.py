@@ -70,6 +70,16 @@ def creer_blueprint_messagerie(deps):
     department_scope_sql = deps['department_scope_sql']
     object_storage = deps['object_storage']
 
+    def _panel_mode():
+        return (request.args.get('panel') == '1'
+                or request.form.get('panel') == '1'
+                or request.headers.get('X-Activity-Panel') == '1')
+
+    def _panel_redirect(endpoint, **values):
+        if _panel_mode():
+            values['panel'] = 1
+        return redirect(url_for(endpoint, **values))
+
     def _stocker_piece(piece):
         if not piece:
             return None
@@ -217,8 +227,14 @@ def creer_blueprint_messagerie(deps):
         role = session.get('role', 'employe')
         with db_cursor() as (conn, cur):
             conversations = _charger_conversations(cur, user_id, role)
+        if _panel_mode():
+            return render_template(
+                'messagerie_panel_inbox.html', conversations=conversations,
+                active_conversation_id=None, panel_mode=True,
+                panel_unread_count=sum(1 for c in conversations if c.get('non_lu')),
+            )
         return render_template('messagerie_inbox.html', conversations=conversations,
-                               active_conversation_id=None)
+                               active_conversation_id=None, panel_mode=False)
 
     @bp.route('/messages/nouveau', methods=['GET', 'POST'])
     @login_required
@@ -239,25 +255,25 @@ def creer_blueprint_messagerie(deps):
             cible_role = request.form.get('cible_role', '').strip() or None
             if len(titre) > TITRE_MAX_CHARS:
                 flash(f"Le titre ne peut pas dépasser {TITRE_MAX_CHARS} caractères.", "danger")
-                return redirect(url_for('messagerie.messagerie_nouveau'))
+                return _panel_redirect('messagerie.messagerie_nouveau')
             if len(contenu) > MESSAGE_MAX_CHARS:
                 flash(f"Le message ne peut pas dépasser {MESSAGE_MAX_CHARS} caractères.", "danger")
-                return redirect(url_for('messagerie.messagerie_nouveau'))
+                return _panel_redirect('messagerie.messagerie_nouveau')
             if cible_role and cible_role not in ROLES_VALIDES:
                 flash("Rôle destinataire invalide.", "danger")
-                return redirect(url_for('messagerie.messagerie_nouveau'))
+                return _panel_redirect('messagerie.messagerie_nouveau')
 
             piece, erreur = _lire_piece_jointe(request.files.get('piece_jointe'), detect_file_type)
             if erreur:
                 flash(erreur, "danger")
-                return redirect(url_for('messagerie.messagerie_nouveau'))
+                return _panel_redirect('messagerie.messagerie_nouveau')
             if not contenu and not piece:
                 flash("Ajoutez un message ou une pièce jointe.", "danger")
-                return redirect(url_for('messagerie.messagerie_nouveau'))
+                return _panel_redirect('messagerie.messagerie_nouveau')
 
             if type_conv in ('prive', 'groupe') and not destinataires:
                 flash("Choisissez au moins un destinataire.", "danger")
-                return redirect(url_for('messagerie.messagerie_nouveau'))
+                return _panel_redirect('messagerie.messagerie_nouveau')
 
             with db_cursor(commit=True) as (conn, cur):
                 membres_ids = [session['user_id']]
@@ -268,7 +284,7 @@ def creer_blueprint_messagerie(deps):
                         abort(403)
                     if not autorises:
                         flash("Choisissez au moins un destinataire autorisé.", "danger")
-                        return redirect(url_for('messagerie.messagerie_nouveau'))
+                        return _panel_redirect('messagerie.messagerie_nouveau')
                     if type_conv == 'prive' and len(autorises) > 1:
                         type_conv = 'groupe'
                     membres_ids.extend(autorises)
@@ -277,7 +293,7 @@ def creer_blueprint_messagerie(deps):
                     stored = _stocker_piece(piece)
                 except ObjectStorageError as exc:
                     flash(str(exc), 'danger')
-                    return redirect(url_for('messagerie.messagerie_nouveau'))
+                    return _panel_redirect('messagerie.messagerie_nouveau')
 
                 cur.execute("""
                     INSERT INTO conversations (type, titre, cible_role, cree_par)
@@ -365,7 +381,7 @@ def creer_blueprint_messagerie(deps):
                           f"{type_conv} : {titre or contenu[:40]}")
 
             flash("Message envoyé.", "success")
-            return redirect(url_for('messagerie.messagerie_voir', id=conv_id))
+            return _panel_redirect('messagerie.messagerie_voir', id=conv_id)
 
         with db_cursor() as (conn, cur):
             scope_sql, scope_params = department_scope_sql('e', 'departement', cur)
@@ -378,9 +394,17 @@ def creer_blueprint_messagerie(deps):
             utilisateurs = cur.fetchall()
             conversations = _charger_conversations(cur, session['user_id'], role)
 
+        if _panel_mode():
+            return render_template(
+                'messagerie_panel_nouveau.html', utilisateurs=utilisateurs,
+                conversations=conversations, active_conversation_id=None,
+                peut_annoncer=peut_annoncer, roles=ROLES_VALIDES,
+                panel_mode=True,
+            )
         return render_template('messagerie_nouveau.html', utilisateurs=utilisateurs,
                                conversations=conversations, active_conversation_id=None,
-                               peut_annoncer=peut_annoncer, roles=ROLES_VALIDES)
+                               peut_annoncer=peut_annoncer, roles=ROLES_VALIDES,
+                               panel_mode=False)
 
     @bp.route('/messages/<int:id>')
     @login_required
@@ -397,7 +421,7 @@ def creer_blueprint_messagerie(deps):
                 abort(404)
             if not _peut_acceder(cur, conv, user_id, role):
                 flash("Vous n'avez pas accès à cette conversation.", "danger")
-                return redirect(url_for('messagerie.messagerie_inbox'))
+                return _panel_redirect('messagerie.messagerie_inbox')
 
             contexte = None
             if conv.get('contexte_type') == 'maintenance' and conv.get('contexte_id'):
@@ -450,7 +474,9 @@ def creer_blueprint_messagerie(deps):
                 {'id': id, 'type': conv['type'], 'libelle': conv.get('titre') or 'Conversation',
                  'avatar_initiale': '💬', 'avatar_photo': None})
 
-        return render_template('messagerie_thread.html', conv=conv, messages=messages,
+        template = ('messagerie_panel_thread.html'
+                    if _panel_mode() else 'messagerie_thread.html')
+        return render_template(template, conv=conv, messages=messages,
                                membres=membres, user_id=user_id,
                                conversations=conversations,
                                active_conversation=active_conversation,
@@ -458,7 +484,10 @@ def creer_blueprint_messagerie(deps):
                                page_messages=page_messages,
                                has_older_messages=has_older_messages,
                                messages_par_page=MESSAGES_PAR_PAGE,
-                               contexte=contexte)
+                               contexte=contexte, panel_mode=_panel_mode(),
+                               panel_unread_count=sum(
+                                   1 for c in conversations if c.get('non_lu')
+                               ))
 
     @bp.route('/messages/<int:id>/repondre', methods=['POST'])
     @login_required
@@ -468,14 +497,14 @@ def creer_blueprint_messagerie(deps):
         contenu = request.form.get('contenu', '').strip()
         if len(contenu) > MESSAGE_MAX_CHARS:
             flash(f"Le message ne peut pas dépasser {MESSAGE_MAX_CHARS} caractères.", "danger")
-            return redirect(url_for('messagerie.messagerie_voir', id=id))
+            return _panel_redirect('messagerie.messagerie_voir', id=id)
 
         piece, erreur = _lire_piece_jointe(request.files.get('piece_jointe'), detect_file_type)
         if erreur:
             flash(erreur, "danger")
-            return redirect(url_for('messagerie.messagerie_voir', id=id))
+            return _panel_redirect('messagerie.messagerie_voir', id=id)
         if not contenu and not piece:
-            return redirect(url_for('messagerie.messagerie_voir', id=id))
+            return _panel_redirect('messagerie.messagerie_voir', id=id)
 
         with db_cursor(commit=True) as (conn, cur):
             cur.execute("SELECT * FROM conversations WHERE id = %s", (id,))
@@ -491,7 +520,7 @@ def creer_blueprint_messagerie(deps):
                 stored = _stocker_piece(piece)
             except ObjectStorageError as exc:
                 flash(str(exc), 'danger')
-                return redirect(url_for('messagerie.messagerie_voir', id=id))
+                return _panel_redirect('messagerie.messagerie_voir', id=id)
             try:
                 cur.execute("""
                     INSERT INTO messages
@@ -562,7 +591,7 @@ def creer_blueprint_messagerie(deps):
             log_action(session.get('user_id'), session.get('username'),
                       "REPLY_MESSAGE", "conversation", id, contenu[:60] if contenu else "Pièce jointe")
 
-        return redirect(url_for('messagerie.messagerie_voir', id=id))
+        return _panel_redirect('messagerie.messagerie_voir', id=id)
 
     @bp.route('/messages/piece-jointe/<int:message_id>')
     @login_required
@@ -608,7 +637,7 @@ def creer_blueprint_messagerie(deps):
                 DELETE FROM conversation_membres WHERE conversation_id = %s AND user_id = %s
             """, (id, session['user_id']))
         flash("Vous avez quitté la discussion.", "success")
-        return redirect(url_for('messagerie.messagerie_inbox'))
+        return _panel_redirect('messagerie.messagerie_inbox')
 
     @bp.app_context_processor
     def inject_messagerie_badge():

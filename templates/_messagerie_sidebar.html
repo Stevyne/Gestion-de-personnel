@@ -4,7 +4,8 @@
       <span class="msg-eyebrow">Messagerie</span>
       <h1>Discussions</h1>
     </div>
-    <a href="{{ url_for('messagerie.messagerie_nouveau') }}" class="msg-compose-btn"
+    <a href="{{ url_for('messagerie.messagerie_nouveau', panel=1) if panel_mode else url_for('messagerie.messagerie_nouveau') }}" class="msg-compose-btn"
+       {% if panel_mode %}data-panel-link{% endif %}
        aria-label="Nouveau message" title="Nouveau message">✎</a>
   </div>
 
@@ -16,7 +17,8 @@
 
   <nav class="msg-conversation-list" id="conversationList">
     {% for c in conversations %}
-    <a href="{{ url_for('messagerie.messagerie_voir', id=c.id) }}"
+    <a href="{{ url_for('messagerie.messagerie_voir', id=c.id, panel=1) if panel_mode else url_for('messagerie.messagerie_voir', id=c.id) }}"
+       {% if panel_mode %}data-panel-link{% endif %}
        class="msg-conversation {% if active_conversation_id == c.id %}is-active{% endif %} {% if c.non_lu %}is-unread{% endif %}"
        data-conversation-search="{{ (c.libelle ~ ' ' ~ (c.dernier_message or ''))|lower }}">
       <span class="msg-avatar msg-avatar--{{ c.type }}">
@@ -42,7 +44,7 @@
     <div class="msg-sidebar-empty">
       <span>💬</span>
       <p>Aucune discussion</p>
-      <a href="{{ url_for('messagerie.messagerie_nouveau') }}">Écrire un message</a>
+      <a href="{{ url_for('messagerie.messagerie_nouveau', panel=1) if panel_mode else url_for('messagerie.messagerie_nouveau') }}" {% if panel_mode %}data-panel-link{% endif %}>Écrire un message</a>
     </div>
     {% endfor %}
     <div class="msg-no-search-result" id="conversationNoResult" hidden>Aucune conversation trouvée.</div>

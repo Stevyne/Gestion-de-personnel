@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='phase3.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='recrutement.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='activity-panel.css') }}">
     <style>
         /* ===== BEAUTIFUL DELETE CONFIRMATION MODAL ===== */
         .modal-backdrop {
@@ -387,16 +388,18 @@
                     <div class="nav-search-panel" id="globalSearchPanel" role="listbox" hidden></div>
                 </div>
 
-                <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="nav-notif {% if request.endpoint and request.endpoint.startswith('messagerie.') %}active{% endif %}"
-                   aria-label="Messages" title="Messages">
+                <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="nav-notif js-activity-panel {% if request.endpoint and request.endpoint.startswith('messagerie.') %}active{% endif %}"
+                   data-panel-kind="messages" data-panel-url="{{ url_for('messagerie.messagerie_inbox', panel=1) }}"
+                   aria-controls="activityPanel" aria-expanded="false" aria-label="Messages" title="Messages">
                     {{ icon('message', 19) }}
                     {% if messages_non_lus and messages_non_lus > 0 %}
                     <span class="notif-badge">{{ messages_non_lus if messages_non_lus < 100 else '99+' }}</span>
                     {% endif %}
                 </a>
 
-                <a href="{{ url_for('notifications.notifications') }}" class="nav-notif {% if request.endpoint == 'notifications.notifications' %}active{% endif %}"
-                   aria-label="Notifications" title="Notifications">
+                <a href="{{ url_for('notifications.notifications') }}" class="nav-notif js-activity-panel {% if request.endpoint == 'notifications.notifications' %}active{% endif %}"
+                   data-panel-kind="notifications" data-panel-url="{{ url_for('notifications.notifications', panel=1) }}"
+                   aria-controls="activityPanel" aria-expanded="false" aria-label="Notifications" title="Notifications">
                     {{ icon('bell', 19) }}
                     {% if unread_notifications and unread_notifications > 0 %}
                     <span class="notif-badge">{{ unread_notifications if unread_notifications < 100 else '99+' }}</span>
@@ -435,7 +438,9 @@
                         <a href="{{ url_for('self_service') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('self_service') %}active{% endif %}">
                             {{ icon('calendar', 17) }}<span>Mes demandes</span>
                         </a>
-                        <a href="{{ url_for('notifications.notifications') }}" class="nav-dropdown-link">
+                        <a href="{{ url_for('notifications.notifications') }}" class="nav-dropdown-link js-activity-panel"
+                           data-panel-kind="notifications" data-panel-url="{{ url_for('notifications.notifications', panel=1) }}"
+                           aria-controls="activityPanel" aria-expanded="false">
                             {{ icon('bell', 17) }}<span>Notifications</span>
                             {% if unread_notifications and unread_notifications > 0 %}
                             <span class="menu-count">{{ unread_notifications }}</span>
@@ -536,14 +541,17 @@
                     <a href="{{ url_for('self_service') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('self_service') %}active{% endif %}">
                         {{ icon('calendar') }}<span>Mes demandes</span>
                     </a>
-                    <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('messagerie.') %}active{% endif %}"
-                       aria-label="Messages" title="Messages">
+                    <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="nav-link js-activity-panel {% if request.endpoint and request.endpoint.startswith('messagerie.') %}active{% endif %}"
+                       data-panel-kind="messages" data-panel-url="{{ url_for('messagerie.messagerie_inbox', panel=1) }}"
+                       aria-controls="activityPanel" aria-expanded="false" aria-label="Messages" title="Messages">
                         {{ icon('message', 19) }}<span>Messages</span>
                         {% if messages_non_lus and messages_non_lus > 0 %}
                         <span class="notif-badge">{{ messages_non_lus if messages_non_lus < 100 else '99+' }}</span>
                         {% endif %}
                     </a>
-                    <a href="{{ url_for('notifications.notifications') }}" class="nav-link {% if request.endpoint == 'notifications.notifications' %}active{% endif %}">
+                    <a href="{{ url_for('notifications.notifications') }}" class="nav-link js-activity-panel {% if request.endpoint == 'notifications.notifications' %}active{% endif %}"
+                       data-panel-kind="notifications" data-panel-url="{{ url_for('notifications.notifications', panel=1) }}"
+                       aria-controls="activityPanel" aria-expanded="false">
                         {{ icon('bell') }}<span>Notifications</span>
                         {% if unread_notifications and unread_notifications > 0 %}
                         <span class="menu-count">{{ unread_notifications }}</span>
@@ -563,6 +571,30 @@
     
     <!-- Backdrop overlay for mobile drawer -->
     <div id="navOverlay" class="nav-overlay"></div>
+
+    {% if session.get('user_id') %}
+    <div class="activity-panel-layer" id="activityPanelLayer" hidden>
+        <button type="button" class="activity-panel-backdrop" id="activityPanelBackdrop" aria-label="Fermer le panneau"></button>
+        <aside class="activity-panel" id="activityPanel" role="dialog" aria-modal="true"
+               aria-labelledby="activityPanelTitle" aria-hidden="true"
+               data-message-css="{{ url_for('static', filename='messagerie.css') }}"
+               data-message-js="{{ url_for('static', filename='messagerie.js') }}">
+            <header class="activity-panel-head">
+                <div class="activity-panel-heading">
+                    <span class="activity-panel-head-icon" id="activityPanelIcon" aria-hidden="true">🔔</span>
+                    <div><span class="activity-panel-label">Aperçu</span><h2 id="activityPanelTitle">Activité</h2></div>
+                </div>
+                <button type="button" class="activity-panel-close" id="activityPanelClose" aria-label="Fermer">×</button>
+            </header>
+            <div class="activity-panel-body" id="activityPanelBody" aria-live="polite">
+                <div class="activity-panel-loader"><span></span><p>Chargement…</p></div>
+            </div>
+            <div class="activity-panel-footer">
+                <a href="#" id="activityPanelFullLink">Ouvrir la page complète</a>
+            </div>
+        </aside>
+    </div>
+    {% endif %}
 
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -648,6 +680,7 @@
 
 
     <script src="{{ url_for('static', filename='register.js') }}"></script>
+    <script src="{{ url_for('static', filename='activity-panel.js') }}" defer></script>
     <script>
         // ===== ROBUST MOBILE DRAWER (no blur + no tap-through + clickable) =====
         const navToggle = document.getElementById('navToggle');

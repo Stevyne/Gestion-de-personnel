@@ -1,0 +1,33 @@
+<section class="activity-panel-view activity-messages activity-message-thread" data-panel-kind="messages" data-unread-count="{{ panel_unread_count }}">
+  {% include '_activity_panel_flashes.html' %}
+  <main class="msg-main msg-thread" aria-label="Conversation {{ active_conversation.libelle }}">
+    <header class="msg-thread-head">
+      <a href="{{ url_for('messagerie.messagerie_inbox', panel=1) }}" data-panel-link class="activity-panel-back" aria-label="Retour aux discussions">‹</a>
+      <span class="msg-avatar msg-avatar--{{ active_conversation.type }} msg-avatar--header">
+        {% if active_conversation.type == 'prive' and active_conversation.avatar_photo %}<img src="{{ url_for('auth.avatar_image', filename=active_conversation.avatar_photo) }}" alt="">
+        {% else %}<span>{{ active_conversation.avatar_initiale }}</span>{% endif %}
+      </span>
+      <div class="msg-thread-identity"><h1>{{ active_conversation.libelle }}</h1><p>{% if conv.type == 'annonce' %}Annonce{% elif conv.type == 'groupe' %}{{ membres|length }} participant(s){% else %}Conversation privée{% endif %}</p></div>
+      {% if contexte %}<a href="{{ url_for('parc.view_exemplaire', id=contexte.exemplaire_id) }}" class="maintenance-chat-link">🔧 {{ contexte.reference }}</a>{% endif %}
+    </header>
+
+    <section class="msg-stream" id="messageStream" aria-live="polite">
+      {% if has_older_messages and messages %}<a href="{{ url_for('messagerie.messagerie_voir', id=conv.id, page_messages=page_messages+1, anchor=messages[0].id, panel=1) }}" data-panel-link class="msg-load-older">↑ Charger {{ messages_par_page }} messages précédents</a>{% endif %}
+      <div class="msg-conversation-intro"><span class="msg-avatar msg-avatar--{{ active_conversation.type }} msg-avatar--intro">{% if active_conversation.type == 'prive' and active_conversation.avatar_photo %}<img src="{{ url_for('auth.avatar_image', filename=active_conversation.avatar_photo) }}" alt="">{% else %}<span>{{ active_conversation.avatar_initiale }}</span>{% endif %}</span><h2>{{ active_conversation.libelle }}</h2><p>Début de la conversation</p></div>
+      {% for m in messages %}{% set own=(m.sender_id==user_id) %}
+      <article class="msg-row {% if own %}is-own{% endif %}" data-message-id="{{ m.id }}">
+        {% if not own %}<span class="msg-avatar msg-avatar--message" title="{{ m.sender_username }}">{% if m.sender_photo %}<img src="{{ url_for('auth.avatar_image', filename=m.sender_photo) }}" alt="">{% else %}<span>{{ m.sender_username[:1]|upper }}</span>{% endif %}</span>{% endif %}
+        <div class="msg-message-wrap">{% if not own %}<span class="msg-sender-name">{{ m.sender_username }}</span>{% endif %}<div class="msg-bubble">{% if m.contenu %}<div class="msg-text">{{ m.contenu }}</div>{% endif %}{% if m.piece_jointe_nom %}<a href="{{ url_for('messagerie.messagerie_piece_jointe', message_id=m.id) }}" class="msg-attachment"><span class="msg-attachment-icon">📄</span><span><strong>{{ m.piece_jointe_nom }}</strong><small>{{ ((m.piece_jointe_taille or 0)/1024)|round(1) }} Ko</small></span><span>↓</span></a>{% endif %}</div><time class="msg-time">{{ m.date_envoi.strftime('%d/%m/%Y à %H:%M') }}</time></div>
+      </article>{% else %}<div class="msg-stream-empty">Envoyez le premier message.</div>{% endfor %}
+    </section>
+
+    {% if conv.type != 'annonce' or current_role in ['admin','rh'] %}
+    <form method="post" action="{{ url_for('messagerie.messagerie_repondre', id=conv.id) }}" enctype="multipart/form-data" class="msg-composer" id="messageComposer" data-panel-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="panel" value="1">
+      <label class="msg-file-btn" aria-label="Ajouter une pièce jointe"><input type="file" name="piece_jointe" id="messageFileInput" hidden><span>＋</span></label>
+      <div class="msg-composer-center"><textarea name="contenu" id="messageComposerText" rows="1" maxlength="20000" placeholder="Aa" aria-label="Votre message"></textarea><span class="msg-file-name" id="messageFileName" hidden></span></div>
+      <button type="submit" class="msg-send-btn" aria-label="Envoyer">➤</button>
+    </form>
+    {% else %}<div class="msg-readonly-note">Cette annonce est en lecture seule.</div>{% endif %}
+  </main>
+</section>

@@ -1,0 +1,33 @@
+<section class="activity-panel-view activity-notifications" data-panel-kind="notifications" data-unread-count="{{ unread_count }}">
+  {% include '_activity_panel_flashes.html' %}
+  <div class="activity-panel-toolbar">
+    <div><span class="activity-eyebrow">Centre d’activité</span><h3>Notifications</h3></div>
+    {% if unread_count %}
+    <form method="post" action="{{ url_for('notifications.mark_notifications_read') }}" data-panel-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="panel" value="1">
+      <button type="submit" class="activity-text-btn">Tout marquer comme lu</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <div class="activity-notification-list">
+    {% for n in notifications %}
+    <article class="activity-notification {% if not n.is_read %}is-unread{% endif %}">
+      <span class="activity-notification-icon activity-notification-icon--{{ n.type or 'info' }}" aria-hidden="true">
+        {% if n.type == 'warning' %}⚠{% elif n.type == 'danger' or n.type == 'retard' %}!{% elif n.type == 'success' %}✓{% else %}i{% endif %}
+      </span>
+      <div class="activity-notification-body">
+        <div class="activity-notification-topline">
+          <strong>{{ n.title }}</strong>
+          {% if not n.is_read %}<span class="activity-new-dot" title="Non lu"></span>{% endif %}
+        </div>
+        {% if n.message %}<p>{{ n.message }}</p>{% endif %}
+        <time>{{ n.timestamp.strftime('%d/%m/%Y à %H:%M') if n.timestamp else '' }}</time>
+      </div>
+    </article>
+    {% else %}
+    <div class="activity-empty"><span>🔔</span><h3>Tout est à jour</h3><p>Aucune notification pour le moment.</p></div>
+    {% endfor %}
+  </div>
+</section>
