@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="{{ url_for('static', filename='Logo.png') }}" type="image/png">
-    <title>Gestion du Personnel</title>
+    <title>{% block title %}Gestion du Personnel{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='phase3.css') }}">
     <style>
@@ -165,7 +165,7 @@
     </style>
     {% block extra_styles %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
 {% macro pagination(endpoint, base_qs, pg, page_items) %}
 {% if pg and pg.pages > 1 %}
 <nav style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin:20px 0 6px;">
@@ -1234,5 +1234,6 @@
     })();
     </script>
 
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

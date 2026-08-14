@@ -27,30 +27,47 @@ def creer_blueprint_auth(deps):
     avatar_folder = deps['avatar_folder']
     limiter = deps['limiter']
     login_rate_limit = os.environ.get('LOGIN_RATE_LIMIT', '5 per minute;20 per hour')
+    # Le même calcul de hash est exécuté pour un compte inconnu afin de réduire
+    # les différences de temps qui pourraient révéler l'existence d'un compte.
+    dummy_password_hash = generate_password_hash('invalid-login-placeholder')
 
     @bp.route('/login', methods=['GET','POST'])
     @limiter.limit(login_rate_limit, methods=['POST'], override_defaults=False)
     def login():
-        if 'user_id' in session: return redirect(url_for('dashboard.dashboard'))
+        if 'user_id' in session:
+            return redirect(url_for('dashboard.dashboard'))
+
+        username = ''
+        login_failed = False
         if request.method == 'POST':
-            u = request.form.get('username','').strip()
-            p = request.form.get('password','')
+            username = request.form.get('username', '').strip()[:80]
+            password = request.form.get('password', '')[:1024]
             with db_cursor() as (conn, cur):
-                cur.execute("SELECT * FROM users WHERE username=%s", (u,))
+                cur.execute("SELECT * FROM users WHERE username=%s", (username,))
                 user = cur.fetchone()
-            if user and user.get('actif', True) and check_password_hash(user['password_hash'], p):
+
+            password_hash = user['password_hash'] if user else dummy_password_hash
+            password_ok = check_password_hash(password_hash, password)
+            if user and user.get('actif', True) and password_ok:
+                # Nettoyage avant authentification pour éviter de conserver un
+                # état de session anonyme potentiellement fixé par un tiers.
+                session.clear()
+                session.permanent = True
                 session['user_id'] = user['id']
                 session['username'] = user['username']
                 session['role'] = user['role']
                 session['role_label'] = get_role_label(user['role'])
-                # Inscription au registre des sessions : permet l'indicateur de
-                # présence et la déconnexion à distance par un administrateur.
                 session['sid'] = enregistrer_session(user['id'], user['username'])
                 log_action(user_id=user['id'], username=user['username'], action="LOGIN")
                 flash(f'Bienvenue, {user["username"]} !', 'success')
                 return redirect(url_for('dashboard.dashboard'))
+
+            login_failed = True
             flash('Identifiants ou mot de passe incorrects.', 'danger')
-        return render_template('login.html')
+
+        return render_template(
+            'login.html', username=username, login_failed=login_failed
+        )
 
     @bp.route('/logout')
     def logout():
