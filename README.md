@@ -1,6 +1,8 @@
 # 👥 Gestion du Personnel
 
 [![Tests](https://github.com/Stevyne/Gestion-de-personnel/actions/workflows/tests.yml/badge.svg)](https://github.com/Stevyne/Gestion-de-personnel/actions/workflows/tests.yml)
+[![Licence MIT](https://img.shields.io/badge/licence-MIT-green.svg)](LICENSE)
+[![Python 3.12.7](https://img.shields.io/badge/Python-3.12.7-blue.svg)](.python-version)
 
 **Application RH complète en Flask + PostgreSQL**
 
@@ -87,7 +89,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - **Poste, département, salaire et date d'embauche sont en lecture seule** : ce sont des données contractuelles, du ressort des RH
 - **Photo de profil** : PNG/JPEG jusqu'à 8 Mo, automatiquement recadrée en carré et réduite à 512×512 (Pillow). Le ré-encodage supprime au passage les métadonnées EXIF (dont la géolocalisation)
 - La photo est portée par le **compte** (`users.photo`), donc disponible même pour les comptes sans fiche employé
-- Fichiers stockés dans `static/avatars/` sous un nom imprévisible ; l'ancien est effacé à chaque remplacement
+- Contenu persistant stocké dans PostgreSQL (`users.photo_contenu`) ; `static/avatars/` ne sert que de cache/repli pour les anciennes photos
 - Accessible via « Mon espace » dans le menu du compte
 
 ### 📁 Documents & Rapports
@@ -533,6 +535,7 @@ Gestion-de-personnel/
 ├── pytest.ini
 ├── .env.example
 ├── .gitignore
+├── LICENSE                 # Licence MIT
 ├── render.yaml             # Déploiement Render
 ├── static/
 │   ├── style.css
@@ -592,7 +595,12 @@ Gestion-de-personnel/
 
 ## 📄 Licence
 
-Projet interne – 2026
+Ce projet est distribué sous licence **MIT**. Vous pouvez l'utiliser, le copier,
+le modifier et le redistribuer, y compris dans un contexte commercial, à
+condition de conserver la notice de copyright et la licence.
+
+Copyright © 2026 Stevyne. Consultez le fichier [LICENSE](LICENSE) pour le texte
+juridique complet.
 
 ---
 
