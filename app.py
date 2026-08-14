@@ -575,10 +575,16 @@ def modal_redirect_passthrough(response):
     On transforme donc la redirection en réponse 204 portant l'URL cible
     dans l'en-tête X-Redirect-To ; le JS lit cet en-tête et navigue
     lui-même, ce qui laisse le flash intact pour le vrai chargement.
+
+    Les formulaires du panneau d'activité sont explicitement exclus : leur JS
+    a besoin de suivre la redirection vers un nouveau fragment HTML.
     """
     try:
         if (response.status_code in (301, 302, 303, 307, 308)
                 and request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+                # Le panneau latéral suit lui-même la redirection afin de
+                # remplacer son fragment. Le 204 est réservé aux popups CRUD.
+                and request.headers.get('X-Activity-Panel') != '1'
                 and request.method == 'POST'):
             target = response.headers.get('Location')
             if target:

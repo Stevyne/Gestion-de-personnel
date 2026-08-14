@@ -257,6 +257,14 @@
                 window.location.assign(response.url);
                 return;
             }
+            // Compatibilité défensive avec le gestionnaire AJAX des popups :
+            // un éventuel 204 indique la cible dans X-Redirect-To.
+            if (response.status === 204) {
+                const target = response.headers.get('X-Redirect-To');
+                if (!target) throw new Error('Redirection de panneau sans cible');
+                await load(target, currentKind);
+                return;
+            }
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const html = await response.text();
             if (/<!doctype html/i.test(html)) {

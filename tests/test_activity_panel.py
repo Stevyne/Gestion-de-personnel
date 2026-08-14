@@ -37,12 +37,25 @@ def test_notifications_se_chargent_en_fragment_et_restent_privees(admin_client):
     assert b'Panneau test' in panel.data
     assert b'data-panel-form' in panel.data
 
-    marked = admin_client.post(
-        '/notifications/mark-read', data={'panel': '1'}, follow_redirects=True
+    marked_redirect = admin_client.post(
+        '/notifications/mark-read', data={'panel': '1'}, follow_redirects=False,
+        headers={'X-Activity-Panel': '1', 'X-Requested-With': 'XMLHttpRequest'},
     )
+    assert marked_redirect.status_code in (301, 302, 303)
+    assert marked_redirect.status_code != 204
+    assert 'panel=1' in marked_redirect.headers['Location']
+    marked = admin_client.get(marked_redirect.headers['Location'])
     assert marked.status_code == 200
     assert b'data-unread-count="0"' in marked.data
     assert b'<!DOCTYPE html>' not in marked.data
+
+    popup_protocol = admin_client.post(
+        '/notifications/mark-read',
+        headers={'X-Requested-With': 'XMLHttpRequest'},
+        follow_redirects=False,
+    )
+    assert popup_protocol.status_code == 204
+    assert popup_protocol.headers.get('X-Redirect-To')
 
     anonymous = application.app.test_client()
     denied = anonymous.get('/notifications?panel=1', follow_redirects=False)
@@ -75,11 +88,16 @@ def test_messagerie_inbox_fil_et_reponse_restent_dans_le_panneau(app):
     assert b'name="panel" value="1"' in thread.data
     assert b'data-panel-form' in thread.data
 
-    reply = employe.post(
+    reply_redirect = employe.post(
         f'/messages/{conversation_id}/repondre',
         data={'contenu': 'Réponse superposée', 'panel': '1'},
-        follow_redirects=True,
+        follow_redirects=False,
+        headers={'X-Activity-Panel': '1', 'X-Requested-With': 'XMLHttpRequest'},
     )
+    assert reply_redirect.status_code in (301, 302, 303)
+    assert reply_redirect.status_code != 204
+    assert 'panel=1' in reply_redirect.headers['Location']
+    reply = employe.get(reply_redirect.headers['Location'])
     assert reply.status_code == 200
     assert b'<!DOCTYPE html>' not in reply.data
     assert 'Réponse superposée'.encode('utf-8') in reply.data
@@ -101,4 +119,6 @@ def test_panneau_est_responsive_accessible_et_sans_dependance_externe():
     assert "event.key === 'Escape'" in js
     assert "event.key !== 'Tab'" in js
     assert "headers: {'X-Activity-Panel': '1'" in js
+    assert 'response.status === 204' in js
+    assert "response.headers.get('X-Redirect-To')" in js
     assert 'http://' not in js and 'https://' not in js
