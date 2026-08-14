@@ -7,6 +7,7 @@
     <title>{% block title %}Gestion du Personnel{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='phase3.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='recrutement.css') }}">
     <style>
         /* ===== BEAUTIFUL DELETE CONFIRMATION MODAL ===== */
         .modal-backdrop {
@@ -274,7 +275,7 @@
 
                 {# --- Personnel : employés + départements --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement','departs.departs_liste'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement','departs.departs_liste'] or (request.endpoint and request.endpoint.startswith('recrutement.')) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('users') }}<span>Personnel</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
@@ -282,6 +283,9 @@
                             {{ icon('users', 17) }}<span>Employés</span>
                         </a>
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+                        <a href="{{ url_for('recrutement.tableau_recrutement') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('recrutement.') %}active{% endif %}">
+                            {{ icon('clipboard', 17) }}<span>Recrutement</span>
+                        </a>
                         <a href="{{ url_for('departements.departements') }}" class="nav-dropdown-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">
                             {{ icon('building', 17) }}<span>Départements</span>
                         </a>
@@ -494,6 +498,7 @@
                 <p class="drawer-section">Personnel</p>
                 <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">{{ icon('users') }}<span>Employés</span></a>
                 {%  if session.get('role') in ['admin', 'rh', 'manager'] %}
+                <a href="{{ url_for('recrutement.tableau_recrutement') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('recrutement.') %}active{% endif %}">{{ icon('clipboard') }}<span>Recrutement</span></a>
                 <a href="{{ url_for('departements.departements') }}" class="nav-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">{{ icon('building') }}<span>Départements</span></a>
                 <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">{{ icon('file') }}<span>Contrats</span></a>
                 {% endif %}

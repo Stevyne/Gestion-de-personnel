@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Demandes de recrutement{% endblock %}
+{% block content %}<div class="rc-shell">
+<section class="rc-hero"><div><h1>Demandes de recrutement</h1><p>Les responsables expriment le besoin ; les RH valident avant création de l'offre.</p></div><a class="rc-btn rc-btn-light" href="{{ url_for('recrutement.demande_nouvelle') }}">+ Nouvelle demande</a></section>
+{% include '_recrutement_nav.html' %}
+<form class="rc-tabs" method="get"><a href="{{ url_for('recrutement.demandes') }}" class="{% if not filtre_statut %}active{% endif %}">Toutes</a>{% for code,label in statuts.items() %}<a href="?statut={{ code }}" class="{% if filtre_statut==code %}active{% endif %}">{{ label }}</a>{% endfor %}</form>
+{% if demandes %}<div class="rc-table-wrap"><table class="rc-table"><thead><tr><th>Référence</th><th>Poste</th><th>Département</th><th>Postes</th><th>Contrat</th><th>Souhaitée</th><th>Statut</th></tr></thead><tbody>
+{% for d in demandes %}<tr><td><a href="{{ url_for('recrutement.demande_detail', demande_id=d.id) }}">{{ d.reference }}</a></td><td>{{ d.poste }}</td><td>{{ d.departement }}</td><td>{{ d.nombre_postes }}</td><td>{{ d.type_contrat|upper }}</td><td>{{ d.date_souhaitee or '—' }}</td><td><span class="rc-badge rc-badge-{{ d.statut }}">{{ statuts[d.statut] }}</span></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<div class="rc-empty">Aucune demande dans cette portée.</div>{% endif %}
+</div>{% endblock %}

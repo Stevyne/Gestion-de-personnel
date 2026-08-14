@@ -20,6 +20,7 @@ RECHERCHE_ACCES = {
 RECHERCHE_PAGES = [
     ('Tableau de bord',        'dashboard.dashboard',  None,                        'dashboard'),
     ('Employés',               'index',                None,                        'users'),
+    ('Recrutement',            'recrutement.tableau_recrutement', ('admin','rh','manager'), 'clipboard'),
     ('Départements',           'departements.departements', None,                    'building'),
     ('Matériels',              'parc.materiels',       None,                        'box'),
     ('Inventaire physique',    'parc.inventaires',     None,                        'box'),

@@ -17,7 +17,7 @@ def test_blueprints_metier_sont_enregistres(app):
     assert {'parc', 'documents', 'departements', 'presences', 'utilisateurs',
             'auth', 'departs', 'contrats', 'rapports_parc', 'dashboards_roles',
             'dashboard', 'recherche', 'conges', 'absences', 'notifications',
-            'absence_justifications', 'messagerie'} <= set(app.blueprints)
+            'recrutement', 'absence_justifications', 'messagerie'} <= set(app.blueprints)
 
 
 def test_urls_publiques_des_modules_extraits_sont_inchangees(app):
@@ -38,6 +38,10 @@ def test_urls_publiques_des_modules_extraits_sont_inchangees(app):
         '/conges': 'conges.conges',
         '/absences': 'absences.absences',
         '/notifications': 'notifications.notifications',
+        '/recrutement': 'recrutement.tableau_recrutement',
+        '/recrutement/demandes': 'recrutement.demandes',
+        '/recrutement/offres': 'recrutement.offres',
+        '/recrutement/candidats': 'recrutement.candidats',
         '/departs': 'departs.departs_liste',
         '/contrats': 'contrats.contrats_liste',
         '/export/materiels/pdf': 'rapports_parc.export_materiels_pdf',
@@ -74,6 +78,7 @@ def test_configuration_et_services_communs_sont_decouples():
         'services/database.py', 'services/schema.py', 'services/common.py',
         'services/migrations.py', 'services/notifications.py', 'migrations/env.py',
         'migrations/versions/20260813_phase4_production.py',
+        'migrations/versions/20260814_recrutement.py',
     }
     assert all((ROOT / chemin).exists() for chemin in attendus)
     source = (ROOT / 'app.py').read_text(encoding='utf-8')

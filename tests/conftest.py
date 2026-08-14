@@ -38,6 +38,10 @@ MUTABLE_TABLES = [
     'soldes_conges', 'audit_logs', 'documents', 'documents_alertes',
     'notifications', 'email_outbox', 'scheduler_runs', 'sessions_actives',
     'conversations',  # CASCADE : messages, membres et lectures d'annonces
+    'recrutement_entretien_notes', 'recrutement_entretiens',
+    'recrutement_evaluations', 'recrutement_criteres',
+    'recrutement_candidatures', 'recrutement_candidats',
+    'recrutement_offres', 'recrutement_demandes',
     'contrats', 'depart_employe_logs', 'maintenance_compteurs',
     # Les modules parc/maintenance sont désormais couverts eux aussi.
     'inventaires', 'materiel_maintenances', 'materiel_exemplaires',

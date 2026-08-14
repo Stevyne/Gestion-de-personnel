@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Nouvelle demande de recrutement{% endblock %}
+{% block content %}<div class="rc-shell">
+<section class="rc-card"><div class="rc-card-head"><div><h1>Demande de recrutement</h1><p class="rc-muted">Décrivez précisément le besoin à transmettre aux RH.</p></div><a class="rc-btn rc-btn-muted" href="{{ url_for('recrutement.demandes') }}">Retour</a></div>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="rc-grid">
+<div class="rc-field"><label for="poste">Poste *</label><input id="poste" name="poste" maxlength="150" required></div>
+<div class="rc-field"><label for="departement_id">Département *</label><select id="departement_id" name="departement_id" required><option value="">Choisir…</option>{% for d in departements %}<option value="{{ d.id }}">{{ d.nom }}</option>{% endfor %}</select></div>
+<div class="rc-field"><label for="nombre_postes">Nombre de postes *</label><input id="nombre_postes" type="number" min="1" max="100" name="nombre_postes" value="1" required></div>
+<div class="rc-field"><label for="type_contrat">Type de contrat *</label><select id="type_contrat" name="type_contrat" required>{% for code,label in types_contrats.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></div>
+<div class="rc-field"><label for="date_souhaitee">Date souhaitée</label><input id="date_souhaitee" type="date" name="date_souhaitee"></div><div></div>
+<div class="rc-field"><label for="salaire_min">Salaire minimum</label><input id="salaire_min" type="number" min="0" step="0.01" name="salaire_min"></div>
+<div class="rc-field"><label for="salaire_max">Salaire maximum</label><input id="salaire_max" type="number" min="0" step="0.01" name="salaire_max"></div>
+<div class="rc-field rc-field-full"><label for="motif">Motif *</label><textarea id="motif" name="motif" required placeholder="Remplacement, croissance, nouvelle compétence…"></textarea></div>
+<div class="rc-field rc-field-full"><label for="competences">Compétences requises</label><textarea id="competences" name="competences" placeholder="Une compétence par ligne&#10;Python&#10;Flask&#10;PostgreSQL"></textarea></div>
+</div><div class="rc-form-actions"><button class="rc-btn rc-btn-green" type="submit">Transmettre aux RH</button><a class="rc-btn rc-btn-muted" href="{{ url_for('recrutement.demandes') }}">Annuler</a></div></form>
+</section></div>{% endblock %}

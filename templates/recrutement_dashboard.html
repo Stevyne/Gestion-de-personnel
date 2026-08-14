@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Recrutement · TeamSphere{% endblock %}
+{% block content %}
+<div class="rc-shell">
+  <section class="rc-hero">
+    <div><h1>🧑‍💼 Recrutement</h1><p>Du besoin exprimé par le responsable à l'embauche, avec décision humaine à chaque étape.</p></div>
+    <div class="rc-hero-actions">
+      <a class="rc-btn rc-btn-light" href="{{ url_for('recrutement.demande_nouvelle') }}">+ Nouvelle demande</a>
+      {% if est_rh %}<a class="rc-btn" href="{{ url_for('recrutement.candidat_nouveau') }}">+ Nouveau candidat</a>{% endif %}
+    </div>
+  </section>
+  {% include '_recrutement_nav.html' %}
+  <section class="rc-stats">
+    <div class="rc-stat"><span>Demandes</span><strong>{{ stats.total or 0 }}</strong></div>
+    <div class="rc-stat"><span>À valider</span><strong>{{ stats.demandes_attente or 0 }}</strong></div>
+    {% if est_rh %}
+    <div class="rc-stat"><span>Offres publiées</span><strong>{{ stats.offres or 0 }}</strong></div>
+    <div class="rc-stat"><span>Candidatures actives</span><strong>{{ stats.candidatures or 0 }}</strong></div>
+    {% else %}
+    <div class="rc-stat"><span>Validées / publiées</span><strong>{{ stats.demandes_validees or 0 }}</strong></div>
+    {% endif %}
+  </section>
+  {% if est_rh %}
+  <section class="rc-card">
+    <div class="rc-card-head"><div><h2>Activité récente</h2><p class="rc-muted">Dernières candidatures modifiées</p></div><a class="rc-btn rc-btn-muted rc-btn-sm" href="{{ url_for('recrutement.candidats') }}">Tous les candidats</a></div>
+    {% if recentes %}<div class="rc-table-wrap"><table class="rc-table"><thead><tr><th>Candidat</th><th>Offre</th><th>Statut</th><th>Score global</th></tr></thead><tbody>
+    {% for c in recentes %}<tr><td><a href="{{ url_for('recrutement.candidature_detail', candidature_id=c.id) }}">{{ c.prenom }} {{ c.nom }}</a></td><td>{{ c.titre }}</td><td><span class="rc-badge rc-badge-{{ c.statut }}">{{ c.statut }}</span></td><td>{% if c.score_global is not none %}<span class="rc-score">{{ c.score_global|round(1) }}</span>{% else %}—{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<div class="rc-empty">Aucune candidature enregistrée.</div>{% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

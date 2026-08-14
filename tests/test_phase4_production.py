@@ -253,3 +253,5 @@ def test_configuration_production_versionnee_sans_blocage_cd():
     assert 'flask db upgrade' in workflow
     assert 'SCHEDULER_STARTUP_TIMEOUT' in render
     assert (ROOT / 'migrations/versions/20260813_phase4_production.py').exists()
+    assert (ROOT / 'migrations/versions/20260814_recrutement.py').exists()
+    assert '20260814_recrutement' in (ROOT / 'scheduler_worker.py').read_text(encoding='utf-8')

@@ -29,6 +29,11 @@ def creer_blueprint_dashboards_roles(deps):
               (SELECT COUNT(*) FROM documents WHERE date_expiration<CURRENT_DATE) AS documents_expires,
               (SELECT COUNT(*) FROM contrats WHERE statut='actif' AND date_fin<=CURRENT_DATE+INTERVAL '30 days') AS contrats_echeance""")
             alertes = cur.fetchone()
+            cur.execute("""SELECT
+              (SELECT COUNT(*) FROM recrutement_demandes WHERE statut='en_attente') AS demandes_recrutement,
+              (SELECT COUNT(*) FROM recrutement_offres WHERE statut='publiee') AS offres_ouvertes,
+              (SELECT COUNT(*) FROM recrutement_candidatures WHERE statut='acceptee') AS candidats_acceptes""")
+            recrutement = cur.fetchone()
         cards = [
             ('Employés actifs', personnel['actifs'], '👥'),
             ('Départs en préparation', personnel['departs'], '🚪'),
@@ -37,6 +42,9 @@ def creer_blueprint_dashboards_roles(deps):
             ('Absences à régulariser', alertes['absences'], '🚫'),
             ('Contrats à échéance ≤ 30 j', alertes['contrats_echeance'], '📑'),
             ('Documents expirés', alertes['documents_expires'], '📁'),
+            ('Demandes de recrutement', recrutement['demandes_recrutement'], '🧑‍💼'),
+            ('Offres publiées', recrutement['offres_ouvertes'], '📣'),
+            ('Candidats acceptés', recrutement['candidats_acceptes'], '⭐'),
             ('Masse salariale annuelle', f"{float(personnel['masse_salariale']):,.0f} Ar", '💰'),
         ]
         return render_template('dashboard_role.html', titre='Tableau de bord RH',

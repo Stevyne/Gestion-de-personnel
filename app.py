@@ -37,6 +37,7 @@ from blueprints.notifications import creer_blueprint_notifications
 from blueprints.recherche import (
     RECHERCHE_PAGES, creer_blueprint_recherche,  # noqa: F401 — réexport public
 )
+from blueprints.recrutement import creer_blueprint_recrutement
 from blueprints.documents import creer_blueprint_documents
 from blueprints.departements import creer_blueprint_departements
 from blueprints.presences import creer_blueprint_presences
@@ -2617,6 +2618,18 @@ app.register_blueprint(creer_blueprint_conges({
     'Q_SOLDE': Q_SOLDE,
 }))
 
+app.register_blueprint(creer_blueprint_recrutement({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'role_required': role_required,
+    'get_department_scope': get_department_scope,
+    'detect_file_type': detect_file_type,
+    'object_storage': object_storage,
+    'create_notification': create_notification,
+    'queue_email': queue_email,
+    'log_action': log_action,
+}))
+
 contrats_bp, contrats_api = creer_blueprint_contrats({
     'db_cursor': db_cursor,
     'login_required': login_required,
@@ -2816,7 +2829,7 @@ def bootstrap_db_command():
 
 register_storage_cli(app, db_cursor, object_storage)
 health_live, health_ready = register_observability(
-    app, get_db, object_storage, alembic_revision='20260813_phase4'
+    app, get_db, object_storage, alembic_revision='20260814_recrutement'
 )
 limiter.exempt(health_live)
 limiter.exempt(health_ready)

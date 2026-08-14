@@ -23,6 +23,19 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - L'historique RH est conservé ; un trigger PostgreSQL interdit l'archivage tant qu'un matériel ou exemplaire reste détenu
 - Photo de profil affichée dans la liste et sur la fiche détaillée (à défaut : initiales)
 
+### 🧑‍💼 Recrutement
+- Demandes de recrutement créées par les managers dans leur département, puis validées ou refusées par admin/RH
+- Offres d'emploi versionnées par statut : brouillon, publiée, suspendue, fermée ou pourvue
+- Fiches candidats indépendantes des employés, avec CV et lettre privés stockés en mode hybride PostgreSQL/S3
+- Candidatures suivies de la réception à l'acceptation/refus, sans création prématurée d'un employé
+- Grilles de critères pondérés totalisant 100 %, notes explicables et score dossier calculé automatiquement
+- Entretiens planifiés avec évaluateur et grille Technique, Communication, Motivation, Travail en équipe, Adaptabilité
+- Score global transparent : 40 % dossier + 60 % moyenne des entretiens ; il reste une aide, jamais une décision automatique
+- Comparaison côte à côte et classement des candidats d'une offre
+- Conversion transactionnelle candidat → employé, création optionnelle du contrat et compte utilisateur créé séparément
+- Politique d'accès : manager limité aux demandes de son département ; admin/RH pilotent offres, candidats, évaluations et embauches
+- Routes principales : `/recrutement`, `/recrutement/demandes`, `/recrutement/offres`, `/recrutement/candidats`
+
 ### 🕒 Gestion des présences
 - Pointage entrée / sortie (`/presences/clock_in/<employe_id>`, `/presences/clock_out/<employe_id>`, en POST)
 - Calcul automatique des retards (seuil configurable, `HEURE_ARRIVEE_ATTENDUE = "09:00"` dans `app.py`)
@@ -301,9 +314,9 @@ flask db current
 flask db revision -m "description"
 ```
 
-La première révision est `20260813_phase4`. Le downgrade refuse de supprimer les
-colonnes tant qu'une clé S3 existe, afin de ne jamais rendre un fichier
-inaccessible.
+La chaîne de migrations part de `20260813_phase4` et aboutit à
+`20260814_recrutement`. Les downgrades refusent de supprimer un stockage encore
+utilisé (fichiers S3 ou candidats déjà convertis en employés).
 
 ### Bascule progressive vers S3 — prête mais désactivée
 
@@ -404,6 +417,8 @@ Redis** est vert. Aucun deploy hook ni secret GitHub n'est requis.
 | `/register`                        | Création d'un compte et rattachement salarié | admin, rh (admin pour rôle admin) |
 | `/recherche`, `/api/recherche`     | Recherche globale (page + JSON)  | Connecté (filtré par rôle) |
 | `/employes`, `/employes/add`, ...  | Gestion des employés             | Tous / selon rôle      |
+| `/recrutement`, `/recrutement/demandes` | Besoins et workflow de validation | manager (département), admin/RH |
+| `/recrutement/offres`, `/recrutement/candidats` | Offres, candidatures, scores et entretiens | admin/RH |
 | `/departements`                    | Gestion des départements         | Selon rôle             |
 | `/materiels`, `/materiels/add`     | Matériels par département        | Tous / selon rôle      |
 | `/inventaires`, `/inventaires/nouveau` | Inventaire physique          | Saisie : admin/rh/manager · clôture : admin/rh |
@@ -490,6 +505,7 @@ la sécurité HTTP, PostgreSQL, le schéma et les services partagés sont isolé
 - `conges.py` : dépôt, avis manager, décision RH et annulation ;
 - `absences.py` : consultation, saisie et synchronisation ;
 - `notifications.py` : centre de notifications et marquage comme lu ;
+- `recrutement.py` : demandes, offres, candidats, évaluations, entretiens et embauche ;
 - `absence_justifications.py` : workflow confidentiel des justificatifs ;
 - `messagerie.py` : messagerie interne.
 
@@ -510,6 +526,7 @@ Gestion-de-personnel/
 │   ├── conges.py           # Workflow des congés
 │   ├── absences.py         # Gestion des absences
 │   ├── notifications.py    # Centre de notifications
+│   ├── recrutement.py      # Workflow complet de recrutement
 │   ├── parc.py             # Stock, inventaires, exemplaires et maintenance
 │   ├── documents.py        # Documents RH et contrôle des téléchargements
 │   ├── departements.py     # Gestion des départements

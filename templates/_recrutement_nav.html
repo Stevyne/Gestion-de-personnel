@@ -1,0 +1,8 @@
+<nav class="rc-tabs" aria-label="Navigation recrutement">
+  <a href="{{ url_for('recrutement.tableau_recrutement') }}" class="{% if request.endpoint == 'recrutement.tableau_recrutement' %}active{% endif %}">Vue d'ensemble</a>
+  <a href="{{ url_for('recrutement.demandes') }}" class="{% if request.endpoint and 'demande' in request.endpoint %}active{% endif %}">Demandes</a>
+  {% if session.get('role') in ['admin','rh'] %}
+  <a href="{{ url_for('recrutement.offres') }}" class="{% if request.endpoint and 'offre' in request.endpoint %}active{% endif %}">Offres</a>
+  <a href="{{ url_for('recrutement.candidats') }}" class="{% if request.endpoint and ('candidat' in request.endpoint or 'entretien' in request.endpoint or 'comparer' in request.endpoint or 'embaucher' in request.endpoint) %}active{% endif %}">Candidats</a>
+  {% endif %}
+</nav>
