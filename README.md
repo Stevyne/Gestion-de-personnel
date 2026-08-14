@@ -131,7 +131,7 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Une contrainte PostgreSQL interdit tout code de rôle inconnu, y compris via une écriture SQL directe
 - Self-service pour les employés (`/self-service` ou `/mon-espace`)
 - Logs d'audit (`/audit`, réservé à `admin`/`rh`)
-- Protection CSRF (Flask-WTF), rate limiting (Flask-Limiter), headers de sécurité (Flask-Talisman)
+- Protection CSRF (Flask-WTF), rate limiting partagé via Redis et limite dédiée aux tentatives de connexion (`5/min`, `20/h` par IP), headers de sécurité (Flask-Talisman)
 - Création de comptes réservée aux admin/RH (`/register`) dans une popup depuis la page Utilisateurs, avec repli en page complète sans JavaScript ; choix immédiat du rôle et de l'employé lié, seul un administrateur pouvant créer un autre administrateur
 
 ### 🖥️ Sessions actives & déconnexion forcée
@@ -232,6 +232,7 @@ cp .env.example .env
 | `DATABASE_URL`            | Chaîne de connexion PostgreSQL |
 | `AUTO_INIT_DB`, `REQUIRE_ALEMBIC_CURRENT` | Bootstrap historique local et exigence de révision Alembic en production |
 | `REDIS_URL`               | Stockage Redis partagé du rate limiting multi-worker |
+| `LOGIN_RATE_LIMIT`        | Limites des POST `/login` (`5 per minute;20 per hour` par défaut) |
 | `OBJECT_STORAGE_ENABLED`, `OBJECT_STORAGE_REQUIRED` | Laisser `false` sans S3 ; activer après création d'un bucket privé |
 | `OBJECT_STORAGE_THRESHOLD_BYTES` | Seuil d'externalisation progressive (1 Mio par défaut) |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT_URL` | Variables optionnelles tant que S3 est désactivé |
@@ -456,7 +457,7 @@ Le workflow `.github/workflows/tests.yml` lance automatiquement PostgreSQL 17,
 compile les modules puis exécute `pytest -q` sur chaque push et pull request vers
 `master`. Il peut également être déclenché manuellement depuis GitHub Actions.
 
-> 💡 Si vous testez manuellement en enchaînant beaucoup de requêtes, le rate limiter (50/heure par route) finit par renvoyer `429 Too Many Requests` — ce n'est pas un bug de l'application. Redémarrez le serveur (le compteur est en mémoire) ou désactivez le limiteur dans votre script de test.
+> 💡 Les POST `/login` sont limités à 5/minute et 20/heure par IP ; les autres routes conservent les limites globales. En production, les compteurs Redis sont partagés entre workers et un redémarrage du web ne les efface pas.
 
 ---
 
@@ -512,8 +513,8 @@ Gestion-de-personnel/
 │   └── phase3_schema.py    # Contexte messagerie/maintenance
 ├── .github/workflows/
 │   └── tests.yml           # PostgreSQL 17 + pytest sur push/PR
-├── requirements.txt        # Dépendances production
-├── requirements-dev.txt    # Dépendances dev (pytest)
+├── requirements.txt        # Dépendances runtime directes, minimales
+├── requirements-dev.txt    # Dépendances dev/CI (pytest, Ruff, git-filter-repo)
 ├── pytest.ini
 ├── .env.example
 ├── .gitignore

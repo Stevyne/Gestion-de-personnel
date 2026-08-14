@@ -4562,6 +4562,7 @@ app.register_blueprint(creer_blueprint_auth({
     'enregistrer_photo_profil': enregistrer_photo_profil,
     'supprimer_photo_profil': supprimer_photo_profil,
     'avatar_folder': AVATAR_FOLDER,
+    'limiter': limiter,
 }))
 
 app.register_blueprint(creer_blueprint_utilisateurs({
@@ -4689,6 +4690,6 @@ if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     if debug_mode and os.environ.get('FLASK_ENV') == 'production':
         raise RuntimeError("FLASK_DEBUG ne doit jamais être activé en production (FLASK_ENV=production).")
-    # For development with basic concurrency support (multiple users)
-    # For production use: gunicorn -w 4 -b 0.0.0.0:5000 app:app
+    # Développement local uniquement. En production Render : gunicorn app:app
+    # --bind 0.0.0.0:$PORT --workers 2 --threads 4
     app.run(debug=debug_mode, host='0.0.0.0', port=5000, threaded=True)

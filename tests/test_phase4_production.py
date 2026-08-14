@@ -1,5 +1,8 @@
 import io
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import app as application
 
@@ -168,6 +171,55 @@ def test_healthchecks_publics(client):
     assert ready.status_code == 200
     assert ready.get_json()['checks']['postgresql'] == 'ok'
     assert live.headers.get('X-Request-ID')
+
+
+def test_login_est_bloque_apres_cinq_tentatives_par_minute():
+    code = """
+import app
+app.app.config['WTF_CSRF_ENABLED'] = False
+app.limiter.reset()
+client = app.app.test_client()
+codes = [client.post('/login', data={'username': 'inconnu', 'password': 'x'}).status_code
+         for _ in range(6)]
+assert codes == [200, 200, 200, 200, 200, 429], codes
+"""
+    env = os.environ.copy()
+    env.update({
+        'RATELIMIT_ENABLED': 'true',
+        'RATELIMIT_STORAGE_URI': 'memory://',
+        'SCHEDULER_MODE': 'disabled',
+        'OBJECT_STORAGE_ENABLED': 'false',
+        'FLASK_ENV': 'testing',
+        'LOG_FORMAT': 'text',
+    })
+    result = subprocess.run(
+        [sys.executable, '-c', code], cwd=ROOT, env=env,
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_login_limite_et_dependances_runtime_minimales():
+    auth_source = (ROOT / 'blueprints/auth.py').read_text(encoding='utf-8')
+    app_source = (ROOT / 'app.py').read_text(encoding='utf-8')
+    runtime = (ROOT / 'requirements.txt').read_text(encoding='utf-8')
+    dev = (ROOT / 'requirements-dev.txt').read_text(encoding='utf-8')
+    runtime_packages = {
+        line.split('==', 1)[0].lower()
+        for line in runtime.splitlines()
+        if line and not line.startswith('#')
+    }
+    assert "@limiter.limit(login_rate_limit, methods=['POST'], override_defaults=False)" in auth_source
+    assert "'limiter': limiter" in app_source
+    assert 'LOGIN_RATE_LIMIT' in auth_source
+    assert '--workers 2 --threads 4' in app_source
+    assert 'gunicorn -w 4' not in app_source
+    assert {
+        'pytest', 'git-filter-repo', 'iniconfig', 'pluggy', 'rich', 'pygments',
+        'markdown-it-py', 'mdurl',
+    }.isdisjoint(runtime_packages)
+    assert 'pytest==8.3.3' in dev
+    assert 'git-filter-repo==2.47.0' in dev
 
 
 def test_configuration_production_versionnee_sans_blocage_cd():

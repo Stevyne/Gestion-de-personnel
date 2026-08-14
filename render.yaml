@@ -27,6 +27,8 @@ envVarGroups:
         value: "true"
       - key: REQUIRE_REDIS_RATE_LIMIT
         value: "true"
+      - key: LOGIN_RATE_LIMIT
+        value: 5 per minute;20 per hour
       # S3 est prêt dans le code, mais reste désactivé tant qu'aucun bucket
       # privé n'a été créé. Les fichiers continuent donc à vivre en BYTEA.
       - key: OBJECT_STORAGE_ENABLED

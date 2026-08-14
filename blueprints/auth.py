@@ -25,8 +25,11 @@ def creer_blueprint_auth(deps):
     enregistrer_photo_profil = deps['enregistrer_photo_profil']
     supprimer_photo_profil = deps['supprimer_photo_profil']
     avatar_folder = deps['avatar_folder']
+    limiter = deps['limiter']
+    login_rate_limit = os.environ.get('LOGIN_RATE_LIMIT', '5 per minute;20 per hour')
 
     @bp.route('/login', methods=['GET','POST'])
+    @limiter.limit(login_rate_limit, methods=['POST'], override_defaults=False)
     def login():
         if 'user_id' in session: return redirect(url_for('dashboard'))
         if request.method == 'POST':
