@@ -163,7 +163,7 @@ jobs:
       - name: Vérifier et appliquer les migrations Alembic
         run: |
           flask db upgrade
-          flask db current | grep 20260814_recrutement
+          flask db current | grep 20260817_objectifs
 
       - name: Exécuter la suite de tests
         run: pytest -q
