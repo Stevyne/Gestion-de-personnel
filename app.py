@@ -2818,6 +2818,7 @@ app.register_blueprint(creer_blueprint_messagerie({
     'log_action': log_action,
     'department_scope_sql': department_scope_sql,
     'object_storage': object_storage,
+    'limiter': limiter,
 }))
 
 # Commandes d'exploitation : bootstrap transitoire du schéma historique,

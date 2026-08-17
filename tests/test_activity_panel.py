@@ -109,6 +109,32 @@ def test_messagerie_inbox_fil_et_reponse_restent_dans_le_panneau(app):
     assert b'data-panel-form' in compose.data
 
 
+def test_badge_mobile_messages_se_met_a_jour_et_disparait_apres_lecture(app):
+    employe = _client_connecte(app, 'employe', 'user123')
+    employe.post('/messages/nouveau', data={
+        'type': 'prive', 'destinataires': '3', 'contenu': 'Badge mobile',
+    })
+    with application.db_cursor() as (_conn, cur):
+        cur.execute('SELECT id FROM conversations ORDER BY id DESC LIMIT 1')
+        conversation_id = cur.fetchone()['id']
+
+    manager = _client_connecte(app, 'manager', 'manager123')
+    count = manager.get('/messages/non-lus')
+    assert count.status_code == 200
+    assert count.get_json() == {'count': 1}
+    assert count.headers['Cache-Control'] == 'private, no-store'
+    source = (ROOT / 'blueprints' / 'messagerie.py').read_text(encoding='utf-8')
+    assert "@limiter.limit('240 per hour', override_defaults=True)" in source
+
+    mobile_nav = manager.get('/')
+    assert b'message-menu-count' in mobile_nav.data
+    assert b'data-message-count-url="/messages/non-lus"' in mobile_nav.data
+
+    thread = manager.get(f'/messages/{conversation_id}?panel=1')
+    assert thread.status_code == 200
+    assert manager.get('/messages/non-lus').get_json() == {'count': 0}
+
+
 def test_panneau_est_responsive_accessible_et_sans_dependance_externe():
     css = (ROOT / 'static' / 'activity-panel.css').read_text(encoding='utf-8')
     js = (ROOT / 'static' / 'activity-panel.js').read_text(encoding='utf-8')
@@ -121,4 +147,7 @@ def test_panneau_est_responsive_accessible_et_sans_dependance_externe():
     assert "headers: {'X-Activity-Panel': '1'" in js
     assert 'response.status === 204' in js
     assert "response.headers.get('X-Redirect-To')" in js
+    assert "badge.className = 'menu-count message-menu-count'" in js
+    assert "window.setInterval(refreshMessageBadge, 30000)" in js
+    assert "updateKindBadges('messages', data.count)" in js
     assert 'http://' not in js and 'https://' not in js

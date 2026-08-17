@@ -84,25 +84,53 @@
         body.innerHTML = '<div class="activity-panel-loader"><span></span><p>Chargement…</p></div>';
     }
 
-    function updateBadges(root) {
-        const count = Number(root && root.dataset.unreadCount);
+    function updateKindBadges(kind, rawCount) {
+        const count = Number(rawCount);
         if (!Number.isFinite(count)) return;
-        document.querySelectorAll(`[data-panel-kind="${currentKind}"]`).forEach(trigger => {
+        document.querySelectorAll(`[data-panel-kind="${kind}"]`).forEach(trigger => {
             let badge = trigger.querySelector('.notif-badge, .menu-count');
             if (count <= 0) {
                 if (badge) badge.hidden = true;
                 return;
             }
-            if (!badge && trigger.classList.contains('nav-notif')) {
+            if (!badge) {
                 badge = document.createElement('span');
-                badge.className = 'notif-badge';
+                if (trigger.classList.contains('nav-notif')) {
+                    badge.className = 'notif-badge';
+                } else {
+                    // Dans le tiroir mobile, un badge absolu se positionnait
+                    // hors du lien. menu-count reste aligné à droite et cliquable.
+                    badge.className = 'menu-count message-menu-count';
+                }
                 trigger.appendChild(badge);
             }
-            if (badge) {
-                badge.hidden = false;
-                badge.textContent = count < 100 ? String(count) : '99+';
-            }
+            badge.hidden = false;
+            badge.textContent = count < 100 ? String(count) : '99+';
+            badge.setAttribute('aria-label', `${count} élément${count > 1 ? 's' : ''} non lu${count > 1 ? 's' : ''}`);
         });
+    }
+
+    function updateBadges(root) {
+        if (!root) return;
+        updateKindBadges(currentKind, root.dataset.unreadCount);
+    }
+
+    async function refreshMessageBadge() {
+        const url = panel.dataset.messageCountUrl;
+        if (!url || document.hidden) return;
+        try {
+            const response = await fetch(url, {
+                credentials: 'same-origin',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                cache: 'no-store',
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            updateKindBadges('messages', data.count);
+        } catch (error) {
+            // Le compteur est non critique : le prochain rafraîchissement ou
+            // rechargement de page réessaiera sans perturber l'utilisateur.
+        }
     }
 
     function normalize(value) {
@@ -284,6 +312,15 @@
             notice.textContent = "L'action n'a pas pu être effectuée. Réessayez.";
             form.prepend(notice);
         }
+    });
+
+    // Le badge mobile se met à jour sans recharger toute la page. La requête
+    // est volontairement légère et suspendue quand l'onglet est masqué.
+    window.setTimeout(refreshMessageBadge, 1200);
+    window.setInterval(refreshMessageBadge, 30000);
+    window.addEventListener('focus', refreshMessageBadge);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) refreshMessageBadge();
     });
 
     closeButton?.addEventListener('click', closeLayer);

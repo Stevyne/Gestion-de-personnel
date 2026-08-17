@@ -13,7 +13,7 @@ fabrique pour éviter tout import circulaire avec ``app.py``.
 
 import psycopg2
 
-from flask import (Blueprint, abort, flash, redirect, render_template,
+from flask import (Blueprint, abort, flash, jsonify, redirect, render_template,
                     request, session, url_for)
 from werkzeug.utils import secure_filename
 
@@ -69,6 +69,7 @@ def creer_blueprint_messagerie(deps):
     log_action = deps['log_action']
     department_scope_sql = deps['department_scope_sql']
     object_storage = deps['object_storage']
+    limiter = deps['limiter']
 
     def _panel_mode():
         return (request.args.get('panel') == '1'
@@ -220,6 +221,19 @@ def creer_blueprint_messagerie(deps):
         return conversations
 
     # ------------------------------------------------------------- routes
+    @bp.route('/messages/non-lus')
+    @limiter.limit('240 per hour', override_defaults=True)
+    @login_required
+    def messagerie_non_lus():
+        """Compteur léger utilisé par le badge mobile et desktop."""
+        user_id = session['user_id']
+        role = session.get('role', 'employe')
+        with db_cursor() as (_conn, cur):
+            count = _nb_non_lus(cur, user_id, role)
+        response = jsonify({'count': count})
+        response.headers['Cache-Control'] = 'private, no-store'
+        return response
+
     @bp.route('/messages')
     @login_required
     def messagerie_inbox():

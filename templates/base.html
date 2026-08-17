@@ -546,7 +546,7 @@
                        aria-controls="activityPanel" aria-expanded="false" aria-label="Messages" title="Messages">
                         {{ icon('message', 19) }}<span>Messages</span>
                         {% if messages_non_lus and messages_non_lus > 0 %}
-                        <span class="notif-badge">{{ messages_non_lus if messages_non_lus < 100 else '99+' }}</span>
+                        <span class="menu-count message-menu-count">{{ messages_non_lus if messages_non_lus < 100 else '99+' }}</span>
                         {% endif %}
                     </a>
                     <a href="{{ url_for('notifications.notifications') }}" class="nav-link js-activity-panel {% if request.endpoint == 'notifications.notifications' %}active{% endif %}"
@@ -578,7 +578,8 @@
         <aside class="activity-panel" id="activityPanel" role="dialog" aria-modal="true"
                aria-labelledby="activityPanelTitle" aria-hidden="true"
                data-message-css="{{ url_for('static', filename='messagerie.css') }}"
-               data-message-js="{{ url_for('static', filename='messagerie.js') }}">
+               data-message-js="{{ url_for('static', filename='messagerie.js') }}"
+               data-message-count-url="{{ url_for('messagerie.messagerie_non_lus') }}">
             <header class="activity-panel-head">
                 <div class="activity-panel-heading">
                     <span class="activity-panel-head-icon" id="activityPanelIcon" aria-hidden="true">🔔</span>

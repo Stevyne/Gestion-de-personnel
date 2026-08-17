@@ -33,7 +33,7 @@ def _id_conversation():
 
 
 def test_routes_messagerie_exigent_connexion(client):
-    for route in ('/messages', '/messages/nouveau'):
+    for route in ('/messages', '/messages/nouveau', '/messages/non-lus'):
         response = client.get(route, follow_redirects=False)
         assert response.status_code in (301, 302)
         assert '/login' in response.headers['Location']
