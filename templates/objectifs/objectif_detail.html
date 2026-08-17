@@ -40,13 +40,13 @@
         <button type="button" class="rc-btn" onclick="document.getElementById('editForm').style.display='block';">✏️ Modifier</button>
       {% endif %}
       {% if o.statut == 'brouillon' and droits.progression %}
-        <form method="post" action="{{ url_for('objectifs.objectif_demarrer', oid=o.id) }}" style="display:inline;">
+        <form method="post" action="{{ url_for('objectifs.objectif_demarrer', oid=o.id) }}" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="rc-btn rc-btn-green" type="submit">▶️ Démarrer</button>
         </form>
       {% endif %}
       {% if droits.soumettre %}
         <form method="post" action="{{ url_for('objectifs.objectif_soumettre', oid=o.id) }}"
-              onsubmit="return confirm('Soumettre cet objectif comme atteint (100%) ?');" style="display:inline;">
+              onsubmit="return confirm('Soumettre cet objectif comme atteint (100%) ?');" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="rc-btn rc-btn-green" type="submit">✅ Marquer comme atteint</button>
         </form>
       {% endif %}
@@ -61,7 +61,7 @@
       {% endif %}
       {% if droits.reactiver %}
         <form method="post" action="{{ url_for('objectifs.objectif_reactiver', oid=o.id) }}"
-              onsubmit="return confirm('Rouvrir cet objectif ?');" style="display:inline;">
+              onsubmit="return confirm('Rouvrir cet objectif ?');" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="rc-btn rc-btn-light" type="submit">🔄 Rouvrir</button>
         </form>
       {% endif %}
@@ -88,7 +88,7 @@
     </div>
 
     {% if droits.progression and o.statut in ('brouillon','en_cours') %}
-    <form method="post" action="{{ url_for('objectifs.objectif_progression', oid=o.id) }}" class="obj-form-block" style="margin-top:16px;padding:0;border:0;box-shadow:none;">
+    <form method="post" action="{{ url_for('objectifs.objectif_progression', oid=o.id) }}" class="obj-form-block" style="margin-top:16px;padding:0;border:0;box-shadow:none;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <h3 style="margin:0 0 10px;font-size:1rem;color:#183b5b;">📈 Ajouter un point de situation</h3>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <input type="range" name="progression" min="0" max="100" value="{{ o.progression }}"
@@ -185,7 +185,7 @@
   {# --------------------------- FORMULAIRES CACHÉS --------------------------- #}
   <div id="editForm" style="display:none;margin-top:18px;" class="obj-form-block">
     <h3>✏️ Modifier l'objectif</h3>
-    <form method="post" action="{{ url_for('objectifs.objectif_modifier', oid=o.id) }}">
+    <form method="post" action="{{ url_for('objectifs.objectif_modifier', oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="rc-field">
         <label>Titre *</label>
         <input type="text" name="titre" required maxlength="200" value="{{ o.titre }}">
@@ -235,7 +235,7 @@
 
   <div id="validerForm" style="display:none;margin-top:18px;" class="obj-form-block">
     <h3>✅ Valider comme atteint</h3>
-    <form method="post" action="{{ url_for('objectifs.objectif_valider', oid=o.id) }}">
+    <form method="post" action="{{ url_for('objectifs.objectif_valider', oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="rc-field"><label>Commentaire (optionnel)</label>
         <textarea name="commentaire" rows="2" placeholder="Bravo, objectif atteint ! Points clés de réussite…"></textarea></div>
       <div class="rc-form-actions">
@@ -247,7 +247,7 @@
 
   <div id="nonAtteintForm" style="display:none;margin-top:18px;" class="obj-form-block">
     <h3>❌ Clore comme non atteint</h3>
-    <form method="post" action="{{ url_for('objectifs.objectif_non_atteint', oid=o.id) }}">
+    <form method="post" action="{{ url_for('objectifs.objectif_non_atteint', oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="rc-field"><label>Motif *</label>
         <textarea name="commentaire" rows="3" required placeholder="Pourquoi cet objectif n'a-t-il pas été atteint ? Difficultés, reports, changement de périmètre…"></textarea></div>
       <div class="rc-form-actions">
@@ -259,7 +259,7 @@
 
   <div id="annulerForm" style="display:none;margin-top:18px;" class="obj-form-block">
     <h3>Annuler l'objectif</h3>
-    <form method="post" action="{{ url_for('objectifs.objectif_annuler', oid=o.id) }}">
+    <form method="post" action="{{ url_for('objectifs.objectif_annuler', oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="rc-field"><label>Motif (optionnel)</label>
         <textarea name="commentaire" rows="2" placeholder="Changement de priorités, périmètre modifié, redéfinition des objectifs…"></textarea></div>
       <div class="rc-form-actions">

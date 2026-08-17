@@ -42,11 +42,11 @@
           <div class="skill-meta">
             <span class="count">{{ c.nb_employes }} collaborateur(s)</span>
             {% if peut_gerer and c.active %}
-              <form method="POST" action="{{ url_for('competences.competence_archiver', cid=c.id) }}" onsubmit="return confirm('Archiver cette compétence ?');" onclick="event.stopPropagation(); event.preventDefault(); if(confirm('Archiver cette compétence ?')) this.submit();">
+              <form method="POST" action="{{ url_for('competences.competence_archiver', cid=c.id) }}" onsubmit="return confirm('Archiver cette compétence ?');" onclick="event.stopPropagation(); event.preventDefault(); if(confirm('Archiver cette compétence ?')) this.submit();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="rc-link">Archiver</button>
               </form>
             {% elif peut_gerer and not c.active %}
-              <form method="POST" action="{{ url_for('competences.competence_reactiver', cid=c.id) }}" onclick="event.stopPropagation();">
+              <form method="POST" action="{{ url_for('competences.competence_reactiver', cid=c.id) }}" onclick="event.stopPropagation();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="rc-link">Réactiver</button>
               </form>
             {% endif %}

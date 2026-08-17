@@ -78,7 +78,7 @@
             {% if peut_ecrire %}
             <details>
               <summary>Modifier / retirer</summary>
-              <form method="POST" action="{{ url_for('competences.employe_competence_modifier', eid=emp.id, ecid=ec.id) }}" class="skill-inline-form">
+              <form method="POST" action="{{ url_for('competences.employe_competence_modifier', eid=emp.id, ecid=ec.id) }}" class="skill-inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="row">
                   <label style="font-size:.85rem;font-weight:700;color:#334e68;">Niveau :
                     <input type="range" name="niveau" min="0" max="100" value="{{ ec.niveau }}"
@@ -113,7 +113,7 @@
     <aside class="obj-side-card" style="background:#fff;">
       <h3 style="margin:0 0 6px;color:#183b5b;">➕ Ajouter une compétence</h3>
       <p class="rc-muted" style="margin:0 0 14px;font-size:.85rem;">Choisissez une compétence du référentiel et estimez son niveau.</p>
-      <form method="POST" action="{{ url_for('competences.employe_competence_ajouter', eid=emp.id) }}">
+      <form method="POST" action="{{ url_for('competences.employe_competence_ajouter', eid=emp.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="rc-field" style="margin-bottom:12px;">
           <label>Compétence *</label>
           <select name="competence_id" required>

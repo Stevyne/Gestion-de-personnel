@@ -19,7 +19,7 @@
         <p class="rc-muted">Renseignez un libellé clair et une catégorie pour retrouver facilement la compétence.</p>
       </div>
     </div>
-    <form method="POST">
+    <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="rc-grid">
         <div class="rc-field">
           <label>Nom *</label>

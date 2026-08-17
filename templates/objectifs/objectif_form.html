@@ -14,7 +14,7 @@
   </section>
 
   <section class="rc-card">
-    <form method="post" action="">
+    <form method="post" action=""><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% if not is_editing and (current_role in ('admin','rh','manager')) %}
       <div class="rc-field">
         <label>Collaborateur *</label>
