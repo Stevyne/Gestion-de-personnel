@@ -51,13 +51,13 @@
         </form>
       {% endif %}
       {% if droits.valider and o.statut in ('en_cours','atteint') %}
-        <button type="button" class="rc-btn rc-btn-green" onclick="document.getElementById('validerForm').style.display='block';">Valider</button>
+        <button type="button" class="rc-btn rc-btn-green" onclick="openObjForm('validerForm')">Valider</button>
       {% endif %}
       {% if droits.non_atteint and o.statut in ('en_cours','atteint') %}
-        <button type="button" class="rc-btn rc-btn-danger" onclick="document.getElementById('nonAtteintForm').style.display='block';">Non atteint</button>
+        <button type="button" class="rc-btn rc-btn-danger" onclick="openObjForm('nonAtteintForm')">Non atteint</button>
       {% endif %}
       {% if droits.annuler %}
-        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('annulerForm').style.display='block';">Annuler</button>
+        <button type="button" class="rc-btn rc-btn-muted" onclick="openObjForm('annulerForm')">Annuler</button>
       {% endif %}
       {% if droits.reactiver %}
         <form method="post" action="{{ url_for('objectifs.objectif_reactiver', oid=o.id) }}"
@@ -81,8 +81,8 @@
       {% elif o.statut=='atteint' %}{% set gcls = 'g-success' %}{% set gcolor = '#059669' %}
       {% elif o.statut=='annule' %}{% set gcls = 'g-annule' %}{% set gcolor = '#9ca3af' %}
       {% else %}{% set gcls = '' %}{% set gcolor = '#b45309' %}{% endif %}
-      <div class="obj-gauge {{ gcls }}" style="--ring-color:{{ gcolor }};">
-        <svg viewBox="0 0 100 100" width="118" height="118">
+      <div class="obj-gauge {{ gcls }}" style="--ring-color:{{ gcolor }};" role="img" aria-label="Progression : {{ pct }} % réalisés">
+        <svg viewBox="0 0 100 100" width="118" height="118" aria-hidden="true">
           <circle class="ring-bg" cx="50" cy="50" r="{{ r }}"></circle>
           <circle class="ring-fill" cx="50" cy="50" r="{{ r }}"
                   stroke-dasharray="{{ circum }}" stroke-dashoffset="{{ (circum * (1 - pct/100))|round(3) }}"></circle>
@@ -94,27 +94,27 @@
       </div>
     </div>
 
-    <div class="obj-bar">
+    <div class="obj-bar" role="progressbar" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100" aria-label="Progression">
       <div class="obj-bar-track">
         <div class="obj-bar-fill {{ progression_couleur(o.progression, o.statut) }}" style="width:{{ [o.progression,4]|max }}%;"></div>
       </div>
     </div>
 
-    {% if droits.progression and o.statut in ('brouillon','en_cours') %}
-    <form method="post" action="{{ url_for('objectifs.objectif_progression', oid=o.id) }}" class="obj-form-block" style="margin-top:16px;padding:0;border:0;box-shadow:none;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <h3 style="margin:0 0 10px;font-size:1rem;color:#183b5b;">📈 Ajouter un point de situation</h3>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <input type="range" name="progression" min="0" max="100" value="{{ o.progression }}"
-               oninput="this.nextElementSibling.value=this.value;document.getElementById('pctv').textContent=this.value+'%';"
-               style="flex:1;min-width:220px;accent-color:#b45309;">
-        <input type="number" name="progression" min="0" max="100" value="{{ o.progression }}"
-               oninput="this.previousElementSibling.value=this.value;document.getElementById('pctv').textContent=this.value+'%';"
-               style="width:80px;padding:9px 12px;border:1px solid #cbd9e5;border-radius:10px;">
-        <strong id="pctv" style="color:#b45309;">{{ o.progression }}%</strong>
+      {% if droits.progression and o.statut in ('brouillon','en_cours') %}
+    <form method="post" action="{{ url_for('objectifs.objectif_progression', oid=o.id) }}" class="obj-form-block obj-form-block-flat"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <h3 class="obj-form-block-title">📈 Ajouter un point de situation</h3>
+      <div class="obj-progress-inputs">
+        <input type="range" name="progression_slider" min="0" max="100" value="{{ o.progression }}"
+               aria-label="Progression en pourcentage"
+               oninput="document.getElementById('progression_num').value=this.value;document.getElementById('progression_hidden').value=this.value;document.getElementById('pctv').textContent=this.value+'%';">
+        <input type="number" id="progression_num" min="0" max="100" value="{{ o.progression }}"
+               aria-label="Progression en pourcentage"
+               oninput="this.closest('div').querySelector('input[type=range]').value=this.value;document.getElementById('progression_hidden').value=this.value;document.getElementById('pctv').textContent=this.value+'%';">
+        <input type="hidden" id="progression_hidden" name="progression" value="{{ o.progression }}">
+        <strong id="pctv" class="obj-progress-pct">{{ o.progression }}%</strong>
       </div>
-      <textarea name="commentaire" rows="2" placeholder="Point de situation, blocage, prochaine étape…"
-                style="width:100%;min-height:70px;margin-top:10px;padding:11px 12px;border:1px solid #cbd9e5;border-radius:10px;resize:vertical;font:inherit;"></textarea>
-      <div class="obj-actions-row" style="justify-content:flex-end;">
+      <textarea name="commentaire" rows="2" class="obj-progress-comment" placeholder="Point de situation, blocage, prochaine étape…"></textarea>
+      <div class="obj-actions-row obj-actions-end">
         <button class="rc-btn" type="submit">Ajouter</button>
       </div>
     </form>
@@ -203,10 +203,10 @@
   <div id="validerForm" style="display:none;margin-top:18px;" class="obj-form-block">
     <h3>✅ Valider comme atteint</h3>
     <form method="post" action="{{ url_for('objectifs.objectif_valider', oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="rc-field"><label>Commentaire (optionnel)</label>
-        <textarea name="commentaire" rows="2" placeholder="Bravo, objectif atteint ! Points clés de réussite…"></textarea></div>
+      <div class="rc-field"><label for="valider_commentaire">Commentaire (optionnel)</label>
+        <textarea id="valider_commentaire" name="commentaire" rows="2" placeholder="Bravo, objectif atteint ! Points clés de réussite…"></textarea></div>
       <div class="rc-form-actions">
-        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('validerForm').style.display='none';">Annuler</button>
+        <button type="button" class="rc-btn rc-btn-muted" onclick="closeObjForm('validerForm')">Annuler</button>
         <button type="submit" class="rc-btn rc-btn-green">Confirmer la validation</button>
       </div>
     </form>
@@ -215,10 +215,10 @@
   <div id="nonAtteintForm" style="display:none;margin-top:18px;" class="obj-form-block">
     <h3>❌ Clore comme non atteint</h3>
     <form method="post" action="{{ url_for('objectifs.objectif_non_atteint', oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="rc-field"><label>Motif *</label>
-        <textarea name="commentaire" rows="3" required placeholder="Pourquoi cet objectif n'a-t-il pas été atteint ? Difficultés, reports, changement de périmètre…"></textarea></div>
+      <div class="rc-field"><label for="nonat_motif">Motif *</label>
+        <textarea id="nonat_motif" name="commentaire" rows="3" required placeholder="Pourquoi cet objectif n'a-t-il pas été atteint ? Difficultés, reports, changement de périmètre…"></textarea></div>
       <div class="rc-form-actions">
-        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('nonAtteintForm').style.display='none';">Annuler</button>
+        <button type="button" class="rc-btn rc-btn-muted" onclick="closeObjForm('nonAtteintForm')">Annuler</button>
         <button type="submit" class="rc-btn rc-btn-danger">Confirmer</button>
       </div>
     </form>
@@ -227,13 +227,29 @@
   <div id="annulerForm" style="display:none;margin-top:18px;" class="obj-form-block">
     <h3>Annuler l'objectif</h3>
     <form method="post" action="{{ url_for('objectifs.objectif_annuler', oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="rc-field"><label>Motif (optionnel)</label>
-        <textarea name="commentaire" rows="2" placeholder="Changement de priorités, périmètre modifié, redéfinition des objectifs…"></textarea></div>
+      <div class="rc-field"><label for="annuler_commentaire">Motif (optionnel)</label>
+        <textarea id="annuler_commentaire" name="commentaire" rows="2" placeholder="Changement de priorités, périmètre modifié, redéfinition des objectifs…"></textarea></div>
       <div class="rc-form-actions">
-        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('annulerForm').style.display='none';">Annuler</button>
+        <button type="button" class="rc-btn rc-btn-muted" onclick="closeObjForm('annulerForm')">Annuler</button>
         <button type="submit" class="rc-btn rc-btn-danger">Confirmer l'annulation</button>
       </div>
     </form>
   </div>
 </div>
+
+<script>
+  // Ouvre un formulaire masqué, scrolle jusqu'à lui et place le focus.
+  function openObjForm(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = 'block';
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    var field = el.querySelector('textarea, input, select');
+    if (field) setTimeout(function(){ field.focus(); }, 120);
+  }
+  function closeObjForm(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  }
+</script>
 {% endblock %}
