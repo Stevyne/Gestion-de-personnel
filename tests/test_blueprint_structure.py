@@ -80,9 +80,13 @@ def test_configuration_et_services_communs_sont_decouples():
         'migrations/versions/20260813_phase4_production.py',
         'migrations/versions/20260814_recrutement.py',
         'migrations/versions/20260817_competences.py',
+        'migrations/versions/20260817_objectifs.py',
         'blueprints/competences.py',
+        'blueprints/objectifs.py',
         'services/competences.py',
+        'services/objectifs.py',
         'services/phase6_schema.py',
+        'services/phase7_schema.py',
     }
     assert all((ROOT / chemin).exists() for chemin in attendus)
     source = (ROOT / 'app.py').read_text(encoding='utf-8')

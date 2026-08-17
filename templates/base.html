@@ -281,7 +281,7 @@
 
                 {# --- Personnel : employés + départements --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement','departs.departs_liste'] or (request.endpoint and (request.endpoint.startswith('recrutement.') or request.endpoint.startswith('competences.'))) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement','departs.departs_liste'] or (request.endpoint and (request.endpoint.startswith('recrutement.') or request.endpoint.startswith('competences.') or request.endpoint.startswith('objectifs.'))) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('users') }}<span>Personnel</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
@@ -302,6 +302,9 @@
                             {{ icon('brain', 17) }}<span>Compétences</span>
                         </a>
                         {% endif %}
+                        <a href="{{ url_for('objectifs.objectifs_liste') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('objectifs.') %}active{% endif %}">
+                            {{ icon('target', 17) }}<span>Objectifs</span>
+                        </a>
                         {% if session.get('role') in ['admin', 'rh'] %}
                         <a href="{{ url_for('departs.departs_liste') }}" class="nav-dropdown-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">
                             {{ icon('logout', 17) }}<span>Départs</span>
@@ -516,6 +519,7 @@
                 <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">{{ icon('file') }}<span>Contrats</span></a>
                 <a href="{{ url_for('competences.competences_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('competences.') %}active{% endif %}">{{ icon('brain') }}<span>Compétences</span></a>
                 {% endif %}
+                <a href="{{ url_for('objectifs.objectifs_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('objectifs.') %}active{% endif %}">{{ icon('target') }}<span>Objectifs</span></a>
                 {% if session.get('role') in ['admin', 'rh'] %}
                 <a href="{{ url_for('departs.departs_liste') }}" class="nav-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">{{ icon('logout') }}<span>Départs</span></a>
                 {% endif %}

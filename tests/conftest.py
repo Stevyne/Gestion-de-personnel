@@ -43,6 +43,7 @@ MUTABLE_TABLES = [
     'recrutement_candidatures', 'recrutement_candidats',
     'recrutement_offres', 'recrutement_demandes',
     'employe_competences', 'competences',
+    'objectifs_points', 'objectifs',
     'contrats', 'depart_employe_logs', 'maintenance_compteurs',
     # Les modules parc/maintenance sont désormais couverts eux aussi.
     'inventaires', 'materiel_maintenances', 'materiel_exemplaires',

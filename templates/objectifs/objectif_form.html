@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Modifier' if objectif else 'Nouvel objectif' }} · Objectifs{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='objectifs.css') }}">{% endblock %}
+{% block content %}
+<section class="obj-hero">
+  <div>
+    <h1>{% if objectif %}✏️ Modifier l'objectif{% else %}➕ Nouvel objectif{% endif %}</h1>
+    <p>{% if objectif %}Mettez à jour l'objectif.{% else %}Définissez un objectif pour vous ou un collaborateur.{% endif %}</p>
+  </div>
+  <div><a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste') }}">← Retour</a></div>
+</section>
+
+<section class="obj-section" style="max-width:820px;margin:auto;">
+  <form method="post" action="">
+    {% if not is_editing and (current_role in ('admin','rh','manager')) %}
+    <div class="obj-form-row">
+      <label>Collaborateur *</label>
+      <select name="employe_id" required>
+        {% for emp in employes %}
+          <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="obj-form-row">
+      <label>Titre * (max 200)</label>
+      <input type="text" name="titre" required maxlength="200"
+             value="{{ objectif.titre if objectif else '' }}"
+             placeholder="Ex : Finaliser la migration du module facturation">
+    </div>
+
+    <div class="obj-form-grid">
+      <div class="obj-form-row">
+        <label>Catégorie</label>
+        <input type="text" name="categorie" list="cat-list" maxlength="80"
+               value="{{ objectif.categorie if objectif else '' }}"
+               placeholder="Performance, Projet, Formation…">
+        <datalist id="cat-list">
+          {% for c in categories %}<option value="{{ c }}">{% endfor %}
+        </datalist>
+      </div>
+      <div class="obj-form-row">
+        <label>Priorité</label>
+        <select name="priorite">
+          {% for p in priorites %}
+            <option value="{{ p }}" {% if objectif and objectif.priorite==p %}selected{% endif %}>{{ priorite_labels[p] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="obj-form-row">
+        <label>Date de début</label>
+        <input type="date" name="date_debut"
+               value="{{ objectif.date_debut.isoformat() if objectif and objectif.date_debut else '' }}">
+      </div>
+      <div class="obj-form-row">
+        <label>Date d'échéance</label>
+        <input type="date" name="date_echeance"
+               value="{{ objectif.date_echeance.isoformat() if objectif and objectif.date_echeance else '' }}">
+      </div>
+      <div class="obj-form-row" style="grid-column: 1 / -1;">
+        <label>Compétence associée (optionnel)</label>
+        <select name="competence_id">
+          <option value="">— Aucune —</option>
+          {% for c in competences %}
+            <option value="{{ c.id }}" {% if objectif and objectif.competence_id==c.id %}selected{% endif %}>
+              {{ c.nom }}{% if c.categorie %} ({{ c.categorie }}){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="obj-form-row">
+      <label>Description / résultats attendus</label>
+      <textarea name="description" placeholder="Décrivez l'objectif, les critères de succès, les moyens mis en œuvre...">{{ objectif.description if objectif else '' }}</textarea>
+    </div>
+
+    {% if not is_editing and current_role in ('admin','rh','manager') %}
+    <div class="obj-form-row" style="flex-direction:row;align-items:center;gap:10px;">
+      <input type="checkbox" name="valider_immediat" value="1" id="valimm" checked>
+      <label for="valimm" style="font-weight:500;">Démarrer cet objectif immédiatement (statut « en cours »)</label>
+    </div>
+    {% endif %}
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <a class="rc-btn rc-btn-muted" href="{{ url_for('objectifs.objectifs_liste') }}">Annuler</a>
+      <button type="submit" class="rc-btn">{{ 'Enregistrer' if objectif else 'Créer l\'objectif' }}</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

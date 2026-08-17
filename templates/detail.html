@@ -39,6 +39,7 @@
             <!-- Quick actions -->
             <div class="employee-actions">
                 <a href="{{ url_for('competences.employe_competences', eid=employee.id) }}" class="btn btn-secondary">🧠 Compétences</a>
+                <a href="{{ url_for('objectifs.objectifs_liste', employe_id=employee.id) }}" class="btn btn-secondary">🎯 Objectifs</a>
                 {% if current_role in ['admin','rh'] %}
                 <a href="{{ url_for('contrats.contrats_liste', employe_id=employee.id) }}" class="btn btn-secondary">📑 Contrats</a>
                 <a href="{{ url_for('departs.departs_liste') }}" class="btn btn-secondary">🚪 Départ</a>

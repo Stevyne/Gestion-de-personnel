@@ -27,7 +27,7 @@ from services.scheduler_runtime import build_scheduler  # noqa: E402
 
 
 logger = logging.getLogger("gestion_personnel.scheduler.worker")
-EXPECTED_REVISION = "20260817_competences"
+EXPECTED_REVISION = "20260817_objectifs"
 
 
 def attendre_schema() -> None:

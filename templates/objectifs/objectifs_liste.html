@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block title %}Objectifs · TeamSphere{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='objectifs.css') }}">{% endblock %}
+{% block content %}
+<section class="obj-hero">
+  <div>
+    <h1>🎯 Objectifs</h1>
+    <p>Définissez, suivez et validez les objectifs individuels des collaborateurs.</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste', miens='1') }}">Mes objectifs</a>
+    <a class="rc-btn" href="{{ url_for('objectifs.objectif_nouveau') }}">+ Nouvel objectif</a>
+  </div>
+</section>
+
+<div class="obj-stats">
+  <div class="obj-stat"><span>Total</span><strong>{{ comptes.get('total',0) }}</strong></div>
+  <div class="obj-stat"><span>Brouillons</span><strong>{{ comptes.get('brouillon',0) }}</strong></div>
+  <div class="obj-stat"><span>En cours</span><strong>{{ comptes.get('en_cours',0) }}</strong></div>
+  <div class="obj-stat"><span>En retard</span><strong style="color:#dc2626;">{{ comptes.get('en_retard',0) }}</strong></div>
+  <div class="obj-stat"><span>À valider</span><strong>{{ comptes.get('atteint',0) }}</strong></div>
+</div>
+
+<form method="get" class="obj-filters">
+  <select name="statut" onchange="this.form.submit()">
+    <option value="">Tous les statuts</option>
+    {% for key, lbl in labels.items() %}
+      <option value="{{ key }}" {% if filtres.statut==key %}selected{% endif %}>{{ lbl }}</option>
+    {% endfor %}
+  </select>
+  {% if employes|length > 1 %}
+  <select name="employe_id" onchange="this.form.submit()">
+    <option value="">Tous les collaborateurs</option>
+    {% for emp in employes %}
+      <option value="{{ emp.id }}" {% if filtres.employe_id==emp.id %}selected{% endif %}>{{ emp.prenom }} {{ emp.nom }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+  <label style="display:flex;align-items:center;gap:6px;font-size:0.88rem;">
+    <input type="checkbox" name="miens" value="1" {% if filtres.miens %}checked{% endif %} onchange="this.form.submit()">
+    Mes objectifs uniquement
+  </label>
+</form>
+
+<div class="obj-list">
+  {% if objectifs %}
+    {% for o in objectifs %}
+      {% set en_retard = (o.statut=='en_cours' and o.date_echeance and o.date_echeance < today) %}
+      <a href="{{ url_for('objectifs.objectif_detail', oid=o.id) }}"
+         class="obj-card {% if o.statut in ('atteint','non_atteint','annule') %}done{% endif %} {% if en_retard %}retard{% endif %}"
+         style="text-decoration:none;color:inherit;">
+        <div class="top">
+          <div>
+            <div class="titre">{{ o.titre }}</div>
+            <div class="who">
+              {{ o.emp_prenom }} {{ o.emp_nom }}
+              {% if o.emp_poste %} · {{ o.emp_poste }}{% endif %}
+              {% if o.categorie %} · <em style="color:#64748b;">{{ o.categorie }}</em>{% endif %}
+              {% if o.comp_nom %} · <span class="skill-cat">{{ o.comp_nom }}</span>{% endif %}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <span class="obj-prio {{ o.priorite }}">{{ priorites.get(o.priorite, o.priorite) }}</span>
+            <span class="obj-badge {{ badges.get(o.statut,'') }}">{{ labels.get(o.statut, o.statut) }}</span>
+            {% if en_retard %}<span class="obj-badge non_atteint">EN RETARD</span>{% endif %}
+          </div>
+        </div>
+        <div class="obj-bar">
+          <div class="obj-bar-track">
+            <div class="obj-bar-fill {{ progression_couleur(o.progression, o.statut) }}" style="width: {{ [o.progression, 4]|max }}%;"></div>
+          </div>
+          <div class="obj-bar-val">{{ o.progression }}%</div>
+        </div>
+        <div class="meta">
+          {% if o.date_debut %}<span>▸ Débute le {{ o.date_debut.strftime('%d/%m/%Y') }}</span>{% endif %}
+          {% if o.date_echeance %}<span>▸ Échéance {{ o.date_echeance.strftime('%d/%m/%Y') }}</span>{% endif %}
+          {% if o.date_realisation %}<span>✓ Réalisé le {{ o.date_realisation.strftime('%d/%m/%Y') }}</span>{% endif %}
+        </div>
+      </a>
+    {% endfor %}
+  {% else %}
+    <div class="rc-empty">Aucun objectif dans ce périmètre.<br>
+      <a href="{{ url_for('objectifs.objectif_nouveau') }}">Créer le premier objectif</a>.
+    </div>
+  {% endif %}
+</div>
+
+{% if pg and pg.pages > 1 %}
+<div class="rc-pagination" style="margin-top:16px;display:flex;gap:6px;justify-content:center;">
+  {% for p in page_items %}
+    {% if p == pg.page %}
+      <span class="rc-btn rc-btn" style="pointer-events:none;">{{ p }}</span>
+    {% elif p == '…' %}
+      <span>…</span>
+    {% else %}
+      <a class="rc-btn rc-btn-light" href="?{{ (base_qs + '&' if base_qs else '') }}page={{ p }}">{{ p }}</a>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}
