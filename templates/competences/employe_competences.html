@@ -2,119 +2,158 @@
 {% block title %}{{ emp.prenom }} {{ emp.nom }} · Compétences{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
 {% block content %}
-<section class="competences-hero" style="background:linear-gradient(135deg,#0ea5e9 0%,#6366f1 100%);">
-  <div>
-    <h1>🧠 {{ emp.prenom }} {{ emp.nom }}</h1>
-    <p>{{ emp.poste or 'Poste non renseigné' }} · {{ emp.departement or 'Département non renseigné' }}</p>
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <a class="rc-btn rc-btn-light" href="{{ url_for('view_employee', id=emp.id) }}">← Fiche employé</a>
-    <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste') }}">Référentiel</a>
-  </div>
-</section>
-
-{% if not acces in ['read','write'] %}
-  {# ne devrait jamais arriver mais garde-fou #}
-  <div class="rc-empty">Accès non autorisé.</div>
-{% endif %}
-
-<section class="rc-card">
-  <div class="emp-skill-header">
-    <div>
-      <h2>Compétences ({{ competences|length }})</h2>
-      <p class="rc-muted">
-        {% if is_self %}Votre propre évaluation des compétences est en lecture seule ; contactez votre manager ou les RH pour une mise à jour.
-        {% elif peut_ecrire %}Cliquez sur « Modifier » pour ajuster un niveau, ou utilisez le formulaire ci-dessous pour en ajouter.
-        {% else %}Vous pouvez consulter les niveaux de compétence de ce collaborateur.{% endif %}
+<div class="rc-shell">
+  <section class="skill-emp-header">
+    <div class="skill-avatar">{{ emp.prenom[:1] }}{{ emp.nom[:1] }}</div>
+    <div class="skill-emp-title">
+      <h1>🧠 {{ emp.prenom }} {{ emp.nom }}</h1>
+      <p>
+        {% if emp.poste %}<strong>{{ emp.poste }}</strong>{% endif %}
+        {% if emp.poste and emp.departement %} · {% endif %}
+        {% if emp.departement %}{{ emp.departement }}{% endif %}
+      </p>
+      <p style="margin-top:6px;opacity:.9;font-size:.85rem;">
+        {{ competences|length }} compétence(s) renseignée(s)
+        · niveau moyen
+        {% if competences %}
+          <strong>{{ (competences|sum(attribute='niveau') / competences|length)|round(0)|int }}/100</strong>
+        {% else %}
+          <strong>—</strong>
+        {% endif %}
       </p>
     </div>
-    {% if not competences %}<span class="rc-badge rc-badge-brouillon">Aucune</span>{% endif %}
-  </div>
+    <div class="skill-emp-actions">
+      <a class="rc-btn rc-btn-light" href="{{ url_for('view_employee', id=emp.id) }}">← Fiche employé</a>
+      <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste', employe_id=emp.id) }}">🎯 Ses objectifs</a>
+      <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste') }}">Catalogue</a>
+    </div>
+  </section>
 
-  {% if competences %}
-  <div class="emp-skill-list">
-    {% for ec in competences %}
-      {% set label, cls = libelle_niveau(ec.niveau) %}
-      <div class="emp-skill-row" id="skill-{{ ec.id }}">
-        <div class="top">
-          <div>
-            <strong>
-              <a href="{{ url_for('competences.competence_detail', cid=ec.competence_id) }}">{{ ec.comp_nom }}</a>
-            </strong>
-            {% if ec.categorie %}<span class="skill-cat" style="margin-left:8px;">{{ ec.categorie }}</span>{% endif %}
-          </div>
-          <span class="meta">
-            {% if ec.modifie_par %}par {{ ec.modifie_par }} · {% endif %}
-            {% if ec.date_modification %}{{ ec.date_modification.strftime('%d/%m/%Y') }}{% endif %}
-          </span>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start;" class="obj-grid-wrap">
+    <section class="rc-card">
+      <div class="rc-card-head">
+        <div>
+          <h2>Portefeuille de compétences</h2>
+          <p class="rc-muted">
+            {% if is_self %}Votre propre évaluation est en lecture seule ; contactez votre manager ou les RH pour une mise à jour.
+            {% elif peut_ecrire %}Ajustez les niveaux et ajoutez des notes sur les points forts et les axes de progression.
+            {% else %}Niveaux de compétence de ce collaborateur.{% endif %}
+          </p>
         </div>
-        <div class="skill-bar">
-          <div class="skill-bar-track"><div class="skill-bar-fill {{ cls }}" style="width:{{ ec.niveau }}%;"></div></div>
-          <span class="skill-value">{{ ec.niveau }}/100</span>
-          <span class="skill-label {{ cls }}">{{ label }}</span>
-        </div>
-        {% if ec.notes %}
-        <div class="notes">{% for ln in lignes_texte(ec.notes) %}{{ ln }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
-        {% endif %}
-        {% if peut_ecrire %}
-        <details style="margin-top:10px;">
-          <summary class="rc-link" style="cursor:pointer;">Modifier / retirer</summary>
-          <form method="POST" action="{{ url_for('competences.employe_competence_modifier', eid=emp.id, ecid=ec.id) }}" class="niveau-form" style="margin-top:8px;">
-            <label style="font-size:0.85rem;">Niveau : <input type="number" name="niveau" min="0" max="100" value="{{ ec.niveau }}" required></label>
-            <input type="range" name="niveau_slider" min="0" max="100" value="{{ ec.niveau }}" oninput="this.previousElementSibling.querySelector('input[name=niveau]').value=this.value">
-            <textarea name="notes" rows="2" placeholder="Notes / axes d'amélioration (optionnel)" style="width:100%;">{{ ec.notes or '' }}</textarea>
-            <div style="display:flex;gap:8px;width:100%;">
-              <button type="submit" class="rc-btn rc-btn-sm">Enregistrer</button>
-              <button type="button" class="rc-btn rc-btn-muted rc-btn-sm" onclick="this.closest('details').open=false;">Annuler</button>
-              <span style="flex:1;"></span>
-              <button type="submit" formaction="{{ url_for('competences.employe_competence_supprimer', eid=emp.id, ecid=ec.id) }}" formmethod="POST" class="rc-btn rc-btn-danger rc-btn-sm"
-                      onclick="return confirm('Retirer cette compétence du profil ?');">Retirer</button>
+      </div>
+
+      {% if competences %}
+      <div class="skill-emp-grid">
+        {% for ec in competences %}
+          {% set label, cls = libelle_niveau(ec.niveau) %}
+          <div class="skill-row" id="skill-{{ ec.id }}">
+            <div class="top">
+              <div>
+                <strong>
+                  <a href="{{ url_for('competences.competence_detail', cid=ec.competence_id) }}" style="color:inherit;text-decoration:none;">{{ ec.comp_nom }}</a>
+                </strong>
+                {% if ec.categorie %}<span class="skill-cat" style="margin-left:8px;">{{ ec.categorie }}</span>{% endif %}
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span class="skill-label {{ cls }}">{{ label }}</span>
+                <span style="font-weight:800;color:#4f46e5;font-size:1rem;">{{ ec.niveau }}/100</span>
+              </div>
             </div>
-          </form>
-        </details>
-        {% endif %}
-      </div>
-    {% endfor %}
-  </div>
-  {% else %}
-    <div class="rc-empty">Aucune compétence n'est encore renseignée.</div>
-  {% endif %}
-</section>
 
-{% if peut_ecrire and disponibles %}
-<section class="rc-card" style="margin-top:18px;">
-  <div class="rc-card-head"><div><h2>Ajouter une compétence</h2><p class="rc-muted">Choisissez une compétence du référentiel et évaluez le niveau.</p></div></div>
-  <form method="POST" action="{{ url_for('competences.employe_competence_ajouter', eid=emp.id) }}" class="rc-form">
-    <div class="rc-form-row">
-      <label>Compétence *</label>
-      <select name="competence_id" required>
-        <option value="">-- Sélectionner --</option>
-        {% for d in disponibles %}
-          <option value="{{ d.id }}">{{ d.nom }}{% if d.categorie %} ({{ d.categorie }}){% endif %}</option>
+            <div class="skill-bar">
+              <div class="skill-bar-track">
+                <div class="skill-bar-fill {{ cls }}" style="width:{{ [ec.niveau,4]|max }}%;"></div>
+              </div>
+            </div>
+
+            {% if ec.notes %}
+              <div class="notes">{{ ec.notes }}</div>
+            {% endif %}
+
+            <div class="meta" style="margin-top:6px;color:#90a0b3;font-size:.78rem;">
+              {% if ec.modifie_par %}par {{ ec.modifie_par }}{% if ec.date_modification %} · {% endif %}{% endif %}
+              {% if ec.date_modification %}{{ ec.date_modification.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+            </div>
+
+            {% if peut_ecrire %}
+            <details>
+              <summary>Modifier / retirer</summary>
+              <form method="POST" action="{{ url_for('competences.employe_competence_modifier', eid=emp.id, ecid=ec.id) }}" class="skill-inline-form">
+                <div class="row">
+                  <label style="font-size:.85rem;font-weight:700;color:#334e68;">Niveau :
+                    <input type="range" name="niveau" min="0" max="100" value="{{ ec.niveau }}"
+                           oninput="this.form.querySelector('input[name=niveau] + input[type=number]').value=this.value">
+                  </label>
+                  <input type="number" name="niveau" min="0" max="100" value="{{ ec.niveau }}" required
+                         oninput="this.form.querySelector('input[type=range]').value=this.value">
+                </div>
+                <textarea name="notes" placeholder="Points forts, axes d'amélioration, formations envisagées…">{{ ec.notes or '' }}</textarea>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                  <button type="button" class="rc-btn rc-btn-muted rc-btn-sm" onclick="this.closest('details').open=false;">Annuler</button>
+                  <button type="submit" class="rc-btn rc-btn-sm">Enregistrer</button>
+                  <button type="submit" formaction="{{ url_for('competences.employe_competence_supprimer', eid=emp.id, ecid=ec.id) }}" formmethod="POST"
+                          class="rc-btn rc-btn-danger rc-btn-sm"
+                          onclick="return confirm('Retirer cette compétence du profil ?');">Retirer</button>
+                </div>
+              </form>
+            </details>
+            {% endif %}
+          </div>
         {% endfor %}
-      </select>
-    </div>
-    <div class="rc-form-row">
-      <label>Niveau (0-100) *</label>
-      <div class="niveau-form">
-        <input type="range" name="niveau_slider" min="0" max="100" value="60" oninput="this.form.niveau.value=this.value">
-        <input type="number" name="niveau" min="0" max="100" value="60" required>
       </div>
-    </div>
-    <div class="rc-form-row">
-      <label>Notes</label>
-      <textarea name="notes" rows="3" placeholder="Points forts, points à travailler, formations envisagées…"></textarea>
-    </div>
-    <div class="rc-form-actions">
-      <button type="submit" class="rc-btn">Ajouter au profil</button>
-    </div>
-  </form>
-</section>
-{% elif peut_ecrire and not disponibles and competences %}
-<section class="rc-card" style="margin-top:18px;">
-  <div class="rc-empty">Toutes les compétences actives du référentiel sont déjà associées à ce collaborateur.
-    <a href="{{ url_for('competences.competence_ajouter') }}">Créer une nouvelle compétence</a>.
+      {% else %}
+        <div class="rc-empty">
+          <div style="font-size:2rem;margin-bottom:6px;">📊</div>
+          Aucune compétence n'est encore renseignée pour ce collaborateur.
+        </div>
+      {% endif %}
+    </section>
+
+    {% if peut_ecrire and disponibles %}
+    <aside class="obj-side-card" style="background:#fff;">
+      <h3 style="margin:0 0 6px;color:#183b5b;">➕ Ajouter une compétence</h3>
+      <p class="rc-muted" style="margin:0 0 14px;font-size:.85rem;">Choisissez une compétence du référentiel et estimez son niveau.</p>
+      <form method="POST" action="{{ url_for('competences.employe_competence_ajouter', eid=emp.id) }}">
+        <div class="rc-field" style="margin-bottom:12px;">
+          <label>Compétence *</label>
+          <select name="competence_id" required>
+            <option value="">-- Sélectionner --</option>
+            {% for d in disponibles %}
+              <option value="{{ d.id }}">{{ d.nom }}{% if d.categorie %} ({{ d.categorie }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="rc-field" style="margin-bottom:12px;">
+          <label>Niveau : <strong id="niveau-val">60</strong>/100</label>
+          <input type="range" name="niveau_slider" min="0" max="100" value="60" style="width:100%;accent-color:#6d28d9;"
+                 oninput="this.form.niveau.value=this.value;document.getElementById('niveau-val').textContent=this.value;">
+          <input type="hidden" name="niveau" value="60">
+        </div>
+        <div class="rc-field" style="margin-bottom:12px;">
+          <label>Notes</label>
+          <textarea name="notes" rows="3" placeholder="Pourquoi ce niveau ? Exemples concrets…"></textarea>
+        </div>
+        <button type="submit" class="rc-btn" style="width:100%;justify-content:center;">Ajouter au profil</button>
+      </form>
+      <p style="margin:12px 0 0;font-size:.78rem;color:#718397;text-align:center;">
+        Une compétence manque ? <a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;">Créer une compétence</a>.
+      </p>
+    </aside>
+    {% elif peut_ecrire and not disponibles and competences %}
+    <aside class="obj-side-card" style="background:#fff;">
+      <h3 style="margin:0 0 6px;color:#183b5b;">🎯 Toutes les compétences actives sont déjà associées</h3>
+      <p class="rc-muted" style="font-size:.88rem;">Vous pouvez <a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;">créer une nouvelle compétence</a> dans le référentiel.</p>
+    </aside>
+    {% endif %}
   </div>
-</section>
-{% endif %}
+</div>
+<script>
+// Synchroniser le slider et le champ numérique sur le formulaire d'ajout
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.skill-inline-form input[type=range]').forEach(function(r){
+    var n = r.parentElement.querySelector('input[type=number]');
+    if(n){ r.addEventListener('input', function(){ n.value = r.value; }); }
+  });
+});
+</script>
 {% endblock %}

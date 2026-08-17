@@ -2,51 +2,65 @@
 {% block title %}Compétences · TeamSphere{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
 {% block content %}
-<section class="competences-hero">
-  <div>
-    <h1>🧠 Référentiel de compétences</h1>
-    <p>Suivi des savoir-faire des collaborateurs par catégorie et par niveau.</p>
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    {% if peut_gerer %}
+<div class="rc-shell">
+  <section class="rc-hero skill-hero">
+    <div>
+      <h1>🧠 Référentiel de compétences</h1>
+      <p>Suivi des savoir-faire des collaborateurs par catégorie et par niveau. Les compétences servent ensuite de socle aux objectifs, aux évaluations et aux plans de formation.</p>
+    </div>
+    <div class="rc-hero-actions">
       {% if show_inactives %}
         <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste') }}">Masquer les archives</a>
       {% else %}
         <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste', inactifs='1') }}">Afficher les archives</a>
       {% endif %}
-      <a class="rc-btn" href="{{ url_for('competences.competence_ajouter') }}">+ Nouvelle compétence</a>
-    {% endif %}
-  </div>
-</section>
+      {% if peut_gerer %}
+        <a class="rc-btn" href="{{ url_for('competences.competence_ajouter') }}">+ Nouvelle compétence</a>
+      {% endif %}
+    </div>
+  </section>
 
-{% if competences %}
-<div class="skill-grid">
-  {% for c in competences %}
-    <a href="{{ url_for('competences.competence_detail', cid=c.id) }}" class="skill-card {% if not c.active %}archived{% endif %}" style="text-decoration:none;color:inherit;">
-      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-        <h3>{{ c.nom }}</h3>
-        {% if not c.active %}<span class="rc-badge rc-badge-refusee">Archivée</span>{% endif %}
+  {% if competences %}
+  <section class="rc-card">
+    <div class="rc-card-head">
+      <div>
+        <h2>Catalogue</h2>
+        <p class="rc-muted">{{ competences|length }} compétence(s) référencée(s)</p>
       </div>
-      {% if c.categorie %}<span class="skill-cat">{{ c.categorie }}</span>{% endif %}
-      {% if c.description %}<p class="desc">{{ c.description }}</p>{% endif %}
-      <div class="skill-meta">
-        <span class="count">{{ c.nb_employes }} collaborateur(s)</span>
-        {% if peut_gerer and c.active %}
-          <form method="POST" action="{{ url_for('competences.competence_archiver', cid=c.id) }}" onsubmit="return confirm('Archiver cette compétence ?');">
-            <button type="submit" class="rc-link">Archiver</button>
-          </form>
-        {% elif peut_gerer and not c.active %}
-          <form method="POST" action="{{ url_for('competences.competence_reactiver', cid=c.id) }}">
-            <button type="submit" class="rc-link">Réactiver</button>
-          </form>
-        {% endif %}
-      </div>
-    </a>
-  {% endfor %}
+    </div>
+    <div class="skill-grid">
+      {% for c in competences %}
+        <a href="{{ url_for('competences.competence_detail', cid=c.id) }}" class="skill-card {% if not c.active %}archived{% endif %}">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;">
+            <h3>{{ c.nom }}</h3>
+            {% if not c.active %}<span class="rc-badge rc-badge-refusee">Archivée</span>{% endif %}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            {% if c.categorie %}<span class="skill-cat">{{ c.categorie }}</span>{% endif %}
+          </div>
+          {% if c.description %}<p class="desc">{{ c.description }}</p>{% endif %}
+          <div class="skill-meta">
+            <span class="count">{{ c.nb_employes }} collaborateur(s)</span>
+            {% if peut_gerer and c.active %}
+              <form method="POST" action="{{ url_for('competences.competence_archiver', cid=c.id) }}" onsubmit="return confirm('Archiver cette compétence ?');" onclick="event.stopPropagation(); event.preventDefault(); if(confirm('Archiver cette compétence ?')) this.submit();">
+                <button type="submit" class="rc-link">Archiver</button>
+              </form>
+            {% elif peut_gerer and not c.active %}
+              <form method="POST" action="{{ url_for('competences.competence_reactiver', cid=c.id) }}" onclick="event.stopPropagation();">
+                <button type="submit" class="rc-link">Réactiver</button>
+              </form>
+            {% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% else %}
+    <div class="rc-empty">
+      <div style="font-size:2.3rem;margin-bottom:8px;">🧠</div>
+      Aucune compétence enregistrée pour le moment.
+      {% if peut_gerer %}<br><a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;">Créer la première compétence</a>.{% endif %}
+    </div>
+  {% endif %}
 </div>
-{% else %}
-<div class="rc-empty">Aucune compétence enregistrée pour le moment.
-  {% if peut_gerer %}<a href="{{ url_for('competences.competence_ajouter') }}">Créer la première</a>.{% endif %}
-</div>
-{% endif %}
 {% endblock %}

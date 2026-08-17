@@ -2,235 +2,271 @@
 {% block title %}{{ o.titre }} · Objectifs{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='objectifs.css') }}">{% endblock %}
 {% block content %}
-<section class="obj-hero" style="background:linear-gradient(135deg,{% if o.statut=='non_atteint' %}#b91c1c,#7f1d1d{% elif o.statut=='atteint' %}#059669,#065f46{% elif o.statut=='annule' %}#6b7280,#374151{% elif o.statut=='brouillon' %}#64748b,#334155{% else %}#f59e0b,#d97706{% endif %});">
-  <div>
-    <h1>🎯 {{ o.titre }}</h1>
-    <p>
-      {{ o.emp_prenom }} {{ o.emp_nom }}{% if o.emp_poste %} · {{ o.emp_poste }}{% endif %}
-      {% if o.emp_dept %} · {{ o.emp_dept }}{% endif %}
-    </p>
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste') }}">← Liste</a>
-    {% if o.competence_id %}
-      <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competence_detail', cid=o.competence_id) }}">{{ o.comp_nom }}</a>
-    {% endif %}
-  </div>
-</section>
-
-<div class="obj-detail-head">
-  <div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <span class="obj-badge {{ badges.get(o.statut,'') }}">{{ labels.get(o.statut, o.statut) }}</span>
-      <span class="obj-prio {{ o.priorite }}">{{ priorite_labels.get(o.priorite, o.priorite) }}</span>
-      {% if o.categorie %}<span class="skill-cat">{{ o.categorie }}</span>{% endif %}
-      {% set en_retard = (o.statut=='en_cours' and o.date_echeance and o.date_echeance < today) %}
-      {% if en_retard %}<span class="obj-badge non_atteint">EN RETARD</span>{% endif %}
+<div class="rc-shell">
+  {# --------------------------- HEADER --------------------------- #}
+  <section class="obj-head" style="background:linear-gradient(125deg,
+     {%- if o.statut=='non_atteint' %}#991b1b,#7f1d1d
+     {%- elif o.statut=='atteint' %}#047857,#065f46
+     {%- elif o.statut=='annule' %}#4b5563,#1f2937
+     {%- elif o.statut=='brouillon' %}#475569,#1e293b
+     {%- else %}#b45309,#dc2626 60%,#be185d{% endif %});">
+    <div class="obj-head-main">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <span class="rc-badge {% if o.statut=='non_atteint' %}rc-badge-refusee{% elif o.statut=='atteint' %}rc-badge-validee{% elif o.statut=='brouillon' %}rc-badge-brouillon{% elif o.statut=='en_cours' %}rc-badge-entretien{% else %}rc-badge-fermee{% endif %}">{{ labels.get(o.statut,o.statut) }}</span>
+        <span class="obj-prio {{ o.priorite }}">{{ priorite_labels.get(o.priorite,o.priorite) }}</span>
+        {% if o.categorie %}<span class="obj-prio" style="background:rgba(255,255,255,.2);color:#fff;text-transform:none;letter-spacing:0;">{{ o.categorie }}</span>{% endif %}
+        {% if o.comp_nom %}<span class="skill-cat">{{ o.comp_nom }}</span>{% endif %}
+        {% set en_retard = (o.statut=='en_cours' and o.date_echeance and o.date_echeance < today) %}
+        {% if en_retard %}<span class="rc-badge rc-badge-refusee">⚠️ En retard</span>{% endif %}
+      </div>
+      <h2>{{ o.titre }}</h2>
+      <div class="meta">
+        <span>👤 <strong style="color:#fff;">{{ o.emp_prenom }} {{ o.emp_nom }}</strong>{% if o.emp_poste %} · {{ o.emp_poste }}{% endif %}{% if o.emp_dept %} · {{ o.emp_dept }}{% endif %}</span>
+        {% if o.date_debut %}<span>▸ Début {{ o.date_debut.strftime('%d/%m/%Y') }}</span>{% endif %}
+        {% if o.date_echeance %}<span>▸ Échéance <strong style="color:#fff;">{{ o.date_echeance.strftime('%d/%m/%Y') }}</strong></span>{% endif %}
+        {% if o.date_realisation %}<span>✓ Réalisé le {{ o.date_realisation.strftime('%d/%m/%Y') }}</span>{% endif %}
+      </div>
+      <div class="meta" style="margin-top:6px;">
+        {% if o.cree_par_nom %}<span>Créé par {{ o.cree_par_nom }}{% if o.cree_par_role %} ({{ o.cree_par_role }}){% endif %}</span>{% endif %}
+        {% if o.valide_par_nom %}<span>✓ Validé par {{ o.valide_par_nom }}{% if o.valide_le %} le {{ o.valide_le.strftime('%d/%m/%Y') }}{% endif %}</span>{% endif %}
+      </div>
     </div>
-    <div class="meta" style="margin-top:8px;">
-      {% if o.date_debut %}<span>▸ Début : {{ o.date_debut.strftime('%d/%m/%Y') }}</span>{% endif %}
-      {% if o.date_echeance %}<span>▸ Échéance : {{ o.date_echeance.strftime('%d/%m/%Y') }}</span>{% endif %}
-      {% if o.date_realisation %}<span>✓ Réalisé le {{ o.date_realisation.strftime('%d/%m/%Y') }}</span>{% endif %}
-      {% if o.cree_par_nom %}<span>▸ Créé par {{ o.cree_par_nom }}{% if o.cree_par_role %} ({{ o.cree_par_role }}){% endif %}</span>{% endif %}
-      {% if o.valide_par_nom %}<span>✓ Validé par {{ o.valide_par_nom }} le {{ o.valide_le.strftime('%d/%m/%Y') if o.valide_le else '' }}</span>{% endif %}
-    </div>
-  </div>
-  <div class="obj-actions">
-    {% if droits.modifier and o.statut != 'atteint' %}
-      <button class="rc-btn rc-btn-light" type="button" onclick="document.getElementById('editForm').style.display='block';this.style.display='none';">✏️ Modifier</button>
-    {% endif %}
-    {% if droits.soumettre %}
-      <form method="post" action="{{ url_for('objectifs.objectif_soumettre', oid=o.id) }}"
-            onsubmit="return confirm('Soumettre cet objectif comme atteint ?');" style="display:inline;">
-        <button class="rc-btn" type="submit">✅ Marquer comme atteint</button>
-      </form>
-    {% endif %}
-    {% if droits.valider and o.statut in ('en_cours','atteint') %}
-      <button class="rc-btn" type="button" onclick="document.getElementById('validerForm').style.display='block';">Valider atteint</button>
-    {% endif %}
-    {% if droits.non_atteint and o.statut in ('en_cours','atteint') %}
-      <button class="rc-btn rc-btn-danger" type="button" onclick="document.getElementById('nonAtteintForm').style.display='block';">Non atteint</button>
-    {% endif %}
-    {% if o.statut == 'brouillon' and droits.modifier %}
-      <form method="post" action="{{ url_for('objectifs.objectif_demarrer', oid=o.id) }}" style="display:inline;">
-        <button class="rc-btn" type="submit">▶️ Démarrer</button>
-      </form>
-    {% endif %}
-    {% if droits.annuler %}
-      <button class="rc-btn rc-btn-muted" type="button" onclick="document.getElementById('annulerForm').style.display='block';">Annuler</button>
-    {% endif %}
-    {% if droits.reactiver %}
-      <form method="post" action="{{ url_for('objectifs.objectif_reactiver', oid=o.id) }}"
-            onsubmit="return confirm('Rouvrir cet objectif ?');" style="display:inline;">
-        <button class="rc-btn rc-btn-light" type="submit">🔄 Rouvrir</button>
-      </form>
-    {% endif %}
-  </div>
-</div>
-
-<!-- Barre de progression -->
-<div class="obj-bar" style="margin: 14px 0 10px;">
-  <div class="obj-bar-track" style="height:14px;">
-    <div class="obj-bar-fill {{ progression_couleur(o.progression, o.statut) }}" style="width:{{ [o.progression, 4]|max }}%;"></div>
-  </div>
-  <div class="obj-bar-val" style="font-size:1.1rem;">{{ o.progression }}%</div>
-</div>
-
-{% if droits.progression and o.statut in ('brouillon','en_cours') %}
-<form method="post" action="{{ url_for('objectifs.objectif_progression', oid=o.id) }}" class="obj-section" style="margin-bottom:14px;">
-  <h3>📈 Mettre à jour la progression</h3>
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <input type="range" name="progression" min="0" max="100" value="{{ o.progression }}"
-           oninput="this.nextElementSibling.value=this.value" style="flex:1;min-width:200px;">
-    <input type="number" name="progression" min="0" max="100" value="{{ o.progression }}" style="width:80px;"
-           oninput="this.previousElementSibling.value=this.value">
-    <span style="font-weight:700;">%</span>
-  </div>
-  <div class="obj-form-row" style="margin-top:10px;">
-    <textarea name="commentaire" rows="2" placeholder="Point de situation / difficultés / prochaines étapes..."></textarea>
-  </div>
-  <div><button class="rc-btn" type="submit">Ajouter un point de situation</button></div>
-</form>
-{% endif %}
-
-<div class="obj-grid">
-  <div>
-    {% if o.description %}
-    <div class="obj-section">
-      <h3>📝 Description</h3>
-      <div class="obj-desc">{{ o.description }}</div>
-    </div>
-    {% endif %}
-
-    {% if o.cloture_commentaire and o.statut in ('non_atteint','annule') %}
-    <div class="obj-section" style="margin-top:12px;">
-      <h3>Commentaire de clôture</h3>
-      <div class="obj-desc" style="color:#991b1b;">{{ o.cloture_commentaire }}</div>
-    </div>
-    {% endif %}
-
-    <div class="obj-section" style="margin-top:12px;">
-      <h3>🗓️ Historique des points de situation ({{ points|length }})</h3>
-      {% if points %}
-        {% for p in points %}
-          {% set classe = 'auteur-employe' %}
-          {% if p.auteur_nom in ['admin','rh'] %}{% set classe = 'auteur-rh' %}
-          {% elif p.auteur_nom == 'manager' %}{% set classe = 'auteur-manager' %}{% endif %}
-          <div class="obj-point {{ classe }}">
-            <div class="who">
-              <span class="pct">{{ p.progression }}%</span>
-              {% if p.auteur_nom %}{{ p.auteur_nom }}{% else %}Système{% endif %}
-              <small>{{ p.date_creation.strftime('%d/%m/%Y %H:%M') }}</small>
-            </div>
-            {% if p.commentaire %}<div class="txt">{{ p.commentaire }}</div>{% endif %}
-          </div>
-        {% endfor %}
-      {% else %}
-        <div class="rc-empty" style="margin:0;">Aucun point de situation encore enregistré.</div>
+    <div class="obj-actions">
+      <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste') }}">← Liste</a>
+      {% if o.competence_id %}
+        <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competence_detail', cid=o.competence_id) }}">{{ o.comp_nom }}</a>
+      {% endif %}
+      {% if droits.modifier and o.statut != 'atteint' %}
+        <button type="button" class="rc-btn" onclick="document.getElementById('editForm').style.display='block';">✏️ Modifier</button>
+      {% endif %}
+      {% if o.statut == 'brouillon' and droits.progression %}
+        <form method="post" action="{{ url_for('objectifs.objectif_demarrer', oid=o.id) }}" style="display:inline;">
+          <button class="rc-btn rc-btn-green" type="submit">▶️ Démarrer</button>
+        </form>
+      {% endif %}
+      {% if droits.soumettre %}
+        <form method="post" action="{{ url_for('objectifs.objectif_soumettre', oid=o.id) }}"
+              onsubmit="return confirm('Soumettre cet objectif comme atteint (100%) ?');" style="display:inline;">
+          <button class="rc-btn rc-btn-green" type="submit">✅ Marquer comme atteint</button>
+        </form>
+      {% endif %}
+      {% if droits.valider and o.statut in ('en_cours','atteint') %}
+        <button type="button" class="rc-btn rc-btn-green" onclick="document.getElementById('validerForm').style.display='block';">Valider</button>
+      {% endif %}
+      {% if droits.non_atteint and o.statut in ('en_cours','atteint') %}
+        <button type="button" class="rc-btn rc-btn-danger" onclick="document.getElementById('nonAtteintForm').style.display='block';">Non atteint</button>
+      {% endif %}
+      {% if droits.annuler %}
+        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('annulerForm').style.display='block';">Annuler</button>
+      {% endif %}
+      {% if droits.reactiver %}
+        <form method="post" action="{{ url_for('objectifs.objectif_reactiver', oid=o.id) }}"
+              onsubmit="return confirm('Rouvrir cet objectif ?');" style="display:inline;">
+          <button class="rc-btn rc-btn-light" type="submit">🔄 Rouvrir</button>
+        </form>
       {% endif %}
     </div>
+  </section>
+
+  {# --------------------------- PROGRESSION --------------------------- #}
+  <section class="obj-progress-xl">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <h3 style="margin:0;color:#183b5b;">Progression</h3>
+        <p class="rc-muted" style="margin:3px 0 0;font-size:.82rem;">Mise à jour via les points de situation ci-dessous.</p>
+      </div>
+      <div style="font-size:1.4rem;font-weight:850;color:
+        {%- if o.statut=='non_atteint' %}#dc2626
+        {%- elif o.statut=='atteint' %}#059669
+        {%- elif o.statut=='annule' %}#6b7280
+        {%- else %}#b45309{% endif %};">{{ o.progression }}%</div>
+    </div>
+    <div class="obj-bar">
+      <div class="obj-bar-track">
+        <div class="obj-bar-fill {{ progression_couleur(o.progression, o.statut) }}" style="width:{{ [o.progression,4]|max }}%;"></div>
+      </div>
+    </div>
+
+    {% if droits.progression and o.statut in ('brouillon','en_cours') %}
+    <form method="post" action="{{ url_for('objectifs.objectif_progression', oid=o.id) }}" class="obj-form-block" style="margin-top:16px;padding:0;border:0;box-shadow:none;">
+      <h3 style="margin:0 0 10px;font-size:1rem;color:#183b5b;">📈 Ajouter un point de situation</h3>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input type="range" name="progression" min="0" max="100" value="{{ o.progression }}"
+               oninput="this.nextElementSibling.value=this.value;document.getElementById('pctv').textContent=this.value+'%';"
+               style="flex:1;min-width:220px;accent-color:#b45309;">
+        <input type="number" name="progression" min="0" max="100" value="{{ o.progression }}"
+               oninput="this.previousElementSibling.value=this.value;document.getElementById('pctv').textContent=this.value+'%';"
+               style="width:80px;padding:9px 12px;border:1px solid #cbd9e5;border-radius:10px;">
+        <strong id="pctv" style="color:#b45309;">{{ o.progression }}%</strong>
+      </div>
+      <textarea name="commentaire" rows="2" placeholder="Point de situation, blocage, prochaine étape…"
+                style="width:100%;min-height:70px;margin-top:10px;padding:11px 12px;border:1px solid #cbd9e5;border-radius:10px;resize:vertical;font:inherit;"></textarea>
+      <div class="obj-actions-row" style="justify-content:flex-end;">
+        <button class="rc-btn" type="submit">Ajouter</button>
+      </div>
+    </form>
+    {% endif %}
+  </section>
+
+  {# --------------------------- CONTENU PRINCIPAL --------------------------- #}
+  <div class="obj-grid">
+    <div>
+      {% if o.description %}
+      <section class="rc-card" style="margin-bottom:18px;">
+        <div class="rc-card-head"><div><h2>📝 Description & résultats attendus</h2></div></div>
+        <div class="rc-text-block" style="border-left-color:#dc2626;">{{ o.description }}</div>
+      </section>
+      {% endif %}
+
+      {% if o.cloture_commentaire and o.statut in ('non_atteint','annule') %}
+      <div class="obj-closure">{{ o.cloture_commentaire }}</div>
+      {% elif o.cloture_commentaire and o.statut == 'atteint' %}
+      <div class="obj-closure success">{{ o.cloture_commentaire or 'Objectif validé comme atteint.' }}</div>
+      {% endif %}
+
+      <section class="rc-card" style="margin-top:{% if o.description or o.cloture_commentaire %}18px{% else %}0{% endif %};">
+        <div class="rc-card-head">
+          <div>
+            <h2>🗓️ Historique</h2>
+            <p class="rc-muted">{{ points|length }} point(s) de situation</p>
+          </div>
+        </div>
+        {% if points %}
+        <div class="obj-points">
+          {% for p in points %}
+            {% set classe = 'auteur-employe' %}
+            {% if p.auteur_nom in ['admin','rh'] %}{% set classe = 'auteur-rh' %}
+            {% elif p.auteur_nom == 'manager' %}{% set classe = 'auteur-manager' %}{% endif %}
+            <div class="obj-point {{ classe }}">
+              <div class="who">
+                <span><span class="pct">{{ p.progression }}%</span>
+                  {% if p.auteur_nom %}{{ p.auteur_nom }}{% else %}Système{% endif %}
+                </span>
+                <span>{{ p.date_creation.strftime('%d/%m/%Y %H:%M') }}</span>
+              </div>
+              {% if p.commentaire %}<div class="txt">{{ p.commentaire }}</div>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        {% else %}
+          <div class="rc-empty" style="margin:0;padding:26px;">
+            <div style="font-size:2rem;margin-bottom:6px;">📝</div>
+            Aucun point de situation encore enregistré.
+          </div>
+        {% endif %}
+      </section>
+    </div>
+
+    {# --------------------------- SIDEBAR --------------------------- #}
+    <aside>
+      <div class="obj-side-card">
+        <h3>🔄 Cycle de vie</h3>
+        <div class="obj-cycle">
+          <div class="obj-cycle-step {% if o.statut in ('en_cours','atteint','non_atteint','annule') %}done{% endif %} {% if o.statut=='brouillon' %}current{% endif %}">Brouillon — rédaction</div>
+          <div class="obj-cycle-step {% if o.statut in ('en_cours','atteint','non_atteint','annule') %}done{% elif o.statut=='en_cours' and not en_retard %}current{% endif %}">En cours — progression suivie</div>
+          <div class="obj-cycle-step {% if o.statut=='atteint' %}current{% elif o.statut in ('non_atteint','annule') %}done{% endif %}">À valider par le manager</div>
+          <div class="obj-cycle-step {% if o.statut in ('atteint','non_atteint','annule') %}current{% endif %}">Clôturé (atteint / non atteint / annulé)</div>
+        </div>
+      </div>
+
+      <div class="obj-side-card">
+        <h3>ℹ️ Informations</h3>
+        <div class="obj-kv">
+          <div class="obj-kv-row"><span>Priorité</span><span>{{ priorite_labels.get(o.priorite,o.priorite) }}</span></div>
+          <div class="obj-kv-row"><span>Catégorie</span><span>{{ o.categorie or '—' }}</span></div>
+          <div class="obj-kv-row"><span>Compétence liée</span><span>{{ o.comp_nom or '—' }}</span></div>
+          <div class="obj-kv-row"><span>Créé par</span><span>{{ o.cree_par_nom or '—' }}</span></div>
+          <div class="obj-kv-row"><span>Validé par</span><span>{{ o.valide_par_nom or '—' }}</span></div>
+        </div>
+      </div>
+    </aside>
   </div>
 
-  <aside>
-    <div class="obj-section">
-      <h3>💡 Cycle de vie</h3>
-      <ol style="padding-left:20px;margin:0;color:#475569;font-size:0.88rem;line-height:1.6;">
-        <li>Brouillon (vous ou votre manager rédigez)</li>
-        <li>En cours (validé, progression suivie)</li>
-        <li>Atteint (soumis par vous, à valider)</li>
-        <li>Validé / Non atteint / Annulé</li>
-      </ol>
-    </div>
-  </aside>
-</div>
-
-<!-- Formulaires cachés -->
-<div id="editForm" style="display:none;" class="obj-section" style="margin-top:14px;">
-  <h3>✏️ Modifier l'objectif</h3>
-  <form method="post" action="{{ url_for('objectifs.objectif_modifier', oid=o.id) }}">
-    <div class="obj-form-row">
-      <label>Titre *</label>
-      <input type="text" name="titre" required maxlength="200" value="{{ o.titre }}">
-    </div>
-    <div class="obj-form-grid">
-      <div class="obj-form-row">
-        <label>Catégorie</label>
-        <input type="text" name="categorie" list="cat-list2" maxlength="80" value="{{ o.categorie or '' }}">
-        <datalist id="cat-list2">
-          {% for c in categories %}<option value="{{ c }}">{% endfor %}
-        </datalist>
+  {# --------------------------- FORMULAIRES CACHÉS --------------------------- #}
+  <div id="editForm" style="display:none;margin-top:18px;" class="obj-form-block">
+    <h3>✏️ Modifier l'objectif</h3>
+    <form method="post" action="{{ url_for('objectifs.objectif_modifier', oid=o.id) }}">
+      <div class="rc-field">
+        <label>Titre *</label>
+        <input type="text" name="titre" required maxlength="200" value="{{ o.titre }}">
       </div>
-      <div class="obj-form-row">
-        <label>Priorité</label>
-        <select name="priorite">
-          {% for p in priorites %}
-            <option value="{{ p }}" {% if o.priorite==p %}selected{% endif %}>{{ priorite_labels[p] }}</option>
-          {% endfor %}
-        </select>
+      <div class="rc-grid" style="margin-top:14px;">
+        <div class="rc-field">
+          <label>Catégorie</label>
+          <input type="text" name="categorie" list="cat-list2" maxlength="80" value="{{ o.categorie or '' }}">
+          <datalist id="cat-list2">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist>
+        </div>
+        <div class="rc-field">
+          <label>Priorité</label>
+          <select name="priorite">
+            {% for p in priorites %}
+              <option value="{{ p }}" {% if o.priorite==p %}selected{% endif %}>{{ priorite_labels[p] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="rc-field">
+          <label>Date de début</label>
+          <input type="date" name="date_debut" value="{{ o.date_debut.isoformat() if o.date_debut else '' }}">
+        </div>
+        <div class="rc-field">
+          <label>Date d'échéance</label>
+          <input type="date" name="date_echeance" value="{{ o.date_echeance.isoformat() if o.date_echeance else '' }}">
+        </div>
+        <div class="rc-field rc-field-full">
+          <label>Compétence liée</label>
+          <select name="competence_id">
+            <option value="">— Aucune —</option>
+            {% for c in competences %}
+              <option value="{{ c.id }}" {% if o.competence_id==c.id %}selected{% endif %}>{{ c.nom }}{% if c.categorie %} ({{ c.categorie }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
-      <div class="obj-form-row">
-        <label>Date de début</label>
-        <input type="date" name="date_debut" value="{{ o.date_debut.isoformat() if o.date_debut else '' }}">
+      <div class="rc-field" style="margin-top:14px;">
+        <label>Description</label>
+        <textarea name="description" rows="4">{{ o.description or '' }}</textarea>
       </div>
-      <div class="obj-form-row">
-        <label>Date d'échéance</label>
-        <input type="date" name="date_echeance" value="{{ o.date_echeance.isoformat() if o.date_echeance else '' }}">
+      <div class="rc-form-actions">
+        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('editForm').style.display='none';">Annuler</button>
+        <button type="submit" class="rc-btn">Enregistrer</button>
       </div>
-      <div class="obj-form-row" style="grid-column: 1 / -1;">
-        <label>Compétence associée</label>
-        <select name="competence_id">
-          <option value="">— Aucune —</option>
-          {% for c in competences %}
-            <option value="{{ c.id }}" {% if o.competence_id==c.id %}selected{% endif %}>{{ c.nom }}{% if c.categorie %} ({{ c.categorie }}){% endif %}</option>
-          {% endfor %}
-        </select>
+    </form>
+  </div>
+
+  <div id="validerForm" style="display:none;margin-top:18px;" class="obj-form-block">
+    <h3>✅ Valider comme atteint</h3>
+    <form method="post" action="{{ url_for('objectifs.objectif_valider', oid=o.id) }}">
+      <div class="rc-field"><label>Commentaire (optionnel)</label>
+        <textarea name="commentaire" rows="2" placeholder="Bravo, objectif atteint ! Points clés de réussite…"></textarea></div>
+      <div class="rc-form-actions">
+        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('validerForm').style.display='none';">Annuler</button>
+        <button type="submit" class="rc-btn rc-btn-green">Confirmer la validation</button>
       </div>
-    </div>
-    <div class="obj-form-row">
-      <label>Description</label>
-      <textarea name="description" rows="4">{{ o.description or '' }}</textarea>
-    </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('editForm').style.display='none';">Annuler</button>
-      <button type="submit" class="rc-btn">Enregistrer</button>
-    </div>
-  </form>
-</div>
+    </form>
+  </div>
 
-<div id="validerForm" style="display:none;" class="obj-section" style="margin-top:14px;">
-  <h3>✅ Valider comme atteint</h3>
-  <form method="post" action="{{ url_for('objectifs.objectif_valider', oid=o.id) }}">
-    <div class="obj-form-row"><label>Commentaire (optionnel)</label>
-      <textarea name="commentaire" rows="2" placeholder="Bravo, objectif atteint !"></textarea></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('validerForm').style.display='none';">Annuler</button>
-      <button type="submit" class="rc-btn">Confirmer la validation</button>
-    </div>
-  </form>
-</div>
+  <div id="nonAtteintForm" style="display:none;margin-top:18px;" class="obj-form-block">
+    <h3>❌ Clore comme non atteint</h3>
+    <form method="post" action="{{ url_for('objectifs.objectif_non_atteint', oid=o.id) }}">
+      <div class="rc-field"><label>Motif *</label>
+        <textarea name="commentaire" rows="3" required placeholder="Pourquoi cet objectif n'a-t-il pas été atteint ? Difficultés, reports, changement de périmètre…"></textarea></div>
+      <div class="rc-form-actions">
+        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('nonAtteintForm').style.display='none';">Annuler</button>
+        <button type="submit" class="rc-btn rc-btn-danger">Confirmer</button>
+      </div>
+    </form>
+  </div>
 
-<div id="nonAtteintForm" style="display:none;" class="obj-section" style="margin-top:14px;">
-  <h3>❌ Clore comme non atteint</h3>
-  <form method="post" action="{{ url_for('objectifs.objectif_non_atteint', oid=o.id) }}">
-    <div class="obj-form-row"><label>Motif *</label>
-      <textarea name="commentaire" rows="3" required placeholder="Pourquoi cet objectif n'est-il pas atteint ?"></textarea></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('nonAtteintForm').style.display='none';">Annuler</button>
-      <button type="submit" class="rc-btn rc-btn-danger">Confirmer</button>
-    </div>
-  </form>
+  <div id="annulerForm" style="display:none;margin-top:18px;" class="obj-form-block">
+    <h3>Annuler l'objectif</h3>
+    <form method="post" action="{{ url_for('objectifs.objectif_annuler', oid=o.id) }}">
+      <div class="rc-field"><label>Motif (optionnel)</label>
+        <textarea name="commentaire" rows="2" placeholder="Changement de priorités, périmètre modifié, redéfinition des objectifs…"></textarea></div>
+      <div class="rc-form-actions">
+        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('annulerForm').style.display='none';">Annuler</button>
+        <button type="submit" class="rc-btn rc-btn-danger">Confirmer l'annulation</button>
+      </div>
+    </form>
+  </div>
 </div>
-
-<div id="annulerForm" style="display:none;" class="obj-section" style="margin-top:14px;">
-  <h3>Annuler l'objectif</h3>
-  <form method="post" action="{{ url_for('objectifs.objectif_annuler', oid=o.id) }}">
-    <div class="obj-form-row"><label>Motif (optionnel)</label>
-      <textarea name="commentaire" rows="2" placeholder="Changement de priorités, périmètre modifié..."></textarea></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('annulerForm').style.display='none';">Annuler</button>
-      <button type="submit" class="rc-btn rc-btn-danger">Confirmer l'annulation</button>
-    </div>
-  </form>
-</div>
-
 {% endblock %}
