@@ -1,0 +1,205 @@
+/* Styles du module Compétences.
+   Palette alignée avec le reste de l'application (variables -primary...). */
+
+.competences-hero {
+    background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+    color: #fff;
+    border-radius: 14px;
+    padding: 22px 26px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.competences-hero h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+.competences-hero p {
+    margin: 6px 0 0;
+    opacity: 0.92;
+    font-size: 0.95rem;
+}
+
+.skill-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 16px;
+}
+.skill-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    transition: transform .15s ease, box-shadow .15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.skill-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -12px rgba(99,102,241,0.35);
+    border-color: #c7d2fe;
+}
+.skill-card.archived {
+    opacity: 0.6;
+    background: #f8fafc;
+}
+.skill-card h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: #1e293b;
+}
+.skill-cat {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #ede9fe;
+    color: #5b21b6;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    width: fit-content;
+}
+.skill-card p.desc {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+.skill-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+    font-size: 0.82rem;
+    color: #64748b;
+}
+.skill-meta .count {
+    font-weight: 600;
+    color: #4f46e5;
+}
+
+/* Barre de niveau */
+.skill-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+.skill-bar-track {
+    flex: 1;
+    height: 8px;
+    background: #f1f5f9;
+    border-radius: 999px;
+    overflow: hidden;
+}
+.skill-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width .35s ease;
+}
+.skill-bar-fill.not-acquired { background: #cbd5e1; width: 10%; }
+.skill-bar-fill.beginner     { background: #fbbf24; }
+.skill-bar-fill.intermediate { background: #60a5fa; }
+.skill-bar-fill.confirmed    { background: #34d399; }
+.skill-bar-fill.expert       { background: linear-gradient(90deg, #10b981, #6366f1); }
+
+.skill-value {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #1e293b;
+    min-width: 64px;
+    text-align: right;
+}
+.skill-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #475569;
+}
+.skill-label.beginner     { background: #fef3c7; color: #92400e; }
+.skill-label.intermediate { background: #dbeafe; color: #1e40af; }
+.skill-label.confirmed    { background: #d1fae5; color: #065f46; }
+.skill-label.expert       { background: #ede9fe; color: #5b21b6; }
+
+/* Profil employé — compétences */
+.emp-skill-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.emp-skill-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+.emp-skill-list {
+    display: grid;
+    gap: 12px;
+}
+.emp-skill-row {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+.emp-skill-row .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+.emp-skill-row .top strong {
+    font-size: 1rem;
+    color: #0f172a;
+}
+.emp-skill-row .top .meta {
+    font-size: 0.78rem;
+    color: #94a3b8;
+}
+.emp-skill-row .notes {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+    color: #475569;
+    font-size: 0.88rem;
+    white-space: pre-wrap;
+}
+.emp-skill-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+/* Formulaire de niveau inline */
+.niveau-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+.niveau-form input[type=range] {
+    flex: 1;
+    min-width: 140px;
+}
+.niveau-form input[type=number] {
+    width: 80px;
+}
+
+@media (max-width: 640px) {
+    .skill-grid { grid-template-columns: 1fr; }
+    .competences-hero { padding: 18px; }
+}

@@ -38,6 +38,7 @@ from blueprints.recherche import (
     RECHERCHE_PAGES, creer_blueprint_recherche,  # noqa: F401 — réexport public
 )
 from blueprints.recrutement import creer_blueprint_recrutement
+from blueprints.competences import creer_blueprint_competences
 from blueprints.documents import creer_blueprint_documents
 from blueprints.departements import creer_blueprint_departements
 from blueprints.presences import creer_blueprint_presences
@@ -2809,6 +2810,16 @@ app.register_blueprint(creer_blueprint_justifications({
     'object_storage': object_storage,
 }))
 
+app.register_blueprint(creer_blueprint_competences({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'role_required': role_required,
+    'get_department_scope': get_department_scope,
+    'employee_in_scope': employee_in_scope,
+    'create_notification': create_notification,
+    'log_action': log_action,
+}))
+
 app.register_blueprint(creer_blueprint_messagerie({
     'db_cursor': db_cursor,
     'login_required': login_required,
@@ -2836,7 +2847,7 @@ def bootstrap_db_command():
 
 register_storage_cli(app, db_cursor, object_storage)
 health_live, health_ready = register_observability(
-    app, get_db, object_storage, alembic_revision='20260814_recrutement'
+    app, get_db, object_storage, alembic_revision='20260817_competences'
 )
 limiter.exempt(health_live)
 limiter.exempt(health_ready)

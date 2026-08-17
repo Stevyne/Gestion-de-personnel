@@ -12,6 +12,7 @@ from services.phase2_schema import appliquer_schema_phase2
 from services.phase3_schema import appliquer_schema_phase3
 from services.phase4_schema import appliquer_schema_phase4
 from services.phase5_schema import appliquer_schema_phase5
+from services.phase6_schema import appliquer_schema_phase6
 
 
 def initialiser_schema(get_db, get_cursor, logger, calculer_jours_acquis_prorata):
@@ -505,6 +506,7 @@ def initialiser_schema(get_db, get_cursor, logger, calculer_jours_acquis_prorata
     appliquer_schema_phase3(cur)
     appliquer_schema_phase4(cur)
     appliquer_schema_phase5(cur)
+    appliquer_schema_phase6(cur)
 
     # Les identifiants publics de démonstration sont strictement réservés au
     # développement/tests ; la production exige un secret de bootstrap.

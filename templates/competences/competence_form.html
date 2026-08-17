@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Modifier' if competence else 'Nouvelle compétence' }} · TeamSphere{% endblock %}
+{% block content %}
+<div class="rc-shell">
+  <section class="rc-hero">
+    <div>
+      <h1>{{ '✏️ Modifier' if competence else '➕ Nouvelle compétence' }}</h1>
+      <p>Référentiel géré par les RH.</p>
+    </div>
+    <div><a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste') }}">← Retour</a></div>
+  </section>
+
+  <section class="rc-card">
+    <form method="POST" class="rc-form">
+      <div class="rc-form-row">
+        <label>Nom *</label>
+        <input type="text" name="nom" required maxlength="100" value="{{ competence.nom if competence else '' }}" placeholder="Ex: Python, Leadership, Anglais…">
+      </div>
+      <div class="rc-form-row">
+        <label>Catégorie</label>
+        <input type="text" name="categorie" list="categories-list" maxlength="80"
+               value="{{ competence.categorie if competence and competence.categorie else '' }}"
+               placeholder="Technique, Soft skills, Management, Langues…">
+        <datalist id="categories-list">
+          {% for cat in categories %}<option value="{{ cat }}">{% endfor %}
+        </datalist>
+      </div>
+      <div class="rc-form-row">
+        <label>Description</label>
+        <textarea name="description" rows="4" placeholder="Description libre : à quoi correspond cette compétence, comment l'évaluer…">{{ competence.description if competence else '' }}</textarea>
+      </div>
+      <div class="rc-form-actions">
+        <a class="rc-btn rc-btn-muted" href="{{ url_for('competences.competences_liste') }}">Annuler</a>
+        <button type="submit" class="rc-btn">{{ 'Enregistrer les modifications' if competence else 'Créer la compétence' }}</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

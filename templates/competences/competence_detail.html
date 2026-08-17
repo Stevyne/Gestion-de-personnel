@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}{{ comp.nom }} · Compétences{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
+{% block content %}
+<section class="competences-hero">
+  <div>
+    <h1>{{ comp.nom }}{% if not comp.active %} <span style="font-size:0.8rem;background:rgba(255,255,255,0.2);padding:2px 10px;border-radius:999px;">Archivée</span>{% endif %}</h1>
+    {% if comp.categorie %}<p><strong>{{ comp.categorie }}</strong></p>{% endif %}
+    {% if comp.description %}<p>{{ comp.description }}</p>{% endif %}
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste') }}">← Toutes les compétences</a>
+    {% if peut_gerer and comp.active %}
+      <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competence_modifier', cid=comp.id) }}">Modifier</a>
+      <form method="POST" action="{{ url_for('competences.competence_archiver', cid=comp.id) }}" onsubmit="return confirm('Archiver cette compétence ?');">
+        <button type="submit" class="rc-btn">Archiver</button>
+      </form>
+    {% elif peut_gerer and not comp.active %}
+      <form method="POST" action="{{ url_for('competences.competence_reactiver', cid=comp.id) }}">
+        <button type="submit" class="rc-btn">Réactiver</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+
+<section class="rc-card">
+  <div class="rc-card-head">
+    <div><h2>Collaborateurs ayant cette compétence</h2><p class="rc-muted">{{ associations|length }} résultat(s){% if not is_global %} dans votre périmètre{% endif %}.</p></div>
+  </div>
+  {% if associations %}
+  <div class="rc-table-wrap">
+    <table class="rc-table">
+      <thead>
+        <tr><th>Employé</th><th>Poste</th><th>Département</th><th>Niveau</th><th>Dernière mise à jour</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for a in associations %}
+        {% set label, cls = libelle_niveau(a.niveau) %}
+        <tr>
+          <td><a href="{{ url_for('view_employee', id=a.employe_id) }}">{{ a.prenom }} {{ a.nom }}</a></td>
+          <td>{{ a.poste or '—' }}</td>
+          <td>{{ a.departement or '—' }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="skill-bar-track" style="width:120px;"><div class="skill-bar-fill {{ cls }}" style="width:{{ a.niveau }}%;"></div></div>
+              <strong>{{ a.niveau }}/100</strong>
+              <span class="skill-label {{ cls }}">{{ label }}</span>
+            </div>
+          </td>
+          <td>{% if a.date_modification %}{{ a.date_modification.strftime('%d/%m/%Y') }}{% if a.modifie_par %} par {{ a.modifie_par }}{% endif %}{% else %}—{% endif %}</td>
+          <td><a class="rc-link" href="{{ url_for('competences.employe_competences', eid=a.employe_id) }}">Voir le profil</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rc-empty">Aucun collaborateur n'a encore cette compétence dans votre périmètre.</div>
+  {% endif %}
+</section>
+{% endblock %}

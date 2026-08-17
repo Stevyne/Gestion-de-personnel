@@ -243,6 +243,11 @@
 <path d="m6 9 6 6 6-6"/>
 {%- elif name == 'message' -%}
 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+{%- elif name == 'brain' -%}
+<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
+<path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
+{%- elif name == 'target' -%}
+<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
 {%- endif -%}
 </svg>
 {%- endmacro %}
@@ -276,7 +281,7 @@
 
                 {# --- Personnel : employés + départements --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement','departs.departs_liste'] or (request.endpoint and request.endpoint.startswith('recrutement.')) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement','departs.departs_liste'] or (request.endpoint and (request.endpoint.startswith('recrutement.') or request.endpoint.startswith('competences.'))) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('users') }}<span>Personnel</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
@@ -292,6 +297,9 @@
                         </a>
                         <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">
                             {{ icon('file', 17) }}<span>Contrats</span>
+                        </a>
+                        <a href="{{ url_for('competences.competences_liste') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('competences.') %}active{% endif %}">
+                            {{ icon('brain', 17) }}<span>Compétences</span>
                         </a>
                         {% endif %}
                         {% if session.get('role') in ['admin', 'rh'] %}
@@ -506,6 +514,7 @@
                 <a href="{{ url_for('recrutement.tableau_recrutement') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('recrutement.') %}active{% endif %}">{{ icon('clipboard') }}<span>Recrutement</span></a>
                 <a href="{{ url_for('departements.departements') }}" class="nav-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">{{ icon('building') }}<span>Départements</span></a>
                 <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">{{ icon('file') }}<span>Contrats</span></a>
+                <a href="{{ url_for('competences.competences_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('competences.') %}active{% endif %}">{{ icon('brain') }}<span>Compétences</span></a>
                 {% endif %}
                 {% if session.get('role') in ['admin', 'rh'] %}
                 <a href="{{ url_for('departs.departs_liste') }}" class="nav-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">{{ icon('logout') }}<span>Départs</span></a>
