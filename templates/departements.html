@@ -1,10 +1,16 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>🏢 Départements ({{ total_depts }})</h1>
-        <a data-modal-title="Nouveau département" href="{{ url_for('departements.add_departement') }}" class="js-modal-form btn btn-primary">+ Nouveau département</a>
+        <div>
+            <h1>{{ icon('building') }}<span>Départements</span></h1>
+            <p>{{ total_depts }} département(s) &middot; {{ total_employes }} employé(s) au total.</p>
+        </div>
+        <a data-modal-title="Nouveau département" href="{{ url_for('departements.add_departement') }}" class="js-modal-form btn btn-primary">
+            {{ icon('building', 15) }}<span>Nouveau département</span>
+        </a>
     </div>
 
     <div class="table-container">
@@ -15,21 +21,21 @@
                     <th>Description</th>
                     <th>Responsable</th>
                     <th>Employés</th>
-                    <th>Actions</th>
+                    <th style="width:120px">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for dept in departements %}
                 <tr>
                     <td data-label="Département"><strong>{{ dept.nom }}</strong></td>
-                    <td data-label="Description">{{ dept.description or '—' }}</td>
+                    <td data-label="Description" class="rc-muted">{{ dept.description or '—' }}</td>
                     <td data-label="Responsable">{{ dept.responsable or '—' }}</td>
                     <td data-label="Employés">
-                        <span class="badge">{{ dept.nb_employes }} employé(s)</span>
+                        <span class="badge badge-info">{{ dept.nb_employes }} employé(s)</span>
                     </td>
                     <td data-label="Actions">
-                        <div class="actions">
-                            <a data-modal-title="Modifier le département" href="{{ url_for('departements.edit_departement', id=dept.id) }}" class="js-modal-form btn btn-secondary" style="padding:4px 10px;font-size:0.75rem;">✏️</a>
+                        <div class="actions" style="gap:4px;">
+                            <a data-modal-title="Modifier le département" href="{{ url_for('departements.edit_departement', id=dept.id) }}" class="js-modal-form btn btn-secondary btn-sm" title="Modifier">{{ icon('wrench', 14) }}</a>
                             <form action="{{ url_for('departements.delete_departement', id=dept.id) }}" method="post" style="display:inline;"
                                   class="confirm-form"
                                   data-confirm-title="Supprimer le département ?"
@@ -37,23 +43,27 @@
                                   data-confirm-icon="🏢"
                                   data-confirm-warning="Les employés associés ne seront pas supprimés.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-danger" style="padding:4px 10px;font-size:0.75rem;">🗑️</button>
+                                <button type="submit" class="btn btn-danger btn-sm" title="Supprimer">{{ icon('ban', 14) }}</button>
                             </form>
                         </div>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" style="text-align:center; padding:40px; color:#64748b;">
-                        Aucun département.
+                    <td colspan="5" class="empty-state">
+                        <div class="empty-icon">🏢</div>
+                        <strong>Aucun département.</strong>
+                        <div style="margin-top:8px;">
+                            <a data-modal-title="Nouveau département" href="{{ url_for('departements.add_departement') }}" class="js-modal-form btn btn-primary btn-sm">+ Créer le premier département</a>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    
-    <p style="text-align:center; color:#64748b; font-size:0.85rem; margin-top:10px;">
+
+    <p class="rc-muted" style="text-align:center; margin-top:6px; font-size:.82rem;">
         {{ total_employes }} employés au total
     </p>
 </div>

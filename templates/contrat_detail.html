@@ -1,20 +1,46 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 {% block content %}
-<div class="card" style="max-width:820px;margin:auto;">
-  <div class="card-header"><div><h1>📑 {{ type_contrats.get(contrat.type_contrat,contrat.type_contrat) }}</h1><p style="margin:4px 0;color:#64748b;">{{ contrat.prenom }} {{ contrat.nom }} · {{ contrat.reference or 'Sans référence' }}</p></div><a href="{{ url_for('contrats.contrats_liste') }}" class="btn btn-secondary">← Contrats</a></div>
-  <div class="detail-grid">
-    <div class="detail-item"><span>Début :</span><strong>{{ contrat.date_debut }}</strong></div>
-    <div class="detail-item"><span>Fin :</span><strong>{{ contrat.date_fin or 'Indéterminée' }}</strong></div>
-    <div class="detail-item"><span>Statut :</span><strong>{{ contrat.statut }}</strong></div>
-    <div class="detail-item"><span>Département :</span><strong>{{ contrat.departement or '—' }}</strong></div>
+<div class="card" style="max-width:880px;margin:auto;">
+  <div class="card-header">
+    <div>
+      <h1>{{ icon('file') }}<span>{{ type_contrats.get(contrat.type_contrat,contrat.type_contrat) }}</span></h1>
+      <p>
+        <a href="{{ url_for('view_employee', id=contrat.employe_id) }}" style="color:#12669d; font-weight:700; text-decoration:none;">{{ contrat.prenom }} {{ contrat.nom }}</a>
+        &middot; {{ contrat.reference or 'Sans référence' }}
+      </p>
+    </div>
+    <a href="{{ url_for('contrats.contrats_liste') }}" class="btn btn-secondary">← Contrats</a>
   </div>
-  {% if contrat.notes %}<div class="wf-circuit" style="margin-top:18px;">{{ contrat.notes }}</div>{% endif %}
-  <div class="form-actions" style="margin-top:20px;">
-    {% if contrat.contenu %}<a href="{{ url_for('contrats.contrat_fichier', id=contrat.id) }}" class="btn btn-primary">📎 Télécharger le contrat</a>{% endif %}
+
+  <div class="rc-detail" style="margin-bottom:18px;">
+    <div class="rc-detail-item"><span>Début</span><strong>{{ contrat.date_debut }}</strong></div>
+    <div class="rc-detail-item"><span>Fin</span><strong>{{ contrat.date_fin or 'Indéterminée' }}</strong></div>
+    <div class="rc-detail-item"><span>Statut</span>
+      <strong>
+        {% if contrat.statut == 'actif' %}<span class="badge badge-success">Actif</span>
+        {% elif contrat.statut == 'expire' %}<span class="badge badge-danger">Expiré</span>
+        {% elif contrat.statut == 'resilie' %}<span class="badge badge-danger">Résilié</span>
+        {% elif contrat.statut == 'renouvele' %}<span class="badge badge-info">Renouvelé</span>
+        {% else %}<span class="badge">{{ contrat.statut }}</span>{% endif %}
+      </strong>
+    </div>
+    <div class="rc-detail-item"><span>Département</span><strong>{{ contrat.departement or '—' }}</strong></div>
+  </div>
+
+  {% if contrat.notes %}<div class="rc-text-block">{{ contrat.notes }}</div>{% endif %}
+
+  <div class="rc-form-actions">
+    {% if contrat.contenu %}<a href="{{ url_for('contrats.contrat_fichier', id=contrat.id) }}" class="btn btn-primary">{{ icon('file', 15) }} Télécharger le contrat</a>{% endif %}
     {% if current_role in ['admin','rh'] and contrat.statut == 'actif' %}
-    <a href="{{ url_for('contrats.contrat_renouveler', id=contrat.id) }}" class="btn btn-secondary">↻ Renouveler</a>
-    <form method="post" action="{{ url_for('contrats.contrat_resilier', id=contrat.id) }}" style="display:flex;gap:6px;">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="motif" class="form-control" placeholder="Motif de résiliation" required><button class="btn btn-danger">Résilier</button>
+    <a href="{{ url_for('contrats.contrat_renouveler', id=contrat.id) }}" class="btn btn-secondary">{{ icon('history', 15) }} Renouveler</a>
+    <form method="post" action="{{ url_for('contrats.contrat_resilier', id=contrat.id) }}" class="confirm-form"
+          data-confirm-title="Résilier ce contrat ?" data-confirm-subtitle="Action irréversible"
+          data-confirm-icon="⚠" data-confirm-warning="La résiliation met fin au contrat de manière anticipée."
+          style="display:flex;gap:8px;flex:1;min-width:260px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="motif" class="form-control" placeholder="Motif de résiliation" required>
+      <button class="btn btn-danger">Résilier</button>
     </form>
     {% endif %}
   </div>

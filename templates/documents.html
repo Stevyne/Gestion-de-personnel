@@ -1,15 +1,19 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>📁 Documents &amp; Pièces jointes</h1>
-        <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Retour</a>
+        <div>
+            <h1>{{ icon('folder') }}<span>Documents &amp; Pièces jointes</span></h1>
+            <p>Stockage centralisé des contrats, certifications et pièces RH.</p>
+        </div>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Tableau de bord</a>
     </div>
 
     <!-- Upload form -->
-    <div style="background:#f8fafc; padding:22px; border-radius:14px; margin-bottom:28px;">
-        <h4 style="margin:0 0 16px;">Uploader un document</h4>
+    <div style="background:#f8fbfd; padding:22px; border-radius:14px; margin-bottom:22px; border:1px solid #e1e9f0;">
+        <h4 style="margin:0 0 14px; color:#183b5b;">{{ icon('file') }} Uploader un document</h4>
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-row">
@@ -17,7 +21,7 @@
                     <label>Titre du document</label>
                     <input type="text" name="titre" class="form-control" placeholder="Ex: Contrat 2026" required>
                 </div>
-                
+
                 {% if current_role in ['admin','rh'] %}
                 <div class="form-group" style="flex:1; min-width:220px;">
                     <label>Employé</label>
@@ -29,12 +33,12 @@
                 </div>
                 {% endif %}
             </div>
-            
+
             <div class="form-group">
-                <label>Fichier (PDF, DOC, XLS, JPG, PNG...)</label>
-                <input type="file" name="fichier" class="form-control" required style="padding:10px;">
+                <label>Fichier (PDF, DOC, XLS, JPG, PNG…)</label>
+                <input type="file" name="fichier" class="form-control" required>
             </div>
-            
+
             <div class="form-row">
                 <div class="form-group" style="flex:1; min-width:220px;">
                     <label>Description (optionnel)</label>
@@ -43,17 +47,16 @@
                 <div class="form-group" style="flex:1; min-width:220px;">
                     <label>Date d'expiration (optionnel)</label>
                     <input type="date" name="date_expiration" class="form-control">
-                    <small style="color:#64748b;">CDD, visa, certification... Une alerte sera envoyée 30 jours avant.</small>
+                    <small class="rc-muted">CDD, visa, certification… Une alerte sera envoyée 30 jours avant.</small>
                 </div>
             </div>
-            
-            <button type="submit" class="btn btn-primary">📤 Uploader</button>
+
+            <button type="submit" class="btn btn-primary">{{ icon('file', 15) }} Uploader</button>
         </form>
     </div>
 
-    <!-- Liste des documents -->
-    <h3 style="margin-bottom:12px;">Documents récents ({{ documents|length }})</h3>
-    
+    <h3 style="margin:0 0 12px; color:#183b5b; font-size:1.02rem;">Documents récents ({{ documents|length }})</h3>
+
     <div class="table-container">
         <table>
             <thead>
@@ -63,7 +66,7 @@
                     <th>Date</th>
                     <th>Expiration</th>
                     <th>Fichier</th>
-                    <th>Actions</th>
+                    <th style="width:80px">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -71,24 +74,24 @@
                 <tr>
                     <td data-label="Titre">
                         <strong>{{ d.titre }}</strong>
-                        {% if d.description %}<br><small style="color:#64748b;">{{ d.description }}</small>{% endif %}
+                        {% if d.description %}<br><small class="rc-muted">{{ d.description }}</small>{% endif %}
                     </td>
                     <td data-label="Employé">{{ d.prenom }} {{ d.nom or '—' }}</td>
                     <td data-label="Date">{{ d.date_upload.strftime('%d/%m/%Y %H:%M') if d.date_upload else '—' }}</td>
                     <td data-label="Expiration">
                         {% if not d.date_expiration %}
-                            <span style="color:#94a3b8;">—</span>
+                            <span class="rc-muted">—</span>
                         {% elif d.date_expiration < today %}
-                            <span class="badge" style="background:#fee2e2;color:#991b1b;">⛔ Expiré le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                            <span class="badge badge-danger">Expiré le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
                         {% elif d.date_expiration <= bientot %}
-                            <span class="badge" style="background:#fef9c3;color:#854d0e;">⚠️ Expire le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                            <span class="badge badge-warning">Expire le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
                         {% else %}
-                            <span class="badge" style="background:#dcfce7;color:#166534;">{{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                            <span class="badge badge-success">{{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
                         {% endif %}
                     </td>
                     <td data-label="Fichier">
-                        <a href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;padding:4px 11px;font-size:0.8rem;">
-                            📄 Télécharger
+                        <a href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm btn-primary">
+                            {{ icon('file', 13) }} Télécharger
                         </a>
                     </td>
                     <td data-label="Actions">
@@ -100,14 +103,18 @@
                                   data-confirm-icon="📄"
                                   data-confirm-warning="Le fichier sera supprimé du serveur.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-danger">🗑️</button>
+                                <button type="submit" class="btn btn-sm btn-danger">{{ icon('ban', 13) }}</button>
                         </form>
                         {% endif %}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" style="text-align:center; padding:40px; color:#64748b;">Aucun document uploadé.</td>
+                    <td colspan="6" class="empty-state">
+                        <div class="empty-icon">📁</div>
+                        <strong>Aucun document uploadé.</strong>
+                        <div class="rc-muted" style="margin-top:4px;">Uploadez votre premier document via le formulaire ci-dessus.</div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

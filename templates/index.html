@@ -1,19 +1,19 @@
 {% extends "base.html" %}
-{% from "base.html" import pagination %}
+{% from "base.html" import pagination, icon %}
 
 {% block content %}
 <div class="employees-page">
     <!-- Header -->
     <div class="page-header">
         <div class="header-left">
-            <h1>👥 Employés</h1>
+            <h1>{{ icon('users') }}<span>Employés</span></h1>
             <div class="header-subtitle">{{ stats.total }} employés • Gestion du personnel</div>
         </div>
         <div class="header-actions">
             <a data-modal-title="Nouvel employé" href="{{ url_for('add_employee') }}" class="js-modal-form btn btn-primary">
-                <span>+</span> Nouvel employé
+                {{ icon('user', 15) }}<span>Nouvel employé</span>
             </a>
-            <a href="{{ url_for('rapports') }}" class="btn btn-secondary">📊 Rapports</a>
+            <a href="{{ url_for('rapports') }}" class="btn btn-secondary">{{ icon('chart', 15) }}<span>Rapports</span></a>
         </div>
     </div>
 

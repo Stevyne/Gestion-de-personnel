@@ -1,0 +1,290 @@
+/* ui-polish.css — harmonisation UI/UX transversale.
+   Surcharges légères pour aligner les pages historiques sur le design
+   system rc-* utilisé par recrutement / compétences / objectifs. */
+
+/* ----- Cohérence des .card en premier niveau : une ombre + radius unique ----- */
+.card {
+    border: 1px solid #e1e9f0 !important;
+    box-shadow: 0 12px 32px -28px #102a43, 0 1px 0 #f1f5f9 inset !important;
+    border-radius: 17px !important;
+    padding: 28px !important;
+}
+.card:hover {
+    box-shadow: 0 16px 36px -28px #102a43, 0 1px 0 #f1f5f9 inset !important;
+}
+
+/* En-têtes de carte : séparateur propre + hiérarchie du titre */
+.card-header {
+    border-bottom: 1px solid #edf2f7 !important;
+    padding-bottom: 18px !important;
+    margin-bottom: 22px !important;
+    align-items: flex-start !important;
+}
+.card-header h1 {
+    font-size: 1.55rem !important;
+    font-weight: 750 !important;
+    letter-spacing: -0.02em !important;
+    color: #0f172a !important;
+}
+.card-header p {
+    color: #64748b;
+    font-size: 0.92rem;
+    margin: 4px 0 0;
+}
+
+/* ----- Titres de page orphelins hors .card-header (ex. : mon_profil) ----- */
+.profil-wrap .card-header h1,
+h1.page-title,
+.page-header h1 {
+    font-size: clamp(1.5rem, 2.4vw, 2rem);
+    font-weight: 750;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+}
+
+/* ----- Boutons : léger gain de présence ----- */
+.btn {
+    border-radius: 10px !important;
+    font-weight: 650 !important;
+    letter-spacing: 0.01em;
+    transition: transform .15s ease, box-shadow .2s ease, background .2s ease, color .2s ease !important;
+}
+.btn-primary {
+    box-shadow: 0 6px 14px -5px rgb(37 99 235 / .45) !important;
+}
+.btn-primary:hover { transform: translateY(-1px); }
+.btn-secondary {
+    border: 1px solid #e2e8f0 !important;
+}
+.btn-danger {
+    box-shadow: 0 4px 10px -3px rgb(220 38 38 / .45) !important;
+}
+.btn-success {
+    background: linear-gradient(135deg,#15803d,#16a34a) !important;
+    color: #fff !important;
+    box-shadow: 0 4px 10px -3px rgb(22 163 74 / .45);
+}
+.btn-success:hover { filter:brightness(1.07); transform:translateY(-1px); }
+.btn-warning {
+    background: linear-gradient(135deg,#b45309,#d97706) !important;
+    color: #fff !important;
+    box-shadow: 0 4px 10px -3px rgb(217 119 6 / .45);
+}
+.btn-warning:hover { filter:brightness(1.07); transform:translateY(-1px); }
+
+/* ----- Tables : en-tête plus net, lignes plus lisibles ----- */
+.table-container {
+    border: 1px solid #e1e9f0 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 10px 24px -24px #102a43 !important;
+    background: #fff !important;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+.table-container table { min-width: 640px; }
+.table-container th {
+    background: #f6f9fc !important;
+    color: #4a6278 !important;
+    font-size: 0.72rem !important;
+    letter-spacing: 0.07em !important;
+    text-transform: uppercase;
+    padding: 13px 16px !important;
+    font-weight: 800;
+    border-bottom: 1px solid #e5edf3 !important;
+}
+.table-container td {
+    padding: 13px 16px !important;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+.table-container tbody tr:hover td { background: #fbfdff; }
+.table-container tbody tr:last-child td { border-bottom: none; }
+
+/* Tables imbriquées dans une .card (double déco) : on retire la seconde ombre */
+.card > .table-container { margin-top: 4px; }
+
+/* ----- Badges : plus nets et cohérents avec rc-badge ----- */
+.badge {
+    font-weight: 750 !important;
+    letter-spacing: 0.02em;
+    border-radius: 999px !important;
+    padding: 4px 10px !important;
+}
+.badge-success { background:#dff7e9 !important; color:#11633f !important; }
+.badge-danger  { background:#fde8ea !important; color:#9b2f3a !important; }
+.badge-warning { background:#fff3cd !important; color:#8a5310 !important; }
+.badge-info    { background:#e2f1fc !important; color:#185d91 !important; }
+.badge-role    { background:#f1f5f9 !important; color:#334155 !important; }
+.badge-dept    { background:#e0e7ff !important; color:#4338ca !important; }
+
+/* ----- Formulaires : inputs, selects et zones de filtre ----- */
+.form-control, .search-input, .filter-select,
+select.form-control, input.form-control, textarea.form-control {
+    border: 1px solid #cbd9e5 !important;
+    border-radius: 10px !important;
+    padding: 10px 12px !important;
+    font-size: 0.92rem !important;
+    background: #fff !important;
+    color: #17324d !important;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.form-control:focus, .search-input:focus, .filter-select:focus {
+    border-color: #1684a5 !important;
+    box-shadow: 0 0 0 3px rgb(8 145 178 / .11) !important;
+    outline: 0 !important;
+}
+.form-group label, .filter-group label {
+    font-size: 0.78rem !important;
+    font-weight: 750 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569 !important;
+}
+
+/* ----- Blocs de filtres en inline-style qu'on harmonise ----- */
+form[style*="display:flex"] label,
+.filters-form label,
+.materiels-filtres label,
+.filtre-champ label {
+    font-size: 0.72rem !important;
+    font-weight: 750 !important;
+    color: #4a6278 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-bottom: 3px;
+}
+.filters-card, .materiels-filtres {
+    background: #f8fbfd !important;
+    border: 1px solid #e1e9f0 !important;
+    border-radius: 14px !important;
+    padding: 18px 20px !important;
+}
+
+/* ----- États vides : plus accueillants ----- */
+.empty-state, td[colspan] {
+    text-align: center;
+    color: #718397;
+    padding: 40px 20px !important;
+}
+.empty-icon { font-size: 2rem; margin-bottom: 8px; }
+
+/* ----- Messages d'alerte ----- */
+.alert {
+    border-radius: 12px !important;
+    border: 1px solid transparent;
+    padding: 13px 16px !important;
+    font-weight: 500;
+    box-shadow: 0 6px 14px -12px #000;
+}
+.alert-success { background:#effaf3; color:#11633f; border-color:#c8ebd4; }
+.alert-danger  { background:#fef2f2; color:#991b1b; border-color:#fecaca; }
+.alert-warning { background:#fffbeb; color:#854d0e; border-color:#fde68a; }
+.alert-info    { background:#eff6ff; color:#1e40af; border-color:#bfdbfe; }
+
+/* ----- Pagination (macro dans base.html) ----- */
+nav[style*="display:flex"] a[href*="page="],
+nav[style*="display:flex"] strong,
+nav[style*="display:flex"] span {
+    border-radius: 8px !important;
+    transition: all .15s ease;
+    font-weight: 600 !important;
+}
+nav[style*="display:flex"] a[href*="page="]:hover {
+    background: #eff6ff !important;
+    border-color: #93c5fd !important;
+    color: #1e40af !important;
+}
+
+/* ----- Dashboard ----- */
+.dashboard-tabs {
+    background: #f6f9fc;
+    border: 1px solid #e1e9f0;
+    border-radius: 13px;
+    padding: 4px;
+    gap: 4px;
+    margin-bottom: 22px;
+}
+.dashboard-tabs a {
+    padding: 9px 15px;
+    border-radius: 9px;
+    font-size: 0.87rem;
+    font-weight: 700;
+    color: #536b80;
+    transition: all .15s ease;
+}
+.dashboard-tabs a:hover { background: #eaf1f7; color: #183b5b; text-decoration:none; }
+.dashboard-tabs a.active { background:#17679f !important; color:#fff !important; }
+.scope-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #075985;
+    border: 1px solid #bae6fd;
+}
+.scope-badge.scope-global { background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+
+.stat-card {
+    border: 1px solid #e1e9f0 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 9px 24px -22px #102a43 !important;
+    padding: 22px !important;
+    transition: all .2s ease !important;
+}
+.stat-card::before { width: 4px; }
+.stat-card:hover { transform: translateY(-2px) !important; }
+.stat-value { font-size: 1.85rem !important; font-weight: 800 !important; color:#173b62 !important; }
+.stat-label { font-size: 0.76rem !important; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; color:#71879b !important; }
+
+/* ----- Workflow chips (congés, etc.) ----- */
+.wf-circuit, .wf-meta { color: #64748b; font-size: 0.88rem; }
+.wf-circuit { padding: 12px 14px; border-left: 4px solid #0d9488; background:#f2f8fa; border-radius:8px; margin-bottom:18px; }
+.wf-attente { padding:12px 14px; border-left:4px solid #f59e0b; background:#fffbeb; border-radius:8px; margin-bottom:18px; color:#92400e; font-weight:500; }
+
+/* ----- Footer ----- */
+footer {
+    text-align: center;
+    padding: 24px 20px 32px;
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+footer p {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 10px -10px #000;
+}
+
+/* ----- Scrollbar plus discrète ----- */
+.table-container::-webkit-scrollbar { height: 8px; }
+.table-container::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:8px; }
+.table-container::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
+
+/* ----- Icônes SVG dans les titres h1 ----- */
+.card-header h1 svg.ico,
+h1 svg.ico {
+    vertical-align: -4px;
+    margin-right: 8px;
+    color: #17679f;
+    opacity: 0.9;
+}
+.card-header h1 span { vertical-align: middle; }
+
+/* ----- Petits ajustements responsive ----- */
+@media (max-width: 768px) {
+    .container { padding: 18px 14px !important; }
+    .card { padding: 18px !important; border-radius: 14px !important; }
+    .card-header { flex-direction: column; align-items: stretch !important; gap:10px; }
+    .btn { width: 100%; justify-content: center; }
+    .card-header .btn,
+    .card-header form { width: auto; }
+}

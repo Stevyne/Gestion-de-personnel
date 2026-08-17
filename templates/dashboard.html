@@ -1,21 +1,22 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card dashboard-card">
   <div class="card-header dashboard-head">
     <div>
-      <h1>📊 Tableau de bord</h1>
+      <h1>{{ icon('chart') }}<span>Tableau de bord</span></h1>
       <div class="scope-badge {{ 'scope-global' if dashboard_scope.is_global else 'scope-dept' }}">
-        {{ '🌍 Vue globale' if dashboard_scope.is_global else '🏢 Vue départementale' }} — {{ dashboard_scope.label }}
+        {{ ('🌐 Vue globale' if dashboard_scope.is_global else icon('building', 14) ~ ' ' ~ 'Vue départementale')|safe }} — {{ dashboard_scope.label }}
       </div>
     </div>
     <div>
       {% if current_role in ['admin','rh','manager'] %}
-      <a href="{{ url_for('presences.presences') }}" class="btn btn-secondary">🕒 Présences</a>
+      <a href="{{ url_for('presences.presences') }}" class="btn btn-secondary">{{ icon('clock', 15) }}<span>Présences</span></a>
       {% else %}
-      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">👤 Mon espace</a>
+      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">{{ icon('user', 15) }}<span>Mon espace</span></a>
       {% endif %}
-      <a href="{{ url_for('rapports') }}" class="btn btn-secondary">📋 Rapports</a>
+      <a href="{{ url_for('rapports') }}" class="btn btn-secondary">{{ icon('chart', 15) }}<span>Rapports</span></a>
     </div>
   </div>
   <nav class="dashboard-tabs">

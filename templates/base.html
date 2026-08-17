@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='phase3.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='recrutement.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='activity-panel.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='ui-polish.css') }}">
     <style>
         /* ===== BEAUTIFUL DELETE CONFIRMATION MODAL ===== */
         .modal-backdrop {
@@ -248,6 +249,18 @@
 <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
 {%- elif name == 'target' -%}
 <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+{%- elif name == 'folder' -%}
+<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/>
+{%- elif name == 'chart' -%}
+<path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-6"/>
+{%- elif name == 'tag' -%}
+<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.2"/>
+{%- elif name == 'receipt' -%}
+<path d="M4 2v20l3-2 3 2 3-2 3 2 3-2V2l-3 2-3-2-3 2-3-2-3 2Z"/><path d="M8 7h8M8 11h8M8 15h5"/>
+{%- elif name == 'ban' -%}
+<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>
+{%- elif name == 'log' -%}
+<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>
 {%- endif -%}
 </svg>
 {%- endmacro %}
@@ -279,9 +292,9 @@
                     {{ icon('dashboard') }}<span>Tableau de bord</span>
                 </a>
 
-                {# --- Personnel : employés + départements --- #}
+                {# --- Personnel : employés + départements + contrats + recrutement + compétences + objectifs --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','departements.departements','add_employee','edit_employee','employee_detail','departements.add_departement','departements.edit_departement','departs.departs_liste'] or (request.endpoint and (request.endpoint.startswith('recrutement.') or request.endpoint.startswith('competences.') or request.endpoint.startswith('objectifs.'))) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','add_employee','edit_employee','employee_detail','departements.departements','departements.add_departement','departements.edit_departement','departs.departs_liste'] or (request.endpoint and (request.endpoint.startswith('recrutement.') or request.endpoint.startswith('competences.') or request.endpoint.startswith('objectifs.') or request.endpoint.startswith('contrats.') or request.endpoint.startswith('documents.'))) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('users') }}<span>Personnel</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
@@ -315,18 +328,18 @@
 
                 {# --- Temps : présences, historique, absences --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['presences.presences','presences.historique','absences','presences.add_presence','add_absence'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('presences.') or request.endpoint.startswith('absences.') or request.endpoint.startswith('absence_justifications.')) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('clock') }}<span>Temps</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
-                        <a href="{{ url_for('presences.presences') }}" class="nav-dropdown-link {% if request.endpoint == 'presences.presences' %}active{% endif %}">
+                        <a href="{{ url_for('presences.presences') }}" class="nav-dropdown-link {% if request.endpoint in ['presences.presences','presences.add_presence'] %}active{% endif %}">
                             {{ icon('clock', 17) }}<span>Présences</span>
                         </a>
                         <a href="{{ url_for('presences.historique') }}" class="nav-dropdown-link {% if request.endpoint == 'presences.historique' %}active{% endif %}">
                             {{ icon('history', 17) }}<span>Historique</span>
                         </a>
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                        <a href="{{ url_for('absences.absences') }}" class="nav-dropdown-link {% if request.endpoint == 'absences.absences' %}active{% endif %}">
+                        <a href="{{ url_for('absences.absences') }}" class="nav-dropdown-link {% if request.endpoint and (request.endpoint.startswith('absences.') or request.endpoint.startswith('absence_justifications.')) %}active{% endif %}">
                             {{ icon('user-x', 17) }}<span>Absences</span>
                         </a>
                         {% endif %}
@@ -335,7 +348,7 @@
 
                 {# --- Congés : congés, permissions, soldes, calendrier --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['conges','permissions','soldes_conges_page','calendrier_conges','add_conge','add_permission'] or (request.endpoint and request.endpoint.startswith('contrats.')) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['conges.conges','permissions','soldes_conges_page','calendrier_conges','conges.add_conge','add_permission','self_service_conges'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('palm') }}<span>Congés</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
@@ -358,7 +371,7 @@
 
                 {# --- Matériels : stock et inventaire physique --- #}
                 <div class="nav-dropdown">
-                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['parc.materiels','parc.add_materiel','parc.edit_materiel','parc.view_materiel','parc.materiels_departement','parc.inventaires','parc.add_inventaire','parc.view_inventaire','parc.maintenances','parc.view_exemplaire','parc.etiquettes_materiel','parc.etiquettes_departement','parc.prestataires_page'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('parc.') or request.endpoint.startswith('rapports_parc.')) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('box') }}<span>Matériels</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
@@ -570,7 +583,7 @@
                         <span class="menu-count">{{ unread_notifications }}</span>
                         {% endif %}
                     </a>
-                    <a href="{{ url_for('auth.logout') }}" class="drawer-logout">{{ icon('auth.logout') }}<span>Déconnexion</span></a>
+                    <a href="{{ url_for('auth.logout') }}" class="drawer-logout">{{ icon('logout') }}<span>Déconnexion</span></a>
                 </div>
             {% else %}
                 {% if current_role == 'admin' %}
