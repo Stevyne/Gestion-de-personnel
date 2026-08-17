@@ -14,55 +14,88 @@
     </div>
   </section>
 
-  <section class="rc-stats">
-    <div class="rc-stat"><span>Total</span><strong>{{ comptes.get('total',0) }}</strong></div>
-    <div class="rc-stat"><span>Brouillons</span><strong>{{ comptes.get('brouillon',0) }}</strong></div>
-    <div class="rc-stat"><span>En cours</span><strong>{{ comptes.get('en_cours',0) }}</strong></div>
-    <div class="rc-stat"><span>En retard</span><strong style="color:#dc2626;">{{ comptes.get('en_retard',0) }}</strong></div>
-    <div class="rc-stat"><span>À valider</span><strong style="color:#b45309;">{{ comptes.get('atteint',0) }}</strong></div>
+  <section class="obj-stats">
+    <div class="stat-card acc-total">
+      <span class="stat-ico">🎯</span>
+      <span class="stat-label">Total</span>
+      <strong class="stat-value">{{ comptes.get('total',0) }}</strong>
+      <span class="stat-sub">tous objectifs</span>
+    </div>
+    <div class="stat-card acc-brouillon">
+      <span class="stat-ico">📝</span>
+      <span class="stat-label">Brouillons</span>
+      <strong class="stat-value">{{ comptes.get('brouillon',0) }}</strong>
+      <span class="stat-sub">en rédaction</span>
+    </div>
+    <div class="stat-card acc-cours">
+      <span class="stat-ico">🚀</span>
+      <span class="stat-label">En cours</span>
+      <strong class="stat-value">{{ comptes.get('en_cours',0) }}</strong>
+      <span class="stat-sub">progression suivie</span>
+    </div>
+    <div class="stat-card acc-retard">
+      <span class="stat-ico">⏰</span>
+      <span class="stat-label">En retard</span>
+      <strong class="stat-value" style="color:#dc2626;">{{ comptes.get('en_retard',0) }}</strong>
+      <span class="stat-sub">échéance dépassée</span>
+    </div>
+    <div class="stat-card acc-valider">
+      <span class="stat-ico">✅</span>
+      <span class="stat-label">À valider</span>
+      <strong class="stat-value" style="color:#b45309;">{{ comptes.get('atteint',0) }}</strong>
+      <span class="stat-sub">atteints</span>
+    </div>
   </section>
 
   <section class="rc-card">
-    <form method="get" class="obj-filters" style="margin:0 0 18px 0;">
-      <select name="statut" onchange="this.form.submit()">
-        <option value="">Tous les statuts</option>
-        {% for key, lbl in labels.items() %}
-          <option value="{{ key }}" {% if filtres.statut==key %}selected{% endif %}>{{ lbl }}</option>
-        {% endfor %}
-      </select>
-      {% if employes|length > 1 %}
-      <select name="employe_id" onchange="this.form.submit()">
-        <option value="">Tous les collaborateurs</option>
-        {% for emp in employes %}
-          <option value="{{ emp.id }}" {% if filtres.employe_id==emp.id %}selected{% endif %}>{{ emp.prenom }} {{ emp.nom }}</option>
-        {% endfor %}
-      </select>
-      {% endif %}
-      <label>
-        <input type="checkbox" name="miens" value="1" {% if filtres.miens %}checked{% endif %} onchange="this.form.submit()">
-        Mes objectifs uniquement
-      </label>
-    </form>
+    <div class="obj-toolbar">
+      <div class="obj-search">
+        <span class="obj-search-ico">🔍</span>
+        <input type="text" id="objSearch" placeholder="Filtrer par titre…" autocomplete="off">
+        <button type="button" class="obj-search-clear" id="objSearchClear" hidden aria-label="Effacer">✕</button>
+      </div>
+      <form method="get" class="obj-filters">
+        <select name="statut" onchange="this.form.submit()">
+          <option value="">Tous les statuts</option>
+          {% for key, lbl in labels.items() %}
+            <option value="{{ key }}" {% if filtres.statut==key %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+        {% if employes|length > 1 %}
+        <select name="employe_id" onchange="this.form.submit()">
+          <option value="">Tous les collaborateurs</option>
+          {% for emp in employes %}
+            <option value="{{ emp.id }}" {% if filtres.employe_id==emp.id %}selected{% endif %}>{{ emp.prenom }} {{ emp.nom }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+        <label class="obj-check">
+          <input type="checkbox" name="miens" value="1" {% if filtres.miens %}checked{% endif %} onchange="this.form.submit()">
+          Mes objectifs uniquement
+        </label>
+        <a class="rc-btn rc-btn-light rc-btn-sm" href="{{ url_for('objectifs.objectifs_liste') }}" title="Réinitialiser les filtres">↺ Réinitialiser</a>
+      </form>
+    </div>
 
     {% if objectifs %}
-    <div class="obj-list">
+    <div class="obj-list" id="objList">
       {% for o in objectifs %}
         {% set en_retard = (o.statut=='en_cours' and o.date_echeance and o.date_echeance < today) %}
+        {% set initials = (o.emp_prenom[:1] ~ o.emp_nom[:1]) if (o.emp_prenom and o.emp_nom) else '?' %}
+        {% set jours = ((o.date_echeance - today).days) if (o.date_echeance and o.statut=='en_cours') else 0 %}
         <a href="{{ url_for('objectifs.objectif_detail', oid=o.id) }}"
-           class="obj-card {% if o.statut in ('atteint','non_atteint','annule') %}done{% endif %} {% if en_retard %}retard{% endif %}">
+           class="obj-card prio-{{ o.priorite }} {% if o.statut in ('atteint','non_atteint','annule') %}done{% endif %} {% if en_retard %}retard{% endif %}"
+           data-title="{{ o.titre|lower }}">
+          <div class="obj-card-acc"></div>
           <div class="top">
             <div style="min-width:0;flex:1;">
               <div class="titre">{{ o.titre }}</div>
-              <div class="who" style="margin-top:4px;">
-                <strong>{{ o.emp_prenom }} {{ o.emp_nom }}</strong>
-                {% if o.emp_poste %} · {{ o.emp_poste }}{% endif %}
-                <span style="display:inline-flex;gap:6px;flex-wrap:wrap;margin-left:6px;">
-                  {% if o.categorie %}<em style="color:#64748b;font-style:normal;">{{ o.categorie }}</em>{% endif %}
-                  {% if o.comp_nom %}<span class="skill-cat">{{ o.comp_nom }}</span>{% endif %}
-                </span>
+              <div class="who" style="margin-top:6px;">
+                <span class="obj-avatar">{{ initials }}</span>
+                <span><strong>{{ o.emp_prenom }} {{ o.emp_nom }}</strong>{% if o.emp_poste %} · {{ o.emp_poste }}{% endif %}</span>
               </div>
             </div>
-            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <div class="obj-card-tags">
               <span class="obj-prio {{ o.priorite }}">{{ priorites.get(o.priorite, o.priorite) }}</span>
               <span class="rc-badge rc-badge-{{ badges.get(o.statut,'') }}">{{ labels.get(o.statut, o.statut) }}</span>
               {% if en_retard %}<span class="rc-badge rc-badge-refusee">En retard</span>{% endif %}
@@ -76,12 +109,21 @@
           </div>
           <div class="meta-row">
             {% if o.date_debut %}<span>▸ Début {{ o.date_debut.strftime('%d/%m/%Y') }}</span>{% endif %}
-            {% if o.date_echeance %}<span>▸ Échéance <strong {% if en_retard %}style="color:#dc2626;"{% endif %}>{{ o.date_echeance.strftime('%d/%m/%Y') }}</strong></span>{% endif %}
+            {% if o.date_echeance %}<span>▸ Échéance <strong {% if en_retard %}style="color:#dc2626;"{% endif %}>{{ o.date_echeance.strftime('%d/%m/%Y') }}</strong>
+              {% if o.statut=='en_cours' %}<span class="jours {{ 'negatif' if en_retard }}">{{ 'J+'~jours if jours>=0 else 'J'~jours }} j</span>{% endif %}
+            </span>{% endif %}
             {% if o.date_realisation %}<span>✓ Réalisé le {{ o.date_realisation.strftime('%d/%m/%Y') }}</span>{% endif %}
+          </div>
+          <div class="obj-card-foot">
+            {% if o.categorie %}<span class="obj-chip">🏷️ {{ o.categorie }}</span>{% endif %}
+            {% if o.comp_nom %}<span class="skill-cat">{{ o.comp_nom }}</span>{% endif %}
           </div>
         </a>
       {% endfor %}
     </div>
+    <p id="objNoResult" class="rc-empty" style="display:none;margin-top:18px;">
+      Aucun objectif ne correspond à votre recherche.
+    </p>
     {% else %}
       <div class="rc-empty">
         <div style="font-size:2.3rem;margin-bottom:8px;">🎯</div>
@@ -105,4 +147,30 @@
     {% endif %}
   </section>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var input = document.getElementById('objSearch');
+  var clear = document.getElementById('objSearchClear');
+  var cards = document.querySelectorAll('#objList .obj-card');
+  var noResult = document.getElementById('objNoResult');
+  if (!input || !cards.length) return;
+  input.addEventListener('input', function () {
+    var q = input.value.trim().toLowerCase();
+    clear.hidden = !q;
+    var visible = 0;
+    cards.forEach(function (card) {
+      var match = !q || (card.dataset.title || '').indexOf(q) !== -1;
+      card.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    if (noResult) noResult.style.display = visible ? 'none' : 'block';
+  });
+  if (clear) clear.addEventListener('click', function () {
+    input.value = ''; clear.hidden = true;
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  });
+});
+</script>
 {% endblock %}

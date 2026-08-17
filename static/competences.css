@@ -72,3 +72,59 @@
   .skill-emp-header { flex-direction:column; align-items:flex-start; padding:19px; }
   .skill-emp-actions { margin-left:0; width:100%; }
 }
+
+/* ================= UI/UX v2 — Compétences ================= */
+
+/* --- Barre d'outils catalogue --- */
+.skill-toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+.skill-search { position:relative; display:flex; align-items:center; min-width:240px; flex:1 1 280px; }
+.skill-search .skill-search-ico { position:absolute; left:13px; pointer-events:none; opacity:.5; }
+.skill-search input { width:100%; padding:11px 14px 11px 38px; border:1px solid #cbd9e5; border-radius:11px; font:inherit; font-size:.88rem; background:#fff; }
+.skill-search input:focus { outline:0; border-color:#6d28d9; box-shadow:0 0 0 3px rgb(109 40 217 / .12); }
+.skill-search-clear { position:absolute; right:9px; width:24px; height:24px; display:grid; place-items:center; border:0; border-radius:50%; background:#eef2f7; color:#64748b; cursor:pointer; font-size:.8rem; }
+
+/* --- Groupes par catégorie --- */
+.skill-group { margin-bottom:26px; }
+.skill-group:last-child { margin-bottom:0; }
+.skill-group-head { display:flex; align-items:center; gap:12px; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #e1e9f0; }
+.skill-group-ico { width:38px; height:38px; display:grid; place-items:center; border-radius:10px; background:#f5f3ff; color:#5b21b6; font-size:1.1rem; }
+.skill-group-head h3 { margin:0; color:#183b5b; font-size:1.05rem; letter-spacing:-.01em; }
+.skill-group-count { margin-left:auto; padding:3px 11px; border-radius:999px; background:#ede9fe; color:#5b21b6; font-size:.76rem; font-weight:800; }
+
+/* --- Cartes compétence v2 --- */
+.skill-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:16px; }
+.skill-card { position:relative; display:flex; flex-direction:column; gap:11px; padding:20px 20px 16px; border:1px solid #e1e9f0; border-radius:16px; background:#fff; box-shadow:0 9px 24px -22px #102a43; transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; color:inherit; text-decoration:none; overflow:hidden; }
+.skill-card::before { content:""; position:absolute; left:0; top:0; right:0; height:4px; background:var(--acc,#6d28d9); }
+.skill-card:hover { transform:translateY(-3px); box-shadow:0 18px 36px -20px rgba(99,102,241,.45); border-color:#c7d2fe; }
+.skill-card.archived { opacity:.62; background:#f8fafc; }
+.skill-card-head { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+.skill-card-head h3 { margin:0; color:#183b5b; font-size:1.08rem; letter-spacing:-.01em; }
+.skill-card-ico { flex:0 0 42px; width:42px; height:42px; display:grid; place-items:center; border-radius:12px; background:var(--acc,#6d28d9); color:#fff; font-size:1.2rem; }
+.skill-card p.desc { margin:0; color:#62768b; font-size:.88rem; line-height:1.55; }
+.skill-meta { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:auto; padding-top:12px; border-top:1px dashed #e1e9f0; font-size:.82rem; color:#71879b; }
+.skill-meta .count { display:inline-flex; align-items:center; gap:6px; color:#4f46e5; font-weight:800; font-size:.95rem; }
+.skill-meta .count::before { content:"👥"; font-size:.85rem; }
+.skill-card .rc-link { font-size:.8rem; }
+.skill-card .skill-cat { align-self:flex-start; }
+
+/* --- Distribution des niveaux (détail) --- */
+.skill-dist { display:grid; gap:10px; }
+.skill-dist-row { display:flex; align-items:center; gap:12px; }
+.skill-dist-label { flex:0 0 110px; font-size:.82rem; color:#334e68; font-weight:700; }
+.skill-dist-track { flex:1; height:12px; background:#edf2f7; border-radius:999px; overflow:hidden; }
+.skill-dist-fill { height:100%; border-radius:999px; transition:width .6s cubic-bezier(.2,.8,.2,1); }
+.skill-dist-fill.not-acquired { background:linear-gradient(90deg,#cbd5e1,#94a3b8); }
+.skill-dist-fill.beginner { background:linear-gradient(90deg,#fde68a,#fbbf24); }
+.skill-dist-fill.intermediate { background:linear-gradient(90deg,#93c5fd,#3b82f6); }
+.skill-dist-fill.confirmed { background:linear-gradient(90deg,#6ee7b7,#10b981); }
+.skill-dist-fill.expert { background:linear-gradient(90deg,#8b5cf6,#4f46e5); }
+.skill-dist-count { flex:0 0 26px; text-align:center; font-weight:850; color:#173b62; }
+
+/* --- Avatar employé dans le tableau --- */
+.skill-table-emp { display:flex; align-items:center; gap:10px; }
+.skill-table-emp .mini-avatar { flex:0 0 34px; width:34px; height:34px; display:grid; place-items:center; border-radius:50%; background:linear-gradient(135deg,#6d28d9,#4338ca); color:#fff; font-size:.72rem; font-weight:800; }
+
+/* --- Puce légende distribution --- */
+.skill-legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:6px; }
+.skill-legend span { display:inline-flex; align-items:center; gap:6px; font-size:.78rem; color:#64748b; }
+.skill-legend i { width:10px; height:10px; border-radius:3px; display:inline-block; }

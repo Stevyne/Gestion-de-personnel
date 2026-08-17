@@ -21,39 +21,60 @@
   </section>
 
   {% if competences %}
+  {% set icones = {'Technique':'⚙️','Techniques':'⚙️','Soft skills':'💬','Soft Skills':'💬','Management':'🧭','Langues':'🌍','Logiciel':'💻','Informatique':'💻','Formation':'🎓','Métier':'🛠️'} %}
   <section class="rc-card">
     <div class="rc-card-head">
       <div>
         <h2>Catalogue</h2>
         <p class="rc-muted">{{ competences|length }} compétence(s) référencée(s)</p>
       </div>
+      <div class="skill-search">
+        <span class="skill-search-ico">🔍</span>
+        <input type="text" id="skillSearch" placeholder="Filtrer par nom ou catégorie…" autocomplete="off">
+        <button type="button" class="skill-search-clear" id="skillSearchClear" hidden aria-label="Effacer">✕</button>
+      </div>
     </div>
-    <div class="skill-grid">
-      {% for c in competences %}
-        <a href="{{ url_for('competences.competence_detail', cid=c.id) }}" class="skill-card {% if not c.active %}archived{% endif %}">
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;">
-            <h3>{{ c.nom }}</h3>
-            {% if not c.active %}<span class="rc-badge rc-badge-refusee">Archivée</span>{% endif %}
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            {% if c.categorie %}<span class="skill-cat">{{ c.categorie }}</span>{% endif %}
-          </div>
-          {% if c.description %}<p class="desc">{{ c.description }}</p>{% endif %}
-          <div class="skill-meta">
-            <span class="count">{{ c.nb_employes }} collaborateur(s)</span>
-            {% if peut_gerer and c.active %}
-              <form method="POST" action="{{ url_for('competences.competence_archiver', cid=c.id) }}" onsubmit="return confirm('Archiver cette compétence ?');" onclick="event.stopPropagation(); event.preventDefault(); if(confirm('Archiver cette compétence ?')) this.submit();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="rc-link">Archiver</button>
-              </form>
-            {% elif peut_gerer and not c.active %}
-              <form method="POST" action="{{ url_for('competences.competence_reactiver', cid=c.id) }}" onclick="event.stopPropagation();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="rc-link">Réactiver</button>
-              </form>
-            {% endif %}
-          </div>
-        </a>
+
+    <div id="skillGroups">
+      {% for groupe in competences|groupby('categorie') %}
+      <div class="skill-group">
+        <div class="skill-group-head">
+          <span class="skill-group-ico">{{ icones.get(groupe.grouper, '🏷️') }}</span>
+          <h3>{{ groupe.grouper or 'Général' }}</h3>
+          <span class="skill-group-count">{{ groupe.list|length }}</span>
+        </div>
+        <div class="skill-grid">
+          {% for c in groupe.list %}
+          <a href="{{ url_for('competences.competence_detail', cid=c.id) }}"
+             class="skill-card {% if not c.active %}archived{% endif %}"
+             data-search="{{ (c.nom ~ ' ' ~ (c.categorie or '') ~ ' ' ~ (c.description or ''))|lower }}">
+            <div class="skill-card-head">
+              <h3>{{ c.nom }}</h3>
+              {% if c.categorie %}<span class="skill-card-ico">{{ icones.get(c.categorie,'🧩') }}</span>{% else %}<span class="skill-card-ico">🧩</span>{% endif %}
+            </div>
+            {% if not c.active %}<span class="rc-badge rc-badge-refusee" style="width:fit-content;">Archivée</span>{% endif %}
+            {% if c.description %}<p class="desc">{{ c.description }}</p>{% endif %}
+            <div class="skill-meta">
+              <span class="count">{{ c.nb_employes }}</span>
+              {% if peut_gerer and c.active %}
+                <form method="POST" action="{{ url_for('competences.competence_archiver', cid=c.id) }}" onsubmit="return confirm('Archiver cette compétence ?');" onclick="event.stopPropagation(); event.preventDefault(); if(confirm('Archiver cette compétence ?')) this.submit();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="rc-link">Archiver</button>
+                </form>
+              {% elif peut_gerer and not c.active %}
+                <form method="POST" action="{{ url_for('competences.competence_reactiver', cid=c.id) }}" onclick="event.stopPropagation();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="rc-link">Réactiver</button>
+                </form>
+              {% endif %}
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
       {% endfor %}
     </div>
+    <p id="skillNoResult" class="rc-empty" style="display:none;margin-top:18px;">
+      Aucune compétence ne correspond à votre recherche.
+    </p>
   </section>
   {% else %}
     <div class="rc-empty">
@@ -63,4 +84,33 @@
     </div>
   {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var input = document.getElementById('skillSearch');
+  var clear = document.getElementById('skillSearchClear');
+  if (!input) return;
+  function apply() {
+    var q = input.value.trim().toLowerCase();
+    clear.hidden = !q;
+    var anyVisible = false;
+    document.querySelectorAll('#skillGroups .skill-group').forEach(function (grp) {
+      var grpVisible = false;
+      grp.querySelectorAll('.skill-card').forEach(function (card) {
+        var match = !q || (card.dataset.search || '').indexOf(q) !== -1;
+        card.style.display = match ? '' : 'none';
+        if (match) grpVisible = true;
+      });
+      grp.style.display = grpVisible ? '' : 'none';
+      if (grpVisible) anyVisible = true;
+    });
+    var noResult = document.getElementById('skillNoResult');
+    if (noResult) noResult.style.display = anyVisible ? 'none' : 'block';
+  }
+  input.addEventListener('input', apply);
+  if (clear) clear.addEventListener('click', function () {
+    input.value = ''; apply(); input.focus();
+  });
+});
+</script>
 {% endblock %}

@@ -11,7 +11,7 @@
      {%- elif o.statut=='brouillon' %}#475569,#1e293b
      {%- else %}#b45309,#dc2626 60%,#be185d{% endif %});">
     <div class="obj-head-main">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
         <span class="rc-badge {% if o.statut=='non_atteint' %}rc-badge-refusee{% elif o.statut=='atteint' %}rc-badge-validee{% elif o.statut=='brouillon' %}rc-badge-brouillon{% elif o.statut=='en_cours' %}rc-badge-entretien{% else %}rc-badge-fermee{% endif %}">{{ labels.get(o.statut,o.statut) }}</span>
         <span class="obj-prio {{ o.priorite }}">{{ priorite_labels.get(o.priorite,o.priorite) }}</span>
         {% if o.categorie %}<span class="obj-prio" style="background:rgba(255,255,255,.2);color:#fff;text-transform:none;letter-spacing:0;">{{ o.categorie }}</span>{% endif %}
@@ -31,13 +31,13 @@
         {% if o.valide_par_nom %}<span>✓ Validé par {{ o.valide_par_nom }}{% if o.valide_le %} le {{ o.valide_le.strftime('%d/%m/%Y') }}{% endif %}</span>{% endif %}
       </div>
     </div>
-    <div class="obj-actions">
+    <div class="obj-actions" id="obj-actions">
       <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste') }}">← Liste</a>
       {% if o.competence_id %}
         <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competence_detail', cid=o.competence_id) }}">{{ o.comp_nom }}</a>
       {% endif %}
       {% if droits.modifier and o.statut != 'atteint' %}
-        <button type="button" class="rc-btn" onclick="document.getElementById('editForm').style.display='block';">✏️ Modifier</button>
+        <button type="button" class="rc-btn" onclick="document.getElementById('editForm').style.display='block';this.style.display='none';">✏️ Modifier</button>
       {% endif %}
       {% if o.statut == 'brouillon' and droits.progression %}
         <form method="post" action="{{ url_for('objectifs.objectif_demarrer', oid=o.id) }}" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -68,19 +68,32 @@
     </div>
   </section>
 
-  {# --------------------------- PROGRESSION --------------------------- #}
+  {# --------------------------- PROGRESSION + JAUGE --------------------------- #}
   <section class="obj-progress-xl">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+    <div class="obj-progress-head">
       <div>
         <h3 style="margin:0;color:#183b5b;">Progression</h3>
         <p class="rc-muted" style="margin:3px 0 0;font-size:.82rem;">Mise à jour via les points de situation ci-dessous.</p>
       </div>
-      <div style="font-size:1.4rem;font-weight:850;color:
-        {%- if o.statut=='non_atteint' %}#dc2626
-        {%- elif o.statut=='atteint' %}#059669
-        {%- elif o.statut=='annule' %}#6b7280
-        {%- else %}#b45309{% endif %};">{{ o.progression }}%</div>
+      {% set pct = o.progression %}
+      {% set r = 42 %}{% set circum = (2 * 3.14159265 * r)|round(3) %}
+      {% if o.statut=='non_atteint' %}{% set gcls = 'g-echec' %}{% set gcolor = '#dc2626' %}
+      {% elif o.statut=='atteint' %}{% set gcls = 'g-success' %}{% set gcolor = '#059669' %}
+      {% elif o.statut=='annule' %}{% set gcls = 'g-annule' %}{% set gcolor = '#9ca3af' %}
+      {% else %}{% set gcls = '' %}{% set gcolor = '#b45309' %}{% endif %}
+      <div class="obj-gauge {{ gcls }}" style="--ring-color:{{ gcolor }};">
+        <svg viewBox="0 0 100 100" width="118" height="118">
+          <circle class="ring-bg" cx="50" cy="50" r="{{ r }}"></circle>
+          <circle class="ring-fill" cx="50" cy="50" r="{{ r }}"
+                  stroke-dasharray="{{ circum }}" stroke-dashoffset="{{ (circum * (1 - pct/100))|round(3) }}"></circle>
+          <g class="ring-text">
+            <text class="ring-label" x="50" y="48" text-anchor="middle">{{ pct }}%</text>
+            <text class="ring-sub" x="50" y="62" text-anchor="middle">RÉALISÉ</text>
+          </g>
+        </svg>
+      </div>
     </div>
+
     <div class="obj-bar">
       <div class="obj-bar-track">
         <div class="obj-bar-fill {{ progression_couleur(o.progression, o.statut) }}" style="width:{{ [o.progression,4]|max }}%;"></div>
@@ -138,13 +151,17 @@
             {% if p.auteur_nom in ['admin','rh'] %}{% set classe = 'auteur-rh' %}
             {% elif p.auteur_nom == 'manager' %}{% set classe = 'auteur-manager' %}{% endif %}
             <div class="obj-point {{ classe }}">
-              <div class="who">
-                <span><span class="pct">{{ p.progression }}%</span>
-                  {% if p.auteur_nom %}{{ p.auteur_nom }}{% else %}Système{% endif %}
-                </span>
-                <span>{{ p.date_creation.strftime('%d/%m/%Y %H:%M') }}</span>
+              <div class="obj-point-marker"><span class="obj-point-dot"></span></div>
+              <div class="obj-point-body">
+                <div class="who">
+                  <span class="obj-who-left">
+                    <span class="pct">{{ p.progression }}%</span>
+                    {% if p.auteur_nom %}{{ p.auteur_nom }}{% else %}Système{% endif %}
+                  </span>
+                  <span>{{ p.date_creation.strftime('%d/%m/%Y %H:%M') }}</span>
+                </div>
+                {% if p.commentaire %}<div class="txt">{{ p.commentaire }}</div>{% endif %}
               </div>
-              {% if p.commentaire %}<div class="txt">{{ p.commentaire }}</div>{% endif %}
             </div>
           {% endfor %}
         </div>
@@ -227,7 +244,7 @@
         <textarea name="description" rows="4">{{ o.description or '' }}</textarea>
       </div>
       <div class="rc-form-actions">
-        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('editForm').style.display='none';">Annuler</button>
+        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('editForm').style.display='none';document.querySelector('#obj-actions .rc-btn[onclick*=\\'editForm\\']').style.display='';">Annuler</button>
         <button type="submit" class="rc-btn">Enregistrer</button>
       </div>
     </form>

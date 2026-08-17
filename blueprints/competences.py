@@ -231,7 +231,8 @@ def creer_blueprint_competences(deps):
                                comp=comp,
                                associations=associations,
                                libelle_niveau=libelle_niveau,
-                               peut_gerer=_est_global())
+                               peut_gerer=_est_global(),
+                               is_global=scope['is_global'])
 
     @bp.route('/competences/<int:cid>/modifier', methods=['GET', 'POST'])
     @login_required

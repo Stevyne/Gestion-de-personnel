@@ -31,6 +31,35 @@
     <div class="rc-stat"><span>À renforcer (&lt;50)</span><strong style="color:#dc2626;">{{ associations|selectattr('niveau','lt',50)|list|length }}</strong></div>
   </section>
 
+  {# --------------------------- DISTRIBUTION DES NIVEAUX --------------------------- #}
+  {% set buckets = {'not-acquired':0,'beginner':0,'intermediate':0,'confirmed':0,'expert':0} %}
+  {% for a in associations %}{% set _c, cls = libelle_niveau(a.niveau) %}{% set _ = buckets.update({cls: buckets.get(cls,0)+1}) %}{% endfor %}
+  {% set nb = associations|length %}
+  <section class="rc-card">
+    <div class="rc-card-head">
+      <div>
+        <h2>Distribution des niveaux</h2>
+        <p class="rc-muted">Répartition des collaborateurs par niveau de maîtrise.</p>
+      </div>
+    </div>
+    <div class="skill-dist">
+      {% for cls, label in [('not-acquired','Débutant'),('beginner','Notions'),('intermediate','Intermédiaire'),('confirmed','Confirmé'),('expert','Expert')] %}
+      <div class="skill-dist-row">
+        <span class="skill-dist-label">{{ label }}</span>
+        <div class="skill-dist-track"><div class="skill-dist-fill {{ cls }}" style="width:{{ ((buckets.get(cls,0) / nb) * 100)|round(1) if nb else 0 }}%;"></div></div>
+        <span class="skill-dist-count">{{ buckets.get(cls,0) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="skill-legend">
+      <span><i style="background:#94a3b8;"></i> Débutant</span>
+      <span><i style="background:#fbbf24;"></i> Notions</span>
+      <span><i style="background:#3b82f6;"></i> Intermédiaire</span>
+      <span><i style="background:#10b981;"></i> Confirmé</span>
+      <span><i style="background:#4f46e5;"></i> Expert</span>
+    </div>
+  </section>
+
   <section class="rc-card">
     <div class="rc-card-head">
       <div>
@@ -52,8 +81,14 @@
           <tbody>
             {% for a in associations %}
               {% set label, cls = libelle_niveau(a.niveau) %}
+              {% set init = (a.prenom[:1] ~ a.nom[:1]) if (a.prenom and a.nom) else '?' %}
               <tr>
-                <td><a href="{{ url_for('view_employee', id=a.employe_id) }}">{{ a.prenom }} {{ a.nom }}</a></td>
+                <td>
+                  <div class="skill-table-emp">
+                    <span class="mini-avatar">{{ init }}</span>
+                    <a href="{{ url_for('view_employee', id=a.employe_id) }}">{{ a.prenom }} {{ a.nom }}</a>
+                  </div>
+                </td>
                 <td>{{ a.poste or '—' }}</td>
                 <td>{{ a.departement or '—' }}</td>
                 <td>
