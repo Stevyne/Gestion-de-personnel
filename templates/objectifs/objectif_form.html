@@ -1,97 +1,99 @@
-{% extends 'base.html' %}
+{% extends layout|default("base.html") %}
+
 {% block title %}{{ 'Modifier' if objectif else 'Nouvel objectif' }} · Objectifs{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='objectifs.css') }}">{% endblock %}
+
 {% block content %}
-<div class="rc-shell">
-  <section class="rc-hero obj-hero">
-    <div>
-      <h1>{% if objectif %}✏️ Modifier l'objectif{% else %}➕ Nouvel objectif{% endif %}</h1>
-      <p>{% if objectif %}Mettez à jour la cible, l'échéance ou les résultats attendus.{% else %}Définissez un objectif pour vous ou un collaborateur. Un bon objectif est spécifique, mesurable, atteignable, pertinent et temporellement défini.{% endif %}</p>
+<div class="card" style="max-width: 860px; margin: 0 auto;">
+    <div class="card-header">
+        <h1>{{ '✏️ Modifier l\'objectif' if objectif else '➕ Nouvel objectif' }}</h1>
+        {% if not is_modal %}
+        <a class="btn btn-secondary" href="{{ url_for('objectifs.objectifs_liste') }}">← Retour</a>
+        {% endif %}
     </div>
-    <div class="rc-hero-actions">
-      <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste') }}">← Retour</a>
-    </div>
-  </section>
 
-  <section class="rc-card">
-    <form method="post" action=""><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      {% if not is_editing and (current_role in ('admin','rh','manager')) %}
-      <div class="rc-field">
-        <label>Collaborateur *</label>
-        <select name="employe_id" required>
-          {% for emp in employes %}
-            <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      {% endif %}
+    <form method="post" action="{{ url_for('objectifs.objectif_modifier', oid=objectif.id) if objectif else url_for('objectifs.objectif_nouveau') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-      <div class="rc-field" style="margin-top:14px;">
-        <label>Titre * <span class="rc-muted" style="font-weight:400;">(max 200)</span></label>
-        <input type="text" name="titre" required maxlength="200" autofocus
-               value="{{ objectif.titre if objectif else '' }}"
-               placeholder="Ex : Finaliser la migration du module facturation pour fin juin">
-      </div>
-
-      <div class="rc-grid" style="margin-top:14px;">
-        <div class="rc-field">
-          <label>Catégorie</label>
-          <input type="text" name="categorie" list="cat-list" maxlength="80"
-                 value="{{ objectif.categorie if objectif else '' }}"
-                 placeholder="Performance, Projet, Formation…">
-          <datalist id="cat-list">
-            {% for c in categories %}<option value="{{ c }}">{% endfor %}
-          </datalist>
+        {% if not is_editing and (current_role in ('admin','rh','manager')) %}
+        <div class="form-group">
+            <label>Collaborateur *</label>
+            <select name="employe_id" class="form-control" required>
+                {% for emp in employes %}
+                    <option value="{{ emp.id }}">{{ emp.prenom }} {{ emp.nom }}</option>
+                {% endfor %}
+            </select>
         </div>
-        <div class="rc-field">
-          <label>Priorité</label>
-          <select name="priorite">
-            {% for p in priorites %}
-              <option value="{{ p }}" {% if objectif and objectif.priorite==p %}selected{% endif %}>{{ priorite_labels[p] }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="rc-field">
-          <label>Date de début</label>
-          <input type="date" name="date_debut"
-                 value="{{ objectif.date_debut.isoformat() if objectif and objectif.date_debut else '' }}">
-        </div>
-        <div class="rc-field">
-          <label>Date d'échéance</label>
-          <input type="date" name="date_echeance"
-                 value="{{ objectif.date_echeance.isoformat() if objectif and objectif.date_echeance else '' }}">
-        </div>
-        <div class="rc-field rc-field-full">
-          <label>Compétence associée <span class="rc-muted" style="font-weight:400;">(optionnel — permet de relier l'objectif à une compétence à développer)</span></label>
-          <select name="competence_id">
-            <option value="">— Aucune —</option>
-            {% for c in competences %}
-              <option value="{{ c.id }}" {% if objectif and objectif.competence_id==c.id %}selected{% endif %}>
-                {{ c.nom }}{% if c.categorie %} ({{ c.categorie }}){% endif %}
-              </option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
+        {% endif %}
 
-      <div class="rc-field" style="margin-top:14px;">
-        <label>Description / résultats attendus</label>
-        <textarea name="description" rows="5"
-                  placeholder="Décrivez l'objectif, les critères de succès concrets, les livrables attendus, les moyens mis en œuvre…">{{ objectif.description if objectif else '' }}</textarea>
-      </div>
+        <div class="form-group">
+            <label>Titre * <small style="color:#64748b;font-weight:400;">(max 200)</small></label>
+            <input type="text" name="titre" class="form-control" required maxlength="200"
+                   value="{{ objectif.titre if objectif else '' }}" autofocus
+                   placeholder="Ex : Finaliser la migration du module facturation pour fin juin">
+        </div>
 
-      {% if not is_editing and current_role in ('admin','rh','manager') %}
-      <label style="display:flex;align-items:center;gap:10px;margin-top:18px;cursor:pointer;font-size:.92rem;color:#334e68;">
-        <input type="checkbox" name="valider_immediat" value="1" checked style="width:18px;height:18px;accent-color:#b45309;">
-        <strong>Démarrer cet objectif immédiatement</strong> <span class="rc-muted" style="font-weight:400;">(statut « en cours » plutôt que « brouillon »)</span>
-      </label>
-      {% endif %}
+        <div class="form-row">
+            <div class="form-group">
+                <label>Catégorie</label>
+                <input type="text" name="categorie" class="form-control" list="cat-list" maxlength="80"
+                       value="{{ objectif.categorie if objectif else '' }}"
+                       placeholder="Performance, Projet, Formation…">
+                <datalist id="cat-list">
+                    {% for c in categories %}<option value="{{ c }}">{% endfor %}
+                </datalist>
+            </div>
+            <div class="form-group">
+                <label>Priorité</label>
+                <select name="priorite" class="form-control">
+                    {% for p in priorites %}
+                        <option value="{{ p }}" {% if objectif and objectif.priorite==p %}selected{% endif %}>{{ priorite_labels[p] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
 
-      <div class="rc-form-actions">
-        <a class="rc-btn rc-btn-muted" href="{{ url_for('objectifs.objectifs_liste') }}">Annuler</a>
-        <button type="submit" class="rc-btn">{{ 'Enregistrer les modifications' if objectif else 'Créer l\'objectif' }}</button>
-      </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Date de début</label>
+                <input type="date" name="date_debut" class="form-control"
+                       value="{{ objectif.date_debut.isoformat() if objectif and objectif.date_debut else '' }}">
+            </div>
+            <div class="form-group">
+                <label>Date d'échéance</label>
+                <input type="date" name="date_echeance" class="form-control"
+                       value="{{ objectif.date_echeance.isoformat() if objectif and objectif.date_echeance else '' }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Compétence associée <small style="color:#64748b;font-weight:400;">(optionnel)</small></label>
+            <select name="competence_id" class="form-control">
+                <option value="">— Aucune —</option>
+                {% for c in competences %}
+                    <option value="{{ c.id }}" {% if objectif and objectif.competence_id==c.id %}selected{% endif %}>
+                        {{ c.nom }}{% if c.categorie %} ({{ c.categorie }}){% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Description / résultats attendus</label>
+            <textarea name="description" class="form-control" rows="5"
+                      placeholder="Décrivez l'objectif, les critères de succès concrets, les livrables attendus, les moyens mis en œuvre…">{{ objectif.description if objectif else '' }}</textarea>
+        </div>
+
+        {% if not is_editing and current_role in ('admin','rh','manager') %}
+        <label style="display:flex;align-items:center;gap:10px;margin:6px 0 4px;cursor:pointer;font-weight:500;color:#334e68;">
+            <input type="checkbox" name="valider_immediat" value="1" checked style="width:17px;height:17px;accent-color:#b45309;">
+            <strong>Démarrer cet objectif immédiatement</strong> <span style="color:#71879b;font-weight:400;">(statut « en cours » plutôt que « brouillon »)</span>
+        </label>
+        {% endif %}
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ 'Enregistrer les modifications' if objectif else 'Créer l\'objectif' }}</button>
+            <a class="btn btn-secondary" href="{{ url_for('objectifs.objectifs_liste') }}">Annuler</a>
+        </div>
     </form>
-  </section>
 </div>
 {% endblock %}

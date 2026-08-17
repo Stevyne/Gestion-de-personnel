@@ -505,13 +505,27 @@ def creer_blueprint_objectifs(deps):
 
     # ---- modifier les champs statiques
 
-    @bp.route('/objectifs/<int:oid>/modifier', methods=['POST'])
+    @bp.route('/objectifs/<int:oid>/modifier', methods=['GET', 'POST'])
     @login_required
     def objectif_modifier(oid):
         with db_cursor(commit=True) as (conn, cur):
             obj = _charger_objectif(cur, oid)
             redir = _require(cur, obj, 'modifier')
             if redir is not None: return redir
+
+            if request.method == 'GET':
+                # Charger les listes pour le formulaire d'édition (popup ou page)
+                cur.execute("SELECT id, nom, categorie FROM competences WHERE active IS TRUE "
+                            "ORDER BY categorie NULLS LAST, nom")
+                competences = cur.fetchall()
+                return render_template('objectifs/objectif_form.html',
+                                       objectif=obj, employes=[],
+                                       competences=competences,
+                                       categories=CATEGORIES_DEFAUT,
+                                       priorites=PRIORITES,
+                                       priorite_labels=PRIORITE_LABELS,
+                                       is_editing=True)
+
             try:
                 titre = (request.form.get('titre') or '').strip()
                 if not titre:

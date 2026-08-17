@@ -12,7 +12,7 @@
     <div class="rc-hero-actions">
       <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste') }}">← Toutes les compétences</a>
       {% if peut_gerer and comp.active %}
-        <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competence_modifier', cid=comp.id) }}">✏️ Modifier</a>
+        <a class="rc-btn rc-btn-light js-modal-form" data-modal-title="Modifier la compétence" href="{{ url_for('competences.competence_modifier', cid=comp.id) }}">✏️ Modifier</a>
         <form method="POST" action="{{ url_for('competences.competence_archiver', cid=comp.id) }}" onsubmit="return confirm('Archiver cette compétence ?');" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="rc-btn rc-btn-danger">Archiver</button>
         </form>

@@ -37,7 +37,7 @@
         <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competence_detail', cid=o.competence_id) }}">{{ o.comp_nom }}</a>
       {% endif %}
       {% if droits.modifier and o.statut != 'atteint' %}
-        <button type="button" class="rc-btn" onclick="document.getElementById('editForm').style.display='block';this.style.display='none';">✏️ Modifier</button>
+        <a class="rc-btn js-modal-form" data-modal-title="Modifier l'objectif" href="{{ url_for('objectifs.objectif_modifier', oid=o.id) }}">✏️ Modifier</a>
       {% endif %}
       {% if o.statut == 'brouillon' and droits.progression %}
         <form method="post" action="{{ url_for('objectifs.objectif_demarrer', oid=o.id) }}" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -200,56 +200,6 @@
   </div>
 
   {# --------------------------- FORMULAIRES CACHÉS --------------------------- #}
-  <div id="editForm" style="display:none;margin-top:18px;" class="obj-form-block">
-    <h3>✏️ Modifier l'objectif</h3>
-    <form method="post" action="{{ url_for('objectifs.objectif_modifier', oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="rc-field">
-        <label>Titre *</label>
-        <input type="text" name="titre" required maxlength="200" value="{{ o.titre }}">
-      </div>
-      <div class="rc-grid" style="margin-top:14px;">
-        <div class="rc-field">
-          <label>Catégorie</label>
-          <input type="text" name="categorie" list="cat-list2" maxlength="80" value="{{ o.categorie or '' }}">
-          <datalist id="cat-list2">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist>
-        </div>
-        <div class="rc-field">
-          <label>Priorité</label>
-          <select name="priorite">
-            {% for p in priorites %}
-              <option value="{{ p }}" {% if o.priorite==p %}selected{% endif %}>{{ priorite_labels[p] }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="rc-field">
-          <label>Date de début</label>
-          <input type="date" name="date_debut" value="{{ o.date_debut.isoformat() if o.date_debut else '' }}">
-        </div>
-        <div class="rc-field">
-          <label>Date d'échéance</label>
-          <input type="date" name="date_echeance" value="{{ o.date_echeance.isoformat() if o.date_echeance else '' }}">
-        </div>
-        <div class="rc-field rc-field-full">
-          <label>Compétence liée</label>
-          <select name="competence_id">
-            <option value="">— Aucune —</option>
-            {% for c in competences %}
-              <option value="{{ c.id }}" {% if o.competence_id==c.id %}selected{% endif %}>{{ c.nom }}{% if c.categorie %} ({{ c.categorie }}){% endif %}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div class="rc-field" style="margin-top:14px;">
-        <label>Description</label>
-        <textarea name="description" rows="4">{{ o.description or '' }}</textarea>
-      </div>
-      <div class="rc-form-actions">
-        <button type="button" class="rc-btn rc-btn-muted" onclick="document.getElementById('editForm').style.display='none';document.querySelector('#obj-actions .rc-btn[onclick*=\\'editForm\\']').style.display='';">Annuler</button>
-        <button type="submit" class="rc-btn">Enregistrer</button>
-      </div>
-    </form>
-  </div>
-
   <div id="validerForm" style="display:none;margin-top:18px;" class="obj-form-block">
     <h3>✅ Valider comme atteint</h3>
     <form method="post" action="{{ url_for('objectifs.objectif_valider', oid=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -10,7 +10,7 @@
     </div>
     <div class="rc-hero-actions">
       <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste', miens='1') }}">👤 Mes objectifs</a>
-      <a class="rc-btn" href="{{ url_for('objectifs.objectif_nouveau') }}">+ Nouvel objectif</a>
+      <a class="rc-btn js-modal-form" data-modal-title="Nouvel objectif" href="{{ url_for('objectifs.objectif_nouveau') }}">+ Nouvel objectif</a>
     </div>
   </section>
 
@@ -128,7 +128,7 @@
       <div class="rc-empty">
         <div style="font-size:2.3rem;margin-bottom:8px;">🎯</div>
         Aucun objectif dans ce périmètre.<br>
-        <a href="{{ url_for('objectifs.objectif_nouveau') }}" style="color:#b45309;font-weight:700;">Créer le premier objectif</a>.
+        <a href="{{ url_for('objectifs.objectif_nouveau') }}" style="color:#b45309;font-weight:700;" class="js-modal-form" data-modal-title="Nouvel objectif">Créer le premier objectif</a>.
       </div>
     {% endif %}
 

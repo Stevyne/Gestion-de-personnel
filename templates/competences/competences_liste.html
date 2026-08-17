@@ -15,7 +15,7 @@
         <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste', inactifs='1') }}">Afficher les archives</a>
       {% endif %}
       {% if peut_gerer %}
-        <a class="rc-btn" href="{{ url_for('competences.competence_ajouter') }}">+ Nouvelle compétence</a>
+        <a class="rc-btn js-modal-form" data-modal-title="Nouvelle compétence" href="{{ url_for('competences.competence_ajouter') }}">+ Nouvelle compétence</a>
       {% endif %}
     </div>
   </section>
@@ -80,7 +80,7 @@
     <div class="rc-empty">
       <div style="font-size:2.3rem;margin-bottom:8px;">🧠</div>
       Aucune compétence enregistrée pour le moment.
-      {% if peut_gerer %}<br><a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;">Créer la première compétence</a>.{% endif %}
+      {% if peut_gerer %}<br><a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;" class="js-modal-form" data-modal-title="Nouvelle compétence">Créer la première compétence</a>.{% endif %}
     </div>
   {% endif %}
 </div>

@@ -136,13 +136,13 @@
         <button type="submit" class="rc-btn" style="width:100%;justify-content:center;">Ajouter au profil</button>
       </form>
       <p style="margin:12px 0 0;font-size:.78rem;color:#718397;text-align:center;">
-        Une compétence manque ? <a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;">Créer une compétence</a>.
+        Une compétence manque ? <a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;" class="js-modal-form" data-modal-title="Nouvelle compétence">Créer une compétence</a>.
       </p>
     </aside>
     {% elif peut_ecrire and not disponibles and competences %}
     <aside class="obj-side-card" style="background:#fff;">
       <h3 style="margin:0 0 6px;color:#183b5b;">🎯 Toutes les compétences actives sont déjà associées</h3>
-      <p class="rc-muted" style="font-size:.88rem;">Vous pouvez <a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;">créer une nouvelle compétence</a> dans le référentiel.</p>
+      <p class="rc-muted" style="font-size:.88rem;">Vous pouvez <a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;" class="js-modal-form" data-modal-title="Nouvelle compétence">créer une nouvelle compétence</a> dans le référentiel.</p>
     </aside>
     {% endif %}
   </div>
