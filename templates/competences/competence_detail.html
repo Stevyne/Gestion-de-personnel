@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}{{ comp.nom }} · Compétences{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
+{% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
 {% block content %}
 <div class="rc-shell">
   <section class="rc-hero skill-hero">
@@ -93,7 +93,7 @@
                 <td>{{ a.departement or '—' }}</td>
                 <td>
                   <div style="display:flex;align-items:center;gap:10px;min-width:220px;">
-                    <div class="skill-bar-track" style="flex:1;" role="progressbar" aria-valuenow="{{ a.niveau }}" aria-valuemin="0" aria-valuemax="100" aria-label="Niveau : {{ a.niveau }} sur 100"><div class="skill-bar-fill {{ cls }}" style="width:{{ a.niveau }}%;"></div></div>
+                    <div class="skill-bar-track" style="flex:1;"><div class="skill-bar-fill {{ cls }}" style="width:{{ a.niveau }}%;"></div></div>
                     <strong style="min-width:60px;text-align:right;">{{ a.niveau }}/100</strong>
                     <span class="skill-label {{ cls }}">{{ label }}</span>
                   </div>

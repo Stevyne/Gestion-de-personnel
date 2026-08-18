@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}{{ emp.prenom }} {{ emp.nom }} · Compétences{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
+{% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
 {% block content %}
 <div class="rc-shell">
   <section class="skill-emp-header">
@@ -56,12 +56,12 @@
               </div>
               <div style="display:flex;gap:8px;align-items:center;">
                 <span class="skill-label {{ cls }}">{{ label }}</span>
-                <span class="skill-level-value">{{ ec.niveau }}/100</span>
+                <span style="font-weight:800;color:#4f46e5;font-size:1rem;">{{ ec.niveau }}/100</span>
               </div>
             </div>
 
-            <div class="skill-bar" role="progressbar" aria-valuenow="{{ ec.niveau }}" aria-valuemin="0" aria-valuemax="100" aria-label="Niveau : {{ label }} — {{ ec.niveau }} sur 100">
-              <div class="skill-bar-track">
+            <div class="skill-bar">
+              <div class="skill-bar-track" role="progressbar" aria-valuenow="{{ ec.niveau }}" aria-valuemin="0" aria-valuemax="100" aria-label="Niveau de {{ ec.comp_nom }}">
                 <div class="skill-bar-fill {{ cls }}" style="width:{{ [ec.niveau,4]|max }}%;"></div>
               </div>
             </div>
@@ -80,17 +80,15 @@
               <summary>Modifier / retirer</summary>
               <form method="POST" action="{{ url_for('competences.employe_competence_modifier', eid=emp.id, ecid=ec.id) }}" class="skill-inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="row">
-                  <label for="niveau_range_{{ ec.id }}" style="font-size:.85rem;font-weight:700;color:#334e68;">Niveau :
-                    <input type="range" id="niveau_range_{{ ec.id }}" name="niveau_slider" min="0" max="100" value="{{ ec.niveau }}"
-                           oninput="syncNiveau('{{ ec.id }}', this.value)">
+                  <label style="font-size:.85rem;font-weight:700;color:#334e68;">Niveau :
+                    <input type="range" min="0" max="100" value="{{ ec.niveau }}" aria-label="Niveau (curseur)"
+                           oninput="this.form.querySelector('input[type=number]').value=this.value">
                   </label>
-                  <input type="number" id="niveau_num_{{ ec.id }}" min="0" max="100" value="{{ ec.niveau }}" required
-                         aria-label="Niveau en pourcentage"
-                         oninput="syncNiveau('{{ ec.id }}', this.value)">
-                  <input type="hidden" name="niveau" id="niveau_hidden_{{ ec.id }}" value="{{ ec.niveau }}">
+                  <input type="number" name="niveau" min="0" max="100" value="{{ ec.niveau }}" required
+                         oninput="this.form.querySelector('input[type=range]').value=this.value">
                 </div>
                 <textarea name="notes" placeholder="Points forts, axes d'amélioration, formations envisagées…">{{ ec.notes or '' }}</textarea>
-                <div class="skill-row-actions">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
                   <button type="button" class="rc-btn rc-btn-muted rc-btn-sm" onclick="this.closest('details').open=false;">Annuler</button>
                   <button type="submit" class="rc-btn rc-btn-sm">Enregistrer</button>
                   <button type="submit" formaction="{{ url_for('competences.employe_competence_supprimer', eid=emp.id, ecid=ec.id) }}" formmethod="POST"
@@ -138,30 +136,24 @@
         <button type="submit" class="rc-btn" style="width:100%;justify-content:center;">Ajouter au profil</button>
       </form>
       <p style="margin:12px 0 0;font-size:.78rem;color:#718397;text-align:center;">
-        Une compétence manque ? <a href="{{ url_for('competences.competence_ajouter') }}" class="skill-accent-link js-modal-form" data-modal-title="Nouvelle compétence">Créer une compétence</a>.
+        Une compétence manque ? <a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;" class="js-modal-form" data-modal-title="Nouvelle compétence">Créer une compétence</a>.
       </p>
     </aside>
     {% elif peut_ecrire and not disponibles and competences %}
     <aside class="obj-side-card" style="background:#fff;">
       <h3 style="margin:0 0 6px;color:#183b5b;">🎯 Toutes les compétences actives sont déjà associées</h3>
-      <p class="rc-muted" style="font-size:.88rem;">Vous pouvez <a href="{{ url_for('competences.competence_ajouter') }}" class="skill-accent-link js-modal-form" data-modal-title="Nouvelle compétence">créer une nouvelle compétence</a> dans le référentiel.</p>
+      <p class="rc-muted" style="font-size:.88rem;">Vous pouvez <a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;" class="js-modal-form" data-modal-title="Nouvelle compétence">créer une nouvelle compétence</a> dans le référentiel.</p>
     </aside>
     {% endif %}
   </div>
 </div>
 <script>
-// Aligne slider, champ numérique et champ caché sur une même valeur,
-// puis met à jour le libellé du niveau affiché à l'écran.
-function syncNiveau(id, val) {
-  var range = document.getElementById('niveau_range_' + id);
-  var num   = document.getElementById('niveau_num_' + id);
-  var hidden= document.getElementById('niveau_hidden_' + id);
-  var n = parseInt(val, 10);
-  if (isNaN(n)) n = 0;
-  n = Math.max(0, Math.min(100, n));
-  if (range) range.value = n;
-  if (num) num.value = n;
-  if (hidden) hidden.value = n;
-}
+// Synchroniser le slider et le champ numérique sur le formulaire d'ajout
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.skill-inline-form input[type=range]').forEach(function(r){
+    var n = r.parentElement.querySelector('input[type=number]');
+    if(n){ r.addEventListener('input', function(){ n.value = r.value; }); }
+  });
+});
 </script>
 {% endblock %}

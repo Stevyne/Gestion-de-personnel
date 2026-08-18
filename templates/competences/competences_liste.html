@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Compétences · TeamSphere{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
+{% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
 {% block content %}
 <div class="rc-shell">
   <section class="rc-hero skill-hero">
@@ -30,7 +30,7 @@
       </div>
       <div class="skill-search">
         <span class="skill-search-ico">🔍</span>
-        <input type="text" id="skillSearch" placeholder="Filtrer par nom ou catégorie…" autocomplete="off" aria-label="Rechercher une compétence">
+        <input type="text" id="skillSearch" placeholder="Filtrer par nom ou catégorie…" autocomplete="off">
         <button type="button" class="skill-search-clear" id="skillSearchClear" hidden aria-label="Effacer">✕</button>
       </div>
     </div>
@@ -57,11 +57,11 @@
             <div class="skill-meta">
               <span class="count">{{ c.nb_employes }}</span>
               {% if peut_gerer and c.active %}
-                <form method="POST" action="{{ url_for('competences.competence_archiver', cid=c.id) }}" onclick="event.stopPropagation(); event.preventDefault(); if(confirm('Archiver cette compétence ?')) this.submit();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <form method="POST" action="{{ url_for('competences.competence_archiver', cid=c.id) }}" onsubmit="event.stopPropagation(); return confirm('Archiver cette compétence ?');" onclick="event.stopPropagation();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="rc-link">Archiver</button>
                 </form>
               {% elif peut_gerer and not c.active %}
-                <form method="POST" action="{{ url_for('competences.competence_reactiver', cid=c.id) }}" onclick="event.stopPropagation(); event.preventDefault(); this.submit();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <form method="POST" action="{{ url_for('competences.competence_reactiver', cid=c.id) }}" onclick="event.stopPropagation();"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="rc-link">Réactiver</button>
                 </form>
               {% endif %}
@@ -80,7 +80,7 @@
     <div class="rc-empty">
       <div style="font-size:2.3rem;margin-bottom:8px;">🧠</div>
       Aucune compétence enregistrée pour le moment.
-      {% if peut_gerer %}<br><a href="{{ url_for('competences.competence_ajouter') }}" class="skill-accent-link js-modal-form" data-modal-title="Nouvelle compétence">Créer la première compétence</a>.{% endif %}
+      {% if peut_gerer %}<br><a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;" class="js-modal-form" data-modal-title="Nouvelle compétence">Créer la première compétence</a>.{% endif %}
     </div>
   {% endif %}
 </div>
