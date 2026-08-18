@@ -71,7 +71,7 @@
 .skill-empty a { color:var(--skill-accent-2); font-weight:700; text-decoration:none; }
 
 /* Responsive */
-@media (max-width:640px) {
+@media (max-width:600px) {
   .skill-grid { grid-template-columns:1fr; }
   .skill-emp-header { flex-direction:column; align-items:flex-start; padding:19px; }
   .skill-emp-actions { margin-left:0; width:100%; }

@@ -15,35 +15,35 @@
   </section>
 
   <section class="obj-stats">
-    <div class="stat-card acc-total">
-      <span class="stat-ico">🎯</span>
-      <span class="stat-label">Total</span>
-      <strong class="stat-value">{{ comptes.get('total',0) }}</strong>
-      <span class="stat-sub">tous objectifs</span>
+    <div class="obj-stat-card acc-total">
+      <span class="obj-stat-card-ico">🎯</span>
+      <span class="obj-stat-card-label">Total</span>
+      <strong class="obj-stat-card-value">{{ comptes.get('total',0) }}</strong>
+      <span class="obj-stat-card-sub">tous objectifs</span>
     </div>
-    <div class="stat-card acc-brouillon">
-      <span class="stat-ico">📝</span>
-      <span class="stat-label">Brouillons</span>
-      <strong class="stat-value">{{ comptes.get('brouillon',0) }}</strong>
-      <span class="stat-sub">en rédaction</span>
+    <div class="obj-stat-card acc-brouillon">
+      <span class="obj-stat-card-ico">📝</span>
+      <span class="obj-stat-card-label">Brouillons</span>
+      <strong class="obj-stat-card-value">{{ comptes.get('brouillon',0) }}</strong>
+      <span class="obj-stat-card-sub">en rédaction</span>
     </div>
-    <div class="stat-card acc-cours">
-      <span class="stat-ico">🚀</span>
-      <span class="stat-label">En cours</span>
-      <strong class="stat-value">{{ comptes.get('en_cours',0) }}</strong>
-      <span class="stat-sub">progression suivie</span>
+    <div class="obj-stat-card acc-cours">
+      <span class="obj-stat-card-ico">🚀</span>
+      <span class="obj-stat-card-label">En cours</span>
+      <strong class="obj-stat-card-value">{{ comptes.get('en_cours',0) }}</strong>
+      <span class="obj-stat-card-sub">progression suivie</span>
     </div>
-    <div class="stat-card acc-retard">
-      <span class="stat-ico">⏰</span>
-      <span class="stat-label">En retard</span>
-      <strong class="stat-value" style="color:#dc2626;">{{ comptes.get('en_retard',0) }}</strong>
-      <span class="stat-sub">échéance dépassée</span>
+    <div class="obj-stat-card acc-retard">
+      <span class="obj-stat-card-ico">⏰</span>
+      <span class="obj-stat-card-label">En retard</span>
+      <strong class="obj-stat-card-value" style="color:#dc2626;">{{ comptes.get('en_retard',0) }}</strong>
+      <span class="obj-stat-card-sub">échéance dépassée</span>
     </div>
-    <div class="stat-card acc-valider">
-      <span class="stat-ico">✅</span>
-      <span class="stat-label">À valider</span>
+    <div class="obj-stat-card acc-valider">
+      <span class="obj-stat-card-ico">✅</span>
+      <span class="obj-stat-card-label">À valider</span>
       <strong class="stat-value obj-accent-link">{{ comptes.get('atteint',0) }}</strong>
-      <span class="stat-sub">atteints</span>
+      <span class="obj-stat-card-sub">atteints</span>
     </div>
   </section>
 

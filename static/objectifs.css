@@ -94,18 +94,18 @@
 
 /* Stats avec icônes */
 .obj-stats { display:grid; grid-template-columns:repeat(5,minmax(120px,1fr)); gap:14px; }
-@media (max-width:960px){ .obj-stats{ grid-template-columns:repeat(2,1fr);} }
-@media (max-width:520px){ .obj-stats{ grid-template-columns:1fr; } }
-.stat-card { position:relative; overflow:hidden; display:flex; flex-direction:column; gap:9px; padding:18px 20px; border:1px solid var(--obj-border); border-radius:var(--radius-lg); background:#fff; box-shadow:0 9px 24px -22px #102a43; }
-.stat-card .stat-ico { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; font-size:1.3rem; }
-.stat-card .stat-label { color:var(--obj-muted); font-size:.73rem; font-weight:750; text-transform:uppercase; letter-spacing:.05em; }
-.stat-card .stat-value { color:var(--obj-text); font-size:1.95rem; font-weight:850; line-height:1; }
-.stat-card .stat-sub { font-size:.73rem; color:#94a3b8; }
-.stat-card.acc-total .stat-ico { background:#eef2ff; }
-.stat-card.acc-brouillon .stat-ico { background:#fef3c7; }
-.stat-card.acc-cours .stat-ico { background:#e0f2fe; }
-.stat-card.acc-retard .stat-ico { background:var(--danger-light); }
-.stat-card.acc-valider .stat-ico { background:#d1fae5; }
+@media (max-width:900px){ .obj-stats{ grid-template-columns:repeat(2,1fr);} }
+@media (max-width:600px){ .obj-stats{ grid-template-columns:1fr; } }
+.obj-stat-card { position:relative; overflow:hidden; display:flex; flex-direction:column; gap:9px; padding:18px 20px; border:1px solid var(--obj-border); border-radius:var(--radius-lg); background:#fff; box-shadow:0 9px 24px -22px #102a43; }
+.obj-stat-card .obj-stat-card-ico { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; font-size:1.3rem; }
+.obj-stat-card .obj-stat-card-label { color:var(--obj-muted); font-size:.73rem; font-weight:750; text-transform:uppercase; letter-spacing:.05em; }
+.obj-stat-card .obj-stat-card-value { color:var(--obj-text); font-size:1.95rem; font-weight:850; line-height:1; }
+.obj-stat-card .obj-stat-card-sub { font-size:.73rem; color:#94a3b8; }
+.obj-stat-card.acc-total .obj-stat-card-ico { background:#eef2ff; }
+.obj-stat-card.acc-brouillon .obj-stat-card-ico { background:#fef3c7; }
+.obj-stat-card.acc-cours .obj-stat-card-ico { background:#e0f2fe; }
+.obj-stat-card.acc-retard .obj-stat-card-ico { background:var(--danger-light); }
+.obj-stat-card.acc-valider .obj-stat-card-ico { background:#d1fae5; }
 
 /* Barre d'outils (recherche + filtres) */
 .obj-toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
