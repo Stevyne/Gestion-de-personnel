@@ -555,9 +555,24 @@ def creer_blueprint_objectifs(deps):
                 log_action(session.get('user_id'), session.get('username'),
                            'OBJECTIF_MODIFIER', 'objectif', oid, titre)
                 flash("Objectif mis à jour.", "success")
+                return redirect(url_for('objectifs.objectif_detail', oid=oid))
             except ValueError as exc:
                 flash(str(exc), "danger")
-        return redirect(url_for('objectifs.objectif_detail', oid=oid))
+
+        # En cas d'erreur de validation, on ré-affiche le formulaire (dans la
+        # popup si le POST venait de ?modal=1) plutôt que de rediriger.
+        with db_cursor(commit=True) as (conn, cur):
+            obj = _charger_objectif(cur, oid)
+            cur.execute("SELECT id, nom, categorie FROM competences WHERE active IS TRUE "
+                        "ORDER BY categorie NULLS LAST, nom")
+            competences = cur.fetchall()
+        return render_template('objectifs/objectif_form.html',
+                               objectif=obj, employes=[],
+                               competences=competences,
+                               categories=CATEGORIES_DEFAUT,
+                               priorites=PRIORITES,
+                               priorite_labels=PRIORITE_LABELS,
+                               is_editing=True)
 
     # ---- soumettre / valider / non atteint / annuler / réactiver
 

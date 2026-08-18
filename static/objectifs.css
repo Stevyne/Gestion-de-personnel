@@ -186,3 +186,9 @@
 /* Lien d'accent réutilisable (remplace les styles inline répétés) */
 .obj-accent-link { color: var(--obj-accent); font-weight: 700; }
 .obj-accent-link:hover { text-decoration: underline; }
+
+/* Badges de statut de la liste (objectifs_liste.html) — alignés sur les
+   couleurs utilisées dans le détail (rc-badge-entretien/validee/refusee). */
+.rc-badge-en_cours { color: #185d91; background: #e2f1fc; }
+.rc-badge-atteint { color: #11633f; background: #dff7e9; }
+.rc-badge-non_atteint { color: #9b2f3a; background: #fde8ea; }
