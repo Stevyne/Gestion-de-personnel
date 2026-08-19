@@ -279,12 +279,230 @@ h1 svg.ico {
 }
 .card-header h1 span { vertical-align: middle; }
 
-/* ----- Petits ajustements responsive ----- */
+/* =================================================================== */
+/*  RESPONSIVE — toutes les pages (≤768px : mobiles)                    */
+/* =================================================================== */
 @media (max-width: 768px) {
-    .container { padding: 18px 14px !important; }
-    .card { padding: 18px !important; border-radius: 14px !important; }
-    .card-header { flex-direction: column; align-items: stretch !important; gap:10px; }
-    .btn { width: 100%; justify-content: center; }
-    .card-header .btn,
-    .card-header form { width: auto; }
+    .container { padding: 14px 12px !important; }
+
+    /* ----- Cartes ----- */
+    .card { padding: 16px !important; border-radius: 14px !important; }
+    .card-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+        padding-bottom: 14px !important;
+    }
+    .card-header h1 { font-size: 1.3rem !important; }
+    .card-header > div,
+    .card-header > a:last-child,
+    .card-header > form:last-child {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 6px !important;
+        width: 100% !important;
+    }
+    .card-header > div > a,
+    .card-header > div > form,
+    .card-header > div > button,
+    .card-header > a,
+    .card-header form[style*="display:inline"] {
+        width: 100% !important;
+        justify-content: center !important;
+        margin: 0 !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex !important;
+    }
+    .card-header form[style*="display:inline"] button { width: 100% !important; }
+    /* Bouton principal pleine largeur dans un header */
+    .card-header > div > .btn-primary,
+    .card-header > div > form:has(.btn-primary) { grid-column: 1 / -1 !important; }
+
+    /* ----- Boutons génériques ----- */
+    .btn { justify-content: center; }
+
+    /* ----- Formulaires (rows & actions) ----- */
+    .form-row {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+    }
+    .form-actions {
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+    .form-actions .btn { width: 100% !important; }
+
+    /* ----- Filtres (materiels, maintenances, inventaires, audit, conges…) ----- */
+    .materiels-filtres,
+    form[style*="background:#f8fafc"][style*="border:1px solid"] {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+        padding: 14px !important;
+    }
+    .materiels-filtres .filtre-champ,
+    .materiels-filtres button,
+    .materiels-filtres .btn,
+    form[style*="background:#f8fafc"][style*="border:1px solid"] > div[style*="display:flex"][style*="flex-direction:column"],
+    form[style*="background:#f8fafc"][style*="border:1px solid"] > button,
+    form[style*="background:#f8fafc"][style*="border:1px solid"] > a.btn {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+    form[style*="background:#f8fafc"][style*="border:1px solid"] input,
+    form[style*="background:#f8fafc"][style*="border:1px solid"] select {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+    form[style*="background:#f8fafc"][style*="border:1px solid"] input[style*="min-width"] { min-width: 0 !important; }
+
+    /* ----- Tableaux : scroll horizontal fluide ----- */
+    .table-container,
+    .rc-table-wrap {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        margin-left: -4px;
+        margin-right: -4px;
+        border-radius: 12px !important;
+    }
+    .table-container table,
+    .rc-table { min-width: 560px; }
+
+    /* ----- États vides : NE PAS forcer min-width sur une table vide ----- */
+    table:has(tbody tr:only-child td[colspan]) { min-width: 100% !important; }
+    td[colspan], .rc-empty, .empty-state {
+        text-align: center !important;
+        padding: 28px 16px !important;
+    }
+    .rc-empty .btn,
+    td[colspan] .btn {
+        display: inline-flex !important;
+        width: auto !important;
+        flex: 0 0 auto !important;
+        margin-top: 8px;
+    }
+
+    /* ----- Tabs dashboard : scroll horizontal ----- */
+    .dashboard-tabs {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .dashboard-tabs::-webkit-scrollbar { display: none; }
+    .dashboard-tabs a {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        font-size: 0.82rem;
+        padding: 8px 12px;
+    }
+
+    /* ----- Navigation ----- */
+    .nav-container { padding: 0 12px !important; }
+    .nav-brand { font-size: 1.15rem !important; }
+    .nav-brand svg, .nav-brand img { height: 22px !important; }
+
+    /* ----- Self-service : carte identité (inline-style background) ----- */
+    div[style*="display:flex"][style*="background"] {
+        flex-direction: column !important;
+        text-align: center !important;
+        align-items: center !important;
+    }
+    div[style*="display:flex"][style*="background"] div[style*="width:44px"] {
+        width: 56px !important;
+        height: 56px !important;
+        font-size: 1.2rem !important;
+    }
+
+    /* ----- Stats / cartes statistiques ----- */
+    .materiels-stats { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+    .materiel-stat-value { font-size: 1.35rem !important; }
+    .stats-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+
+    /* ----- Self-service : groupe de boutons d'action (Tout voir / PDF / Excel) ----- */
+    div[style*="display:flex"] > div[style*="display:flex"] > a.btn,
+    div[style*="display:flex"] > div[style*="display:flex"] > button {
+        flex: 1 1 calc(50% - 3px) !important;
+        min-width: 0;
+        font-size: 0.82rem;
+        padding: 8px 10px;
+    }
+    div[style*="display:flex"] > div[style*="display:flex"] > a.btn.btn-primary,
+    div[style*="display:flex"] > div[style*="display:flex"] > button.btn-primary {
+        flex-basis: 100% !important;
+    }
+
+    /* ----- Pagination ----- */
+    nav[style*="display:flex"] {
+        flex-wrap: wrap;
+        justify-content: center !important;
+        gap: 4px;
+    }
+    nav[style*="display:flex"] a,
+    nav[style*="display:flex"] strong,
+    nav[style*="display:flex"] span { padding: 6px 10px; font-size: 0.82rem; }
+
+    /* ----- Badges plus compacts ----- */
+    .badge, .rc-badge { font-size: 0.7rem !important; padding: 3px 8px !important; }
+
+    /* ----- Formulaires de filtres génériques (filters) ----- */
+    .filters { padding: 14px !important; }
+    .filters form,
+    form.filter-form {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px !important;
+        align-items: stretch !important;
+    }
+    .filters form .btn,
+    form.filter-form .btn { width: 100% !important; justify-content: center; }
+    .filters form .filter-group,
+    form.filter-form .filter-group { width: 100% !important; }
+
+    /* Bloc de pointage rapide (présences) : deux boutons ENTRÉE / SORTIE en grille */
+    .wf-circuit > form[style*="display:flex"],
+    .wf-attente > form[style*="display:flex"],
+    .wf-circuit > div[style*="display:flex"] {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 8px !important;
+    }
+    .wf-circuit > form[style*="display:flex"] button,
+    .wf-circuit > form[style*="display:flex"] .btn,
+    .wf-circuit > form[style*="display:flex"] > div { width: 100% !important; flex: 1 1 100% !important; min-width: 0 !important; }
+    .wf-circuit > form[style*="display:flex"] select,
+    .wf-circuit > form[style*="display:flex"] input { width: 100%; }
+
+    /* ----- Messages ----- */
+    .alert { padding: 11px 14px !important; font-size: 0.9rem; }
+
+    /* ----- Workflow chips ----- */
+    .wf-circuit, .wf-attente { padding: 10px 12px; font-size: 0.85rem; }
+}
+
+/* ----- Très petits écrans ≤480px ----- */
+@media (max-width: 480px) {
+    .container { padding: 10px !important; }
+    .card { padding: 13px !important; }
+    .card-header h1 { font-size: 1.15rem !important; }
+    .card-header > div { grid-template-columns: 1fr !important; }
+    .materiels-stats, .stats-grid { grid-template-columns: 1fr !important; }
+    .table-container table, .rc-table { min-width: 480px; }
+    .stat-value, .materiel-stat-value { font-size: 1.2rem !important; }
+    .dashboard-tabs a { font-size: 0.78rem; padding: 7px 10px; }
+}
+
+/* ----- Tablettes 769-1024px ----- */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .container { padding: 20px 16px; }
+    .materiels-stats { grid-template-columns: repeat(4, minmax(120px, 1fr)); }
+    .card-header > div {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+    }
 }
