@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 {% block content %}
 <div class="card">
   <div class="card-header">
     <div>
-      <h1>🚫 Mes absences et justificatifs</h1>
+      <h1>{{ icon('user-x') }} Mes absences et justificatifs</h1>
       <p style="margin:5px 0 0;color:#64748b;">Déposez un justificatif en PDF ou image (8 Mo maximum). Seules les RH peuvent le consulter et rendre une décision.</p>
     </div>
-    <a href="{{ url_for('self_service') }}" class="btn btn-secondary">← Mon espace</a>
+    <a href="{{ url_for('self_service') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Mon espace</a>
   </div>
 
   <div class="table-container">

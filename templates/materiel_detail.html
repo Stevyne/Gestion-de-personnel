@@ -1,14 +1,15 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>📦 {{ materiel.nom }}</h1>
+        <h1>{{ icon('box') }} {{ materiel.nom }}</h1>
         <div>
             {% if peut_gerer_materiels %}
-            <a data-modal-title="Modifier le matériel" href="{{ url_for('parc.edit_materiel', id=materiel.id) }}" class="js-modal-form btn btn-secondary">✏️ Modifier</a>
+            <a data-modal-title="Modifier le matériel" href="{{ url_for('parc.edit_materiel', id=materiel.id) }}" class="js-modal-form btn btn-secondary">{{ icon('tools', 16) }} Modifier</a>
             {% endif %}
-            <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">← Retour</a>
+            <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Retour</a>
         </div>
     </div>
 

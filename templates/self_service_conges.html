@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 {% macro etat(demande) %}
   {% set st = demande.statut %}
   {% set cls = {'en attente':'badge-warning','avis rendu':'badge-info','approuvé':'badge-success','refusé':'badge-danger','annulé':'badge-secondary'} %}
@@ -17,13 +18,13 @@
 {% block content %}
 <div class="card">
   <div class="card-header">
-    <h1>🏖️ Mes congés et permissions</h1>
+    <h1>{{ icon('palm') }} Mes congés et permissions</h1>
     <div>
-      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">← Retour</a>
-      <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('conges.add_conge') }}" class="js-modal-form btn btn-primary">+ Demander un congé</a>
-      <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">+ Demander une permission</a>
-      <a href="{{ url_for('export_conges_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;">📄 PDF</a>
-      <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn" style="background:#15803d;color:white;">📊 Excel</a>
+      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Retour</a>
+      <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('conges.add_conge') }}" class="js-modal-form btn btn-primary">{{ icon('plus', 14) }} Demander un congé</a>
+      <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">{{ icon('plus', 14) }} Demander une permission</a>
+      <a href="{{ url_for('export_conges_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;">{{ icon('file', 13) }} PDF</a>
+      <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn" style="background:#15803d;color:white;">{{ icon('chart', 13) }} Excel</a>
     </div>
   </div>
 

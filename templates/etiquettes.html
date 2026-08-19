@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card no-print">
     <div class="card-header">
-        <h1>🖨️ Étiquettes — {{ titre }}</h1>
+        <h1>{{ icon('printer') }} Étiquettes — {{ titre }}</h1>
         <div>
-            <button type="button" class="btn btn-primary" onclick="window.print();">🖨️ Imprimer la planche</button>
-            <a href="{{ retour_url }}" class="btn btn-secondary">← Retour</a>
+            <button type="button" class="btn btn-primary" onclick="window.print();">{{ icon('printer', 16) }} Imprimer la planche</button>
+            <a href="{{ retour_url }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Retour</a>
         </div>
     </div>
     <p style="color:#64748b; margin:0;">

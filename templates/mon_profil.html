@@ -1,10 +1,11 @@
 {% extends layout|default("base.html") %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="profil-wrap">
 
     <div class="card-header" style="margin-bottom:18px;">
-        <h1>👤 Mon espace</h1>
+        <h1>{{ icon('user') }} Mon espace</h1>
     </div>
 
     {% if not emp %}
@@ -45,7 +46,7 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="file" name="photo" id="photoInput" accept="image/png,image/jpeg" hidden>
                 <button type="button" class="btn btn-secondary btn-block" id="photoPick">
-                    📷 {% if user and user.photo %}Changer la photo{% else %}Ajouter une photo{% endif %}
+                    {{ icon('camera', 16) }} {% if user and user.photo %}Changer la photo{% else %}Ajouter une photo{% endif %}
                 </button>
                 <p class="profil-hint">PNG ou JPEG, 8 Mo maximum. L'image est automatiquement recadrée en carré.</p>
                 <p class="profil-filename" id="photoName" hidden></p>
@@ -119,7 +120,7 @@
             <div class="card">
                 <div class="card-header">
                     <h2>Informations professionnelles</h2>
-                    <span class="profil-lock">🔒 Gérées par les RH</span>
+                    <span class="profil-lock">{{ icon('lock', 14) }} Gérées par les RH</span>
                 </div>
                 <div class="profil-readonly">
                     <div><span>Identifiant</span><strong>{{ user.username if user else '—' }}</strong></div>

@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>📋 {{ inv.reference or ('INV-' ~ inv.id) }}</h1>
+        <h1>{{ icon('clipboard') }} {{ inv.reference or ('INV-' ~ inv.id) }}</h1>
         <div>
-            <a href="{{ url_for('parc.inventaires') }}" class="btn btn-secondary">← Toutes les campagnes</a>
+            <a href="{{ url_for('parc.inventaires') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Toutes les campagnes</a>
         </div>
     </div>
 

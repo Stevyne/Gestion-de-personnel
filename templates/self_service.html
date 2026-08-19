@@ -1,34 +1,46 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>👤 Mon Espace Employé (Self-Service)</h1>
-        <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Tableau de bord</a>
+        <h1>{{ icon('user') }} Mon Espace Employé (Self-Service)</h1>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">{{ icon('dashboard', 16) }} Tableau de bord</a>
     </div>
+
+    <p class="rc-muted" style="margin:-8px 0 20px;">
+        Consultez vos présences, absences, congés et équipements en un coup d'œil
+        et effectuez vos demandes en quelques clics.
+    </p>
+
     {% if employee %}
-    <div style="margin:20px 0; padding:15px; background:#f0f9ff; border-radius:10px;">
-        <h3 style="margin:0 0 8px;">📋 {{ employee.prenom }} {{ employee.nom }} — {{ employee.poste }}</h3>
-        <p style="margin:0; color:#475569;">{{ employee.departement }} • {{ employee.email or '' }}</p>
+    <div style="margin:0 0 20px; padding:16px 20px; background:#eff6ff; border:1px solid #dbeafe; border-radius:12px; display:flex; align-items:center; gap:14px;">
+        <div style="width:44px;height:44px;border-radius:999px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;">
+            {{ employee.prenom[0]|upper }}{{ employee.nom[0]|upper }}
+        </div>
+        <div>
+            <h3 style="margin:0 0 2px; font-size:1.05rem;">{{ employee.prenom }} {{ employee.nom }} — {{ employee.poste }}</h3>
+            <p style="margin:0; color:#475569; font-size:.88rem;">{{ icon('building', 13) }} {{ employee.departement }} · {{ employee.email or '' }}</p>
+        </div>
     </div>
 
     {% if materiels_a_confirmer %}
-    <div class="wf-attente">
-        <strong>{{ materiels_a_confirmer }} équipement(s) en attente de votre confirmation.</strong>
-        <a href="{{ url_for('self_service_materiels') }}" class="btn btn-sm btn-primary" style="margin-left:10px;">Accuser réception</a>
+    <div class="wf-attente" style="margin-bottom:20px;">
+        {{ icon('box', 16) }} <strong>{{ materiels_a_confirmer }} équipement(s) en attente de votre confirmation.</strong>
+        <a href="{{ url_for('self_service_materiels') }}" class="btn btn-sm btn-primary" style="margin-left:10px;">{{ icon('check', 13) }} Accuser réception</a>
     </div>
     {% endif %}
 
-    <div style="margin-bottom:30px;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <h3 style="margin:0;">🕒 Mes Présences</h3>
-            <div>
-                <a href="{{ url_for('self_service_presences') }}" class="btn btn-secondary" style="font-size:0.8rem;padding:4px 10px;">Tout voir</a>
-                <a href="{{ url_for('export_presences_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;font-size:0.8rem;padding:4px 8px;">📄 PDF</a>
-                <a href="{{ url_for('export_presences_excel', my=1) }}" class="btn" style="background:#15803d;color:white;font-size:0.8rem;padding:4px 8px;">📊 Excel</a>
+    <div style="margin-bottom:24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap;">
+            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">{{ icon('clock', 18) }} Mes Présences</h3>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <a href="{{ url_for('self_service_presences') }}" class="btn btn-secondary btn-sm">{{ icon('eye', 13) }} Tout voir</a>
+                <a href="{{ url_for('export_presences_pdf', my=1) }}" class="btn btn-sm" style="background:#1e40af;color:white;">{{ icon('file', 13) }} PDF</a>
+                <a href="{{ url_for('export_presences_excel', my=1) }}" class="btn btn-sm" style="background:#15803d;color:white;">{{ icon('chart', 13) }} Excel</a>
             </div>
         </div>
-        <div class="table-container">
-        <table style="font-size:0.85rem;">
+        <div class="rc-table-wrap">
+        <table class="rc-table" style="font-size:.88rem;">
             <thead>
                 <tr><th>Date</th><th>Arrivée</th><th>Retard</th><th>Départ</th><th>Statut</th></tr>
             </thead>
@@ -41,20 +53,22 @@
                 <td data-label="Départ">{{ p.heure_depart or '—' }}</td>
                 <td data-label="Statut">{{ p.statut }}</td>
             </tr>
+            {% else %}
+            <tr><td colspan="5" class="rc-empty"><p>Aucun pointage récent.</p></td></tr>
             {% endfor %}
             </tbody>
         </table>
         </div>
     </div>
 
-    <div style="margin-bottom:30px;">
-        <div style="display:flex; justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <h3 style="margin:0;">🚫 Mes absences</h3>
-            <a href="{{ url_for('absence_justifications.self_service_absences') }}" class="btn btn-secondary" style="font-size:0.8rem;padding:4px 10px;">Voir et justifier</a>
+    <div style="margin-bottom:24px;">
+        <div style="display:flex; justify-content:space-between;align-items:center;margin-bottom:10px; gap:8px; flex-wrap:wrap;">
+            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">{{ icon('user-x', 18) }} Mes absences</h3>
+            <a href="{{ url_for('absence_justifications.self_service_absences') }}" class="btn btn-secondary btn-sm">{{ icon('file', 13) }} Voir et justifier</a>
         </div>
         {% if my_absences %}
-        <div class="table-container">
-          <table style="font-size:0.85rem;">
+        <div class="rc-table-wrap">
+          <table class="rc-table" style="font-size:.88rem;">
             <thead><tr><th>Date</th><th>Statut</th></tr></thead>
             <tbody>
             {% for a in my_absences[:5] %}
@@ -67,21 +81,21 @@
           </table>
         </div>
         {% else %}
-          <p style="color:#64748b;margin:0;">Aucune absence enregistrée.</p>
+          <p class="rc-muted" style="margin:0;">Aucune absence enregistrée.</p>
         {% endif %}
     </div>
 
-    <div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <h3 style="margin:0;">🏖️ Mes Congés</h3>
-            <div>
-                <a href="{{ url_for('self_service_conges') }}" class="btn btn-secondary" style="font-size:0.8rem;padding:4px 10px;">Gérer</a>
-                <a href="{{ url_for('export_conges_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;font-size:0.8rem;padding:4px 8px;">📄 PDF</a>
-                <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn" style="background:#15803d;color:white;font-size:0.8rem;padding:4px 8px;">📊 Excel</a>
+    <div style="margin-bottom:24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap;">
+            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">{{ icon('palm', 18) }} Mes Congés</h3>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <a href="{{ url_for('self_service_conges') }}" class="btn btn-secondary btn-sm">{{ icon('eye', 13) }} Gérer</a>
+                <a href="{{ url_for('export_conges_pdf', my=1) }}" class="btn btn-sm" style="background:#1e40af;color:white;">{{ icon('file', 13) }} PDF</a>
+                <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn btn-sm" style="background:#15803d;color:white;">{{ icon('chart', 13) }} Excel</a>
             </div>
         </div>
-        <div class="table-container">
-        <table style="font-size:0.85rem;">
+        <div class="rc-table-wrap">
+        <table class="rc-table" style="font-size:.88rem;">
             <thead>
                 <tr><th>Type</th><th>Dates</th><th>Jours</th><th>Statut</th></tr>
             </thead>
@@ -93,28 +107,33 @@
                 <td data-label="Jours">{{ c.nombre_jours }} j</td>
                 <td data-label="Statut">{{ libelles.get(c.statut, c.statut) }}</td>
             </tr>
+            {% else %}
+            <tr><td colspan="4" class="rc-empty"><p>Aucune demande de congé.</p></td></tr>
             {% endfor %}
             </tbody>
         </table>
         </div>
-        <div style="margin-top:12px;">
-            <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('conges.add_conge') }}" class="js-modal-form btn btn-primary">+ Demander un congé</a>
-            <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">+ Demander une permission</a>
+        <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+            <a data-modal-title="Nouvelle demande de congé" href="{{ url_for('conges.add_conge') }}" class="js-modal-form btn btn-primary">{{ icon('plus', 14) }} Demander un congé</a>
+            <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">{{ icon('plus', 14) }} Demander une permission</a>
         </div>
     </div>
 
-    <div style="margin-top:30px;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <h3 style="margin:0;">💻 Mon matériel</h3>
-            <a href="{{ url_for('self_service_materiels') }}" class="btn btn-secondary" style="font-size:0.8rem;padding:4px 10px;">Voir et confirmer</a>
+    <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap;">
+            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">{{ icon('box', 18) }} Mon matériel</h3>
+            <a href="{{ url_for('self_service_materiels') }}" class="btn btn-secondary btn-sm">{{ icon('eye', 13) }} Voir et confirmer</a>
         </div>
-        <p style="margin:0; color:#64748b; font-size:0.86rem;">
+        <p class="rc-muted" style="margin:0; font-size:.88rem;">
             Confirmez la réception des équipements qui vous sont remis, ou contestez
             si l'enregistrement ne correspond pas.
         </p>
     </div>
     {% else %}
-    <p>Aucun employé lié à votre compte.</p>
+    <div class="rc-empty">
+        {{ icon('user', 28) }}
+        <p>Aucun employé lié à votre compte. Contactez le service RH.</p>
+    </div>
     {% endif %}
 </div>
 {% endblock %}

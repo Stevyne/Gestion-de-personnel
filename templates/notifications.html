@@ -1,12 +1,16 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card notifications-card">
     <div class="card-header">
-        <h1>🛎️ Notifications</h1>
+        <div>
+            <h1>{{ icon('bell') }}<span>Notifications</span></h1>
+            <p>Votre fil d'activité : retards, validations, messages et alertes système.</p>
+        </div>
         <form action="{{ url_for('notifications.mark_notifications_read') }}" method="post" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-secondary">Marquer tout comme lu</button>
+            <button type="submit" class="btn btn-secondary">{{ icon('check', 14) }}<span>Tout marquer comme lu</span></button>
         </form>
     </div>
 
@@ -24,12 +28,12 @@
             <tbody>
                 {% for n in notifications %}
                 <tr>
-                    <td data-label="Date">{{ n.timestamp }}</td>
+                    <td data-label="Date" class="rc-muted" style="white-space:nowrap;font-size:.85rem;">{{ n.timestamp.strftime('%d/%m/%Y %H:%M') if n.timestamp is defined and n.timestamp.strftime else n.timestamp }}</td>
                     <td data-label="Type">
                         {% if n.type == 'retard' %}
-                            <span style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:4px;">Retard</span>
+                            <span class="badge badge-danger">Retard</span>
                         {% else %}
-                            <span class="badge">{{ n.type }}</span>
+                            <span class="badge badge-info">{{ n.type }}</span>
                         {% endif %}
                     </td>
                     <td data-label="Message" class="notification-message-cell">
@@ -42,9 +46,9 @@
                     </td>
                     <td data-label="Statut">
                         {% if n.is_read %}
-                            <span style="color:#16a34a;">Lu</span>
+                            <span class="badge badge-success">Lu</span>
                         {% else %}
-                            <span style="color:#ca8a04; font-weight:600;">Nouveau</span>
+                            <span class="badge badge-warning">Nouveau</span>
                         {% endif %}
                     </td>
                 </tr>
@@ -53,8 +57,10 @@
         </table>
     </div>
     {% else %}
-    <div style="padding:40px; text-align:center; color:#64748b;">
-        Aucune notification pour le moment.
+    <div class="rc-empty">
+        <div style="font-size:2.3rem;margin-bottom:8px;">{{ icon('bell') }}</div>
+        <strong>Aucune notification</strong>
+        <p class="rc-muted" style="margin:6px 0 0;">Vous n'avez pas de nouvelle notification pour le moment.</p>
     </div>
     {% endif %}
 </div>

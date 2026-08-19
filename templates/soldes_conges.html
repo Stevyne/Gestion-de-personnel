@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>💰 Soldes de Congés</h1>
+        <h1>{{ icon('wallet') }} Soldes de Congés</h1>
         <div>
             <form method="get" style="display:inline-flex; gap:8px; align-items:center;">
                 <label for="annee" style="font-size:0.85rem; color:#64748b;">Année :</label>
@@ -13,7 +14,7 @@
                     {% endfor %}
                 </select>
             </form>
-            <a href="{{ url_for('conges.conges') }}" class="btn btn-secondary">← Retour aux congés</a>
+            <a href="{{ url_for('conges.conges') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Retour aux congés</a>
         </div>
     </div>
 

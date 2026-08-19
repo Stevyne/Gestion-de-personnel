@@ -1,10 +1,11 @@
 {% extends layout|default("base.html") %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card" style="max-width:720px; margin:0 auto;">
     <div class="card-header">
-        <h1>📦 {{ title }}</h1>
-        <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">← Retour</a>
+        <h1>{{ icon('box') }} {{ title }}</h1>
+        <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Retour</a>
     </div>
 
     <form method="post">

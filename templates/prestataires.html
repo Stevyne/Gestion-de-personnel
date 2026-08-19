@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>🛠️ Prestataires de réparation</h1>
-        <a href="{{ url_for('parc.maintenances') }}" class="btn btn-secondary">← Maintenance</a>
+        <h1>{{ icon('tools') }} Prestataires de réparation</h1>
+        <a href="{{ url_for('parc.maintenances') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Maintenance</a>
     </div>
-    <p style="color:#64748b; margin:0 0 16px;">
+    <p class="rc-muted" style="margin:0 0 16px;">
         Ateliers et techniciens externes à qui confier une réparation. Un prestataire
         désactivé n'apparaît plus dans la liste d'assignation, mais son historique
         d'interventions est conservé.

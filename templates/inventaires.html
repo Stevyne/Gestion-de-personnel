@@ -1,20 +1,20 @@
 {% extends "base.html" %}
-{% from "base.html" import pagination %}
+{% from "base.html" import icon, pagination %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>📋 Inventaire physique</h1>
+        <h1>{{ icon('clipboard') }} Inventaire physique</h1>
         <div>
             {% if peut_saisir %}
             <a data-modal-title="Nouvelle campagne d'inventaire"
-               href="{{ url_for('parc.add_inventaire') }}" class="js-modal-form btn btn-primary">+ Nouvelle campagne</a>
+               href="{{ url_for('parc.add_inventaire') }}" class="js-modal-form btn btn-primary">{{ icon('plus', 16) }} Nouvelle campagne</a>
             {% endif %}
-            <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">📦 Stock</a>
+            <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">{{ icon('box', 16) }} Stock</a>
         </div>
     </div>
 
-    <p style="color:#64748b; margin: 0 0 16px;">
+    <p class="rc-muted" style="margin:0 0 16px;">
         Le stock affiché dans le module Matériels est un <strong>stock théorique</strong> :
         il découle des entrées et sorties saisies. L'inventaire le confronte au terrain
         (« 10 en base, 9 trouvés »), signale les écarts, puis corrige le stock à la clôture
@@ -56,12 +56,12 @@
                 <option value="annule" {{ 'selected' if filters.statut == 'annule' }}>Annulées</option>
             </select>
         </div>
-        <button type="submit" class="btn btn-primary">Filtrer</button>
-        <a href="{{ url_for('parc.inventaires') }}" class="btn btn-secondary">Réinitialiser</a>
+        <button type="submit" class="btn btn-primary">{{ icon('search', 14) }} Filtrer</button>
+        <a href="{{ url_for('parc.inventaires') }}" class="btn btn-secondary">{{ icon('refresh', 14) }} Réinitialiser</a>
     </form>
 
-    <div class="table-container">
-        <table>
+    <div class="rc-table-wrap">
+        <table class="rc-table">
             <thead>
                 <tr>
                     <th>Référence</th>
@@ -83,20 +83,20 @@
                     </td>
                     <td data-label="Écarts">
                         {% if c.nb_ecarts and c.nb_ecarts > 0 %}
-                            <span class="badge" style="background:#fee2e2;color:#991b1b;">⚠ {{ c.nb_ecarts }}</span>
+                            <span class="rc-badge refusee">{{ icon('alert', 12) }} {{ c.nb_ecarts }}</span>
                         {% elif c.nb_comptes and c.nb_comptes > 0 %}
-                            <span class="badge" style="background:#dcfce7;color:#166534;">Conforme</span>
+                            <span class="rc-badge validee">{{ icon('check', 12) }} Conforme</span>
                         {% else %}
-                            <span style="color:#94a3b8;">—</span>
+                            <span class="rc-muted">—</span>
                         {% endif %}
                     </td>
                     <td data-label="Statut">
                         {% if c.statut == 'en_cours' %}
-                            <span class="badge" style="background:#fef9c3;color:#854d0e;">En cours</span>
+                            <span class="rc-badge en_attente">En cours</span>
                         {% elif c.statut == 'cloture' %}
-                            <span class="badge" style="background:#dcfce7;color:#166534;">Clôturée</span>
+                            <span class="rc-badge validee">Clôturée</span>
                         {% else %}
-                            <span class="badge" style="background:#e2e8f0;color:#475569;">Annulée</span>
+                            <span class="rc-badge" style="background:#e2e8f0;color:#475569;">Annulée</span>
                         {% endif %}
                     </td>
                     <td data-label="Ouverte le">
@@ -104,14 +104,15 @@
                     </td>
                     <td data-label="Actions">
                         <a href="{{ url_for('parc.view_inventaire', id=c.id) }}" class="btn btn-sm btn-primary">
-                            {% if c.statut == 'en_cours' and peut_saisir %}Compter{% else %}Consulter{% endif %}
+                            {% if c.statut == 'en_cours' and peut_saisir %}{{ icon('clipboard', 13) }} Compter{% else %}{{ icon('eye', 13) }} Consulter{% endif %}
                         </a>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" style="text-align:center; color:#94a3b8; padding:24px;">
-                        Aucune campagne d'inventaire pour l'instant.
+                    <td colspan="7" class="rc-empty">
+                        {{ icon('clipboard', 28) }}
+                        <p>Aucune campagne d'inventaire pour l'instant.</p>
                     </td>
                 </tr>
                 {% endfor %}

@@ -1,13 +1,14 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>👤 Gestion des Utilisateurs</h1>
+        <h1>{{ icon('shield') }} Gestion des Utilisateurs</h1>
         <div>
             <a href="{{ url_for('utilisateurs.register') }}" class="js-modal-form btn btn-primary"
-               data-modal-title="Créer un compte utilisateur">+ Nouvel utilisateur</a>
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
+               data-modal-title="Créer un compte utilisateur">{{ icon('plus', 16) }} Nouvel utilisateur</a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Retour</a>
         </div>
     </div>
 

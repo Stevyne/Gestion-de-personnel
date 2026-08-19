@@ -1,9 +1,10 @@
 {% extends layout|default("base.html") %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card" style="max-width: 720px; margin: 0 auto;">
     <div class="card-header">
-        <h1>🏖️ Nouvelle demande de congé</h1>
+        <h1>{{ icon('palm') }} Nouvelle demande de congé</h1>
     </div>
 
     <p class="wf-circuit">Votre demande suivra le circuit : <strong>avis de votre manager</strong>, puis <strong>décision des RH</strong>. Vous serez notifié à chaque étape.</p>

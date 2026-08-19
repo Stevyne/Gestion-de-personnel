@@ -1,12 +1,15 @@
 {% extends "base.html" %}
-{% from "base.html" import pagination %}
+{% from "base.html" import pagination, icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>📋 Historique des Pointages</h1>
         <div>
-            <a href="{{ url_for('presences.presences') }}" class="btn btn-secondary">← Retour aux Présences</a>
+          <h1>{{ icon('history') }}<span>Historique des pointages</span></h1>
+          <p>Consultez, filtrez et corrigez les pointages sur la période de votre choix.</p>
+        </div>
+        <div>
+            <a href="{{ url_for('presences.presences') }}" class="btn btn-secondary">← Retour aux présences</a>
         </div>
     </div>
 
@@ -48,7 +51,7 @@
                 </select>
             </div>
 
-            <button type="submit" class="btn btn-primary">🔍 Filtrer</button>
+            <button type="submit" class="btn btn-primary">{{ icon('search', 14) }} Filtrer</button>
             <a href="{{ url_for('presences.historique') }}" class="btn btn-secondary">Réinitialiser</a>
         </form>
     </div>

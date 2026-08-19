@@ -1,12 +1,15 @@
 {% extends "base.html" %}
-{% from "base.html" import pagination %}
+{% from "base.html" import pagination, icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1>🧾 Gestion des Permissions</h1>
         <div>
-            <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">+ Nouvelle demande</a>
+          <h1>{{ icon('receipt') }}<span>Permissions</span></h1>
+          <p>Autorisations d'absence courtes (rendez-vous, démarches) — indépendantes des congés.</p>
+        </div>
+        <div>
+            <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">{{ icon('plus', 15) }}<span>Nouvelle demande</span></a>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
         </div>
     </div>

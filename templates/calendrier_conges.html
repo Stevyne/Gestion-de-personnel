@@ -1,16 +1,17 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
         <div>
-            <h1 style="margin:0;">📅 Calendrier des Congés</h1>
-            <span style="color:#64748b; font-size:0.95rem;">Congés approuvés — Année {{ annee }}</span>
+            <h1 style="margin:0;">{{ icon('calendar') }} Calendrier des Congés</h1>
+            <span class="rc-muted" style="font-size:0.95rem;">Congés approuvés — Année {{ annee }}</span>
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
-            <a href="{{ url_for('conges.conges') }}" class="btn btn-secondary">← Retour</a>
-            <a href="{{ url_for('calendrier_conges', annee=annee-1) }}" class="btn btn-secondary">← {{ annee-1 }}</a>
-            <a href="{{ url_for('calendrier_conges', annee=annee+1) }}" class="btn btn-secondary">{{ annee+1 }} →</a>
+            <a href="{{ url_for('conges.conges') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Retour</a>
+            <a href="{{ url_for('calendrier_conges', annee=annee-1) }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} {{ annee-1 }}</a>
+            <a href="{{ url_for('calendrier_conges', annee=annee+1) }}" class="btn btn-secondary">{{ annee+1 }}</a>
         </div>
     </div>
 

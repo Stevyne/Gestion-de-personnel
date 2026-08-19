@@ -1,9 +1,10 @@
 {% extends layout|default("base.html") %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card" style="max-width: 720px; margin: 0 auto;">
     <div class="card-header">
-        <h1>🧾 Nouvelle demande de permission</h1>
+        <h1>{{ icon('receipt') }} Nouvelle demande de permission</h1>
     </div>
 
     <p style="color:#64748b; margin: 0 0 16px;">

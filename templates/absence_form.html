@@ -1,9 +1,10 @@
 {% extends layout|default("base.html") %}
+{% from "base.html" import icon %}
 
 {% block content %}
 <div class="card" style="max-width: 720px; margin: 0 auto;">
     <div class="card-header">
-        <h1>🚫 Enregistrer une absence non justifiée</h1>
+        <h1>{{ icon('user-x') }} Enregistrer une absence non justifiée</h1>
     </div>
 
     <form method="POST">

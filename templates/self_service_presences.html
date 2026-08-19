@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% from "base.html" import icon %}
 {% block content %}
 <div class="card">
   <div class="card-header">
-    <h1>🕒 Mes Présences</h1>
+    <h1>{{ icon('clock') }} Mes Présences</h1>
     <div>
-      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">← Retour</a>
-      <a href="{{ url_for('export_presences_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;">📄 PDF</a>
-      <a href="{{ url_for('export_presences_excel', my=1) }}" class="btn" style="background:#15803d;color:white;">📊 Excel</a>
+      <a href="{{ url_for('self_service') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Retour</a>
+      <a href="{{ url_for('export_presences_pdf', my=1) }}" class="btn" style="background:#1e40af;color:white;">{{ icon('file', 13) }} PDF</a>
+      <a href="{{ url_for('export_presences_excel', my=1) }}" class="btn" style="background:#15803d;color:white;">{{ icon('chart', 13) }} Excel</a>
     </div>
   </div>
   <div class="table-container">
