@@ -30,7 +30,7 @@
       </span>
       <span class="msg-conversation-body">
         <span class="msg-conversation-topline">
-          <strong>{{ c.libelle }}</strong>
+          <strong title="{{ c.libelle }}">{{ c.libelle }}</strong>
           <time>{{ c.date_dernier_message.strftime('%H:%M') if c.date_dernier_message else '' }}</time>
         </span>
         <span class="msg-conversation-preview">

@@ -7,7 +7,7 @@
         {% if active_conversation.type == 'prive' and active_conversation.avatar_photo %}<img src="{{ url_for('auth.avatar_image', filename=active_conversation.avatar_photo) }}" alt="">
         {% else %}<span>{{ active_conversation.avatar_initiale }}</span>{% endif %}
       </span>
-      <div class="msg-thread-identity"><h1>{{ active_conversation.libelle }}</h1><p>{% if conv.type == 'annonce' %}Annonce{% elif conv.type == 'groupe' %}{{ membres|length }} participant(s){% else %}Conversation privée{% endif %}</p></div>
+      <div class="msg-thread-identity"><h1 title="{{ active_conversation.libelle }}">{{ active_conversation.libelle }}</h1><p>{% if conv.type == 'annonce' %}Annonce{% elif conv.type == 'groupe' %}{{ membres|length }} participant(s){% else %}Conversation privée{% endif %}</p></div>
       {% if contexte %}<a href="{{ url_for('parc.view_exemplaire', id=contexte.exemplaire_id) }}" class="maintenance-chat-link">🔧 {{ contexte.reference }}</a>{% endif %}
     </header>
 

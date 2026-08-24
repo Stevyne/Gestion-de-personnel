@@ -16,7 +16,7 @@
         {% endif %}
       </span>
       <div class="msg-thread-identity">
-        <h1>{{ active_conversation.libelle }}</h1>
+        <h1 title="{{ active_conversation.libelle }}">{{ active_conversation.libelle }}</h1>
         <p>
           {% if conv.type == 'annonce' %}
             Annonce{% if conv.cible_role %} · {{ conv.cible_role }}{% else %} · Tous les utilisateurs{% endif %}
