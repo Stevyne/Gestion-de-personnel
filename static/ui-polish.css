@@ -78,7 +78,8 @@ h1.page-title,
     border-radius: 14px !important;
     box-shadow: 0 10px 24px -24px #102a43 !important;
     background: #fff !important;
-    overflow: hidden;
+    overflow-x: auto; 
+    overflow-y: hidden;
     margin-bottom: 24px;
 }
 .table-container table { min-width: 640px; }
