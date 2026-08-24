@@ -1203,17 +1203,21 @@ footer {
         border-radius: 12px;
     }
     
-    /* ===== RESPONSIVE TABLES - STACKED CARDS ON MOBILE ===== */
-    table {
+    /* ===== RESPONSIVE TABLES - STACKED CARDS ON MOBILE =====
+       :not(.rc-table) exclut les tableaux du module Recrutement, qui
+       suivent un pattern différent (scroll horizontal, voir ui-polish.css)
+       et n'ont pas d'attributs data-label — les combiner créait un
+       conflit d'affichage (cf. capture d'écran /recrutement/demandes). */
+    table:not(.rc-table) {
         min-width: 100%;
         font-size: 0.82rem;
     }
     
-    table thead {
+    table:not(.rc-table) thead {
         display: none;
     }
     
-    table tr {
+    table:not(.rc-table) tr {
         display: block;
         margin-bottom: 12px;
         border: 1px solid #e2e8f0;
@@ -1223,7 +1227,7 @@ footer {
         overflow: hidden;
     }
     
-    table td {
+    table:not(.rc-table) td {
         display: flex;
         flex-wrap: wrap;
         justify-content: space-between;
@@ -1233,38 +1237,47 @@ footer {
         border-bottom: 1px solid #f1f5f9;
         text-align: right;
         min-height: 42px;
+        min-width: 0;
+    }
+
+    /* Filet de sécurité : un email, un identifiant ou un code de référence
+       n'a pas d'espace où couper — sans cette règle, ce texte déborde du
+       viewport au lieu de s'enrouler, et se fait couper net par
+       l'overflow-x:hidden global au lieu de rester visible. */
+    table:not(.rc-table) td {
+        overflow-wrap: anywhere;
     }
 
     /* Colonnes "Actions" contenant plusieurs boutons/formulaires : le libellé
        (::before) prend toute la largeur et les boutons se placent en dessous,
        alignés à droite, au lieu de déborder horizontalement. */
-    table td:has(> form:nth-child(2)),
-    table td:has(> details:nth-child(2)) {
+    table:not(.rc-table) td:has(> form:nth-child(2)),
+    table:not(.rc-table) td:has(> details:nth-child(2)) {
         justify-content: flex-end;
     }
 
-    table td:has(> form:nth-child(2)):before,
-    table td:has(> details:nth-child(2)):before {
+    table:not(.rc-table) td:has(> form:nth-child(2)):before,
+    table:not(.rc-table) td:has(> details:nth-child(2)):before {
         flex: 1 0 100%;
     }
     
-    table td:last-child {
+    table:not(.rc-table) td:last-child {
         border-bottom: none;
     }
 
     /* Lignes "aucun résultat" (un seul <td colspan>) : pas de data-label,
        donc pas de mise en page flex column/label — juste un message centré. */
-    table td[colspan] {
+    table:not(.rc-table) td[colspan] {
         display: block;
         text-align: center;
         color: #64748b;
     }
 
-    table td[colspan]:before {
+    table:not(.rc-table) td[colspan]:before {
         content: none;
     }
 
-    table td:before {
+    table:not(.rc-table) td:before {
         content: attr(data-label);
         font-weight: 600;
         color: #475569;
@@ -2514,6 +2527,12 @@ footer {
     display: flex;
     align-items: center;
     gap: 10px;
+    min-width: 0;
+}
+
+.user-cell-info {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .user-cell-avatar {

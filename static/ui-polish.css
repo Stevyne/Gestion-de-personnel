@@ -368,6 +368,18 @@ h1 svg.ico {
         margin-right: -4px;
         border-radius: 12px !important;
     }
+
+    /* Indice visuel : un léger dégradé sur le bord droit signale qu'il y a
+       du contenu à découvrir en balayant horizontalement (le tableau
+       recrutement/demandes, par ex., est plus large que l'écran par design). */
+    .rc-table-wrap {
+        position: relative;
+        background:
+            linear-gradient(to right, transparent calc(100% - 22px), rgba(15,23,42,.07)) left,
+            transparent;
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+    }
     .table-container table,
     .rc-table { min-width: 560px; }
 

@@ -326,6 +326,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    min-width: 0;
 }
 
 .avatar-small {
@@ -352,16 +353,19 @@
 
 .employee-info {
     line-height: 1.15;
+    min-width: 0;
 }
 
 .employee-name {
     font-weight: 600;
     color: #0f172a;
+    overflow-wrap: anywhere;
 }
 
 .employee-email {
     font-size: 0.78rem;
     color: #64748b;
+    overflow-wrap: anywhere;
 }
 
 .badge {

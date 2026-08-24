@@ -181,7 +181,7 @@
     <div class="table-container">
       <table>
         <thead><tr><th>Département</th><th>Employés</th><th>Part</th></tr></thead>
-        <tbody>{% for dept in dept_stats %}<tr><td><strong>{{ dept.nom }}</strong></td><td>{{ dept.nb_employes }}</td><td>{{ dept.pourcentage }}%</td></tr>{% else %}<tr><td colspan="3">Aucune donnée</td></tr>{% endfor %}</tbody>
+        <tbody>{% for dept in dept_stats %}<tr><td data-label="Département"><strong>{{ dept.nom }}</strong></td><td data-label="Employés">{{ dept.nb_employes }}</td><td data-label="Part">{{ dept.pourcentage }}%</td></tr>{% else %}<tr><td colspan="3">Aucune donnée</td></tr>{% endfor %}</tbody>
       </table>
     </div>
   </section>
