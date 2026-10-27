@@ -242,9 +242,32 @@ def initialiser_schema(get_db, get_cursor, logger, calculer_jours_acquis_prorata
         seuil_alerte INTEGER NOT NULL DEFAULT 0,
         unite VARCHAR(30) DEFAULT 'unité',
         description TEXT,
-        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        -- Facture d'achat de l'article : contenu validé par magic-bytes,
+        -- stocké en BYTEA (ou externalisé sur S3 selon le seuil configuré).
+        facture_nom VARCHAR(255),
+        facture_contenu BYTEA,
+        facture_type VARCHAR(30),
+        facture_taille INTEGER,
+        facture_date_upload TIMESTAMP,
+        facture_storage_key VARCHAR(1024),
+        facture_storage_etag VARCHAR(128),
+        facture_storage_sha256 VARCHAR(64)
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_materiels_dept ON materiels(departement_id)")
+    # CREATE TABLE IF NOT EXISTS ne complète jamais une table existante :
+    # les colonnes ajoutées après coup doivent aussi être déclarées ici.
+    for _col, _type in (
+        ("facture_nom", "VARCHAR(255)"),
+        ("facture_contenu", "BYTEA"),
+        ("facture_type", "VARCHAR(30)"),
+        ("facture_taille", "INTEGER"),
+        ("facture_date_upload", "TIMESTAMP"),
+        ("facture_storage_key", "VARCHAR(1024)"),
+        ("facture_storage_etag", "VARCHAR(128)"),
+        ("facture_storage_sha256", "VARCHAR(64)"),
+    ):
+        cur.execute(f"ALTER TABLE materiels ADD COLUMN IF NOT EXISTS {_col} {_type}")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_materiels_nom ON materiels(nom)")
 
     # Historique des mouvements : toute entrée/sortie est tracée (auditable).
@@ -258,9 +281,14 @@ def initialiser_schema(get_db, get_cursor, logger, calculer_jours_acquis_prorata
         motif TEXT,
         user_id INTEGER,
         username VARCHAR(80),
+        -- Département destinataire d'une sortie (transfert entre services).
+        -- NULL pour une entrée ou une sortie sans destinataire identifié.
+        departement_destinataire VARCHAR(120),
         date_mouvement TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_mvt_materiel ON materiels_mouvements(materiel_id, date_mouvement DESC)")
+    cur.execute("""ALTER TABLE materiels_mouvements ADD COLUMN IF NOT EXISTS
+                   departement_destinataire VARCHAR(120)""")
 
     # Attributions durables (PC, téléphone, clés...) : remise à un employé
     # puis retour éventuel. Une attribution active a date_retour IS NULL.
@@ -422,10 +450,41 @@ def initialiser_schema(get_db, get_cursor, logger, calculer_jours_acquis_prorata
         contact VARCHAR(150),
         telephone VARCHAR(40),
         email VARCHAR(150),
-        specialite VARCHAR(100),
+        -- Catégorie imposée. Les codes doivent rester synchronisés avec
+        -- PRESTATAIRE_CATEGORIES dans blueprints/parc.py.
+        categorie VARCHAR(30) NOT NULL DEFAULT 'externe',
         actif BOOLEAN DEFAULT TRUE,
-        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT ck_prestataire_categorie CHECK (categorie IN
+            ('comptable', 'agent_distribution', 'agent_saisie', 'externe'))
     )''')
+    # Migration d'une base existante : l'ancienne colonne libre `specialite`
+    # alimente la catégorie, puis est abandonnée. Le bloc est protégé pour
+    # rester rejouable et pour ne pas dépendre de l'ordre init_db / Alembic.
+    cur.execute("ALTER TABLE prestataires ADD COLUMN IF NOT EXISTS categorie VARCHAR(30)")
+    cur.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'prestataires'
+                          AND column_name = 'specialite') THEN
+                UPDATE prestataires SET categorie = 'comptable'
+                 WHERE LOWER(COALESCE(specialite, '')) LIKE '%comptab%';
+                UPDATE prestataires SET categorie = 'agent_distribution'
+                 WHERE LOWER(COALESCE(specialite, '')) LIKE '%distribution%';
+                UPDATE prestataires SET categorie = 'agent_saisie'
+                 WHERE LOWER(COALESCE(specialite, '')) LIKE '%saisie%';
+            END IF;
+        END $$
+    """)
+    cur.execute("ALTER TABLE prestataires ALTER COLUMN categorie SET DEFAULT 'externe'")
+    cur.execute("UPDATE prestataires SET categorie = 'externe' WHERE categorie IS NULL")
+    cur.execute("ALTER TABLE prestataires ALTER COLUMN categorie SET NOT NULL")
+    cur.execute("ALTER TABLE prestataires DROP CONSTRAINT IF EXISTS ck_prestataire_categorie")
+    cur.execute("""ALTER TABLE prestataires ADD CONSTRAINT ck_prestataire_categorie
+                   CHECK (categorie IN
+                       ('comptable', 'agent_distribution', 'agent_saisie', 'externe'))
+                   NOT VALID""")
 
     # Compteurs des numéros d'inventaire : une séquence par préfixe et par
     # année (PC-2026-001, PC-2026-002...). Table dédiée plutôt que MAX()+1,

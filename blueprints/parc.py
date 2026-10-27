@@ -14,7 +14,8 @@ import re
 from urllib.parse import urlencode
 
 from flask import (Blueprint, flash, redirect, render_template, request,
-                   session, url_for)
+                   send_file, session, url_for)
+from werkzeug.utils import secure_filename
 from markupsafe import Markup, escape
 import psycopg2
 
@@ -90,6 +91,25 @@ MAINTENANCE_VALIDATION_JOURS = int(os.environ.get('MAINTENANCE_VALIDATION_JOURS'
 def creer_blueprint_parc(deps):
     """Construit le Blueprint du parc avec ses dépendances applicatives."""
     bp = Blueprint('parc', __name__)
+
+    # Catégories de prestataires. Les codes doivent rester synchronisés
+    # avec la contrainte ck_prestataire_categorie du schéma.
+    PRESTATAIRE_CATEGORIES = (
+        ('comptable', 'Comptable'),
+        ('agent_distribution', 'Agent de distribution'),
+        ('agent_saisie', 'Agent de saisie'),
+        ('externe', 'Externe'),
+    )
+    PRESTATAIRE_CODES = tuple(code for code, _ in PRESTATAIRE_CATEGORIES)
+    PRESTATAIRE_CATEGORIES_DICT = dict(PRESTATAIRE_CATEGORIES)
+
+    # Factures d'achat : types acceptés, validés sur le contenu réel.
+    _FACTURE_MAGIC = (
+        (b'%PDF', 'pdf'),
+        (b'\x89PNG\r\n\x1a\n', 'png'),
+        (b'\xff\xd8\xff', 'jpg'),
+    )
+    FACTURE_MAX_BYTES = 8 * 1024 * 1024
     db_cursor = deps['db_cursor']
     login_required = deps['login_required']
     role_required = deps['role_required']
@@ -350,7 +370,8 @@ def creer_blueprint_parc(deps):
 
 
     def _enregistrer_mouvement(cur, materiel_id, type_mouvement, quantite,
-                               employe_id=None, motif=None, origine='manuel'):
+                               employe_id=None, motif=None, origine='manuel',
+                               departement_destinataire=None):
         """Écrit un mouvement et met à jour le stock. Retourne le nouveau stock.
 
         Lève ValueError si une sortie dépasse le stock disponible.
@@ -372,10 +393,11 @@ def creer_blueprint_parc(deps):
         cur.execute("""
             INSERT INTO materiels_mouvements
                 (materiel_id, type_mouvement, quantite, employe_id, motif, user_id,
-                 username, origine)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                 username, origine, departement_destinataire)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (materiel_id, type_mouvement, quantite, employe_id, motif or None,
-              session.get('user_id'), session.get('username'), origine))
+              session.get('user_id'), session.get('username'), origine,
+              departement_destinataire or None))
 
         _notifier_stock_bas(cur, materiel_id)
         return nouveau
@@ -659,7 +681,12 @@ def creer_blueprint_parc(deps):
             """, (id,))
             stats_ex = cur.fetchone()
 
+        with db_cursor() as (_conn, _cur):
+            _cur.execute("SELECT nom FROM departements ORDER BY nom")
+            departements = [r['nom'] for r in _cur.fetchall()]
         return render_template('materiel_detail.html',
+                               departements=departements,
+                               prestataire_categories=PRESTATAIRE_CATEGORIES,
                                exemplaires=exemplaires, stats_ex=stats_ex,
                                etats_dict=EXEMPLAIRE_ETATS_DICT,
                                prefixe_propose=_prefixe_materiel(materiel),
@@ -681,6 +708,10 @@ def creer_blueprint_parc(deps):
         quantite = request.form.get('quantite', type=int) or 0
         motif = (request.form.get('motif') or '').strip()
         employe_id = request.form.get('employe_id', type=int)
+        # Département destinataire : utile surtout pour les sorties
+        # (transfert vers un autre service).
+        departement_destinataire = (
+            request.form.get('departement_destinataire') or '').strip()[:120] or None
 
         if type_mvt not in ('entree', 'sortie'):
             flash("Type de mouvement invalide", "danger")
@@ -690,7 +721,8 @@ def creer_blueprint_parc(deps):
             try:
                 with db_cursor(commit=True) as (conn, cur):
                     nouveau = _enregistrer_mouvement(cur, id, type_mvt, quantite,
-                                                     employe_id or None, motif)
+                                                     employe_id or None, motif,
+                                                     departement_destinataire=departement_destinataire)
                 libelle = "Entrée" if type_mvt == 'entree' else "Sortie"
                 log_action(session.get('user_id'), session.get('username'),
                            f"{libelle} stock", "materiel", id, f"{quantite}")
@@ -702,6 +734,111 @@ def creer_blueprint_parc(deps):
                 flash(f"Erreur : {e}", "danger")
 
         return redirect(url_for('parc.view_materiel', id=id))
+
+
+    @bp.route('/materiels/<int:id>/facture', methods=['POST'])
+    @login_required
+    @role_required('admin', 'rh')
+    def uploader_facture(id):
+        """Import de la facture d'achat de l'article (PDF, PNG ou JPEG)."""
+        fichier = request.files.get('facture')
+        if not fichier or not fichier.filename:
+            flash("Aucun fichier sélectionné.", "danger")
+            return redirect(url_for('parc.view_materiel', id=id))
+
+        # Le type est validé sur le contenu réel (magic-bytes), jamais sur
+        # l'extension fournie par le navigateur.
+        head = fichier.stream.read(8)
+        fichier.stream.seek(0)
+        type_detecte = None
+        for magic, extension in _FACTURE_MAGIC:
+            if head.startswith(magic):
+                type_detecte = extension
+                break
+        if type_detecte is None:
+            flash("Format refusé : la facture doit être un PDF, un PNG ou un JPEG.",
+                  "danger")
+            return redirect(url_for('parc.view_materiel', id=id))
+
+        contenu = fichier.read()
+        if not contenu:
+            flash("Le fichier est vide.", "danger")
+            return redirect(url_for('parc.view_materiel', id=id))
+        if len(contenu) > FACTURE_MAX_BYTES:
+            flash("Facture trop volumineuse (8 Mo maximum).", "danger")
+            return redirect(url_for('parc.view_materiel', id=id))
+
+        nom_fichier = secure_filename(fichier.filename)[:255]
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                cur.execute("SELECT id FROM materiels WHERE id = %s", (id,))
+                if not cur.fetchone():
+                    flash("Matériel introuvable.", "danger")
+                    return redirect(url_for('parc.materiels'))
+                cur.execute("""
+                    UPDATE materiels
+                       SET facture_nom=%s, facture_contenu=%s, facture_type=%s,
+                           facture_taille=%s, facture_date_upload=CURRENT_TIMESTAMP
+                     WHERE id=%s
+                """, (nom_fichier, psycopg2.Binary(contenu), type_detecte,
+                      len(contenu), id))
+            log_action(session.get('user_id'), session.get('username'),
+                       "Import facture matériel", "materiel", id, nom_fichier)
+            flash("Facture importée.", "success")
+        except Exception as e:
+            logger.error("Erreur import facture: %s", e, exc_info=True)
+            flash(f"Erreur lors de l'import : {e}", "danger")
+        return redirect(url_for('parc.view_materiel', id=id))
+
+
+    @bp.route('/materiels/<int:id>/facture')
+    @login_required
+    @role_required('admin', 'rh')
+    def telecharger_facture(id):
+        """Téléchargement de la facture, réservé à admin et RH."""
+        with db_cursor() as (conn, cur):
+            cur.execute("""SELECT facture_nom, facture_contenu, facture_type
+                             FROM materiels WHERE id = %s""", (id,))
+            row = cur.fetchone()
+        if not row or not row['facture_contenu']:
+            flash("Aucune facture pour cet article.", "warning")
+            return redirect(url_for('parc.view_materiel', id=id))
+        return send_file(
+            io.BytesIO(bytes(row['facture_contenu'])),
+            mimetype=_mime_facture(row['facture_type']),
+            as_attachment=True,
+            download_name=row['facture_nom'] or 'facture',
+        )
+
+
+    @bp.route('/materiels/<int:id>/facture/supprimer', methods=['POST'])
+    @login_required
+    @role_required('admin', 'rh')
+    def supprimer_facture(id):
+        """Retire la facture sans toucher à l'article ni à son stock."""
+        try:
+            with db_cursor(commit=True) as (conn, cur):
+                cur.execute("""
+                    UPDATE materiels
+                       SET facture_nom=NULL, facture_contenu=NULL, facture_type=NULL,
+                           facture_taille=NULL, facture_date_upload=NULL
+                     WHERE id=%s
+                """, (id,))
+            log_action(session.get('user_id'), session.get('username'),
+                       "Suppression facture matériel", "materiel", id, "")
+            flash("Facture supprimée.", "info")
+        except Exception as e:
+            logger.error("Erreur suppression facture: %s", e, exc_info=True)
+            flash(f"Erreur : {e}", "danger")
+        return redirect(url_for('parc.view_materiel', id=id))
+
+
+    def _mime_facture(type_fichier):
+        return {
+            'pdf': 'application/pdf',
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+        }.get(type_fichier, 'application/octet-stream')
 
 
     @bp.route('/materiels/<int:id>/attribuer', methods=['POST'])
@@ -2108,14 +2245,19 @@ def creer_blueprint_parc(deps):
                 return redirect(url_for('parc.prestataires_page'))
             try:
                 with db_cursor(commit=True) as (conn, cur):
+                    # Catégorie imposée : toute valeur hors liste (formulaire
+                    # forgé comprise) retombe sur 'externe'.
+                    categorie = (request.form.get('categorie') or '').strip()
+                    if categorie not in PRESTATAIRE_CODES:
+                        categorie = 'externe'
                     cur.execute("""INSERT INTO prestataires
-                                     (nom, contact, telephone, email, specialite)
+                                     (nom, contact, telephone, email, categorie)
                                    VALUES (%s,%s,%s,%s,%s) RETURNING id""",
                                 (nom[:150],
                                  (request.form.get('contact') or '').strip()[:150] or None,
                                  (request.form.get('telephone') or '').strip()[:40] or None,
                                  (request.form.get('email') or '').strip()[:150] or None,
-                                 (request.form.get('specialite') or '').strip()[:100] or None))
+                                 categorie))
                     pid = cur.fetchone()['id']
                 log_action(session.get('user_id'), session.get('username'),
                            "Création prestataire", "prestataire", pid, nom)
@@ -2136,7 +2278,9 @@ def creer_blueprint_parc(deps):
                  ORDER BY p.actif DESC, p.nom
             """)
             liste = cur.fetchall()
-        return render_template('prestataires.html', prestataires=liste)
+        return render_template('prestataires.html', prestataires=liste,
+                               categories=PRESTATAIRE_CATEGORIES,
+                               categories_dict=PRESTATAIRE_CATEGORIES_DICT)
 
 
     @bp.route('/prestataires/<int:id>/basculer', methods=['POST'])

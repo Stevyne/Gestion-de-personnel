@@ -86,11 +86,20 @@
                        {{ 'disabled' if materiel.quantite == 0 }}>
             </div>
             <div class="form-group">
-                <label>Pour qui ? <small style="color:#94a3b8;">(facultatif)</small></label>
+                <label>Récepteur <small style="color:#94a3b8;">(facultatif)</small></label>
                 <select name="employe_id" class="form-control">
                     <option value="">— Non précisé —</option>
                     {% for e in employes %}
                     <option value="{{ e.id }}">{{ e.prenom }} {{ e.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Département destinataire <small style="color:#94a3b8;">(facultatif)</small></label>
+                <select name="departement_destinataire" class="form-control">
+                    <option value="">— Non précisé —</option>
+                    {% for d in departements %}
+                    <option value="{{ d }}">{{ d }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -101,6 +110,34 @@
             <button type="submit" class="btn btn-primary" style="background:#dc2626;"
                     {{ 'disabled' if materiel.quantite == 0 }}>
                 Enregistrer la sortie
+            </button>
+        </form>
+
+        <h3 style="margin:22px 0 12px;">🧾 Facture d'achat</h3>
+        {% if materiel.facture_nom %}
+        <p style="margin:0 0 10px;">
+            <a class="btn btn-secondary btn-sm"
+               href="{{ url_for('parc.telecharger_facture', id=materiel.id) }}">📎 {{ materiel.facture_nom }}</a>
+            {% if materiel.facture_date_upload %}
+            <span class="rc-muted" style="font-size:.82rem;">· ajoutée le {{ materiel.facture_date_upload.strftime('%d/%m/%Y') }}</span>
+            {% endif %}
+        </p>
+        <form method="post" action="{{ url_for('parc.supprimer_facture', id=materiel.id) }}"
+              onsubmit="return confirm('Supprimer la facture de cet article ?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm" style="background:#dc2626;color:#fff;">Supprimer la facture</button>
+        </form>
+        {% else %}
+        <p class="rc-muted" style="margin:0 0 10px; font-size:.88rem;">Aucune facture importée pour cet article.</p>
+        {% endif %}
+        <form method="post" enctype="multipart/form-data"
+              action="{{ url_for('parc.uploader_facture', id=materiel.id) }}"
+              style="margin-top:10px; display:grid; gap:7px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="file" name="facture" class="form-control"
+                   accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required>
+            <button type="submit" class="btn btn-primary">
+                {{ 'Remplacer la facture' if materiel.facture_nom else 'Importer la facture' }}
             </button>
         </form>
     </div>

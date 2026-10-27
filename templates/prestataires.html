@@ -20,8 +20,12 @@
             <input type="text" name="nom" class="form-control" placeholder="Atelier Info+" required>
         </div>
         <div class="filtre-champ">
-            <label>Spécialité</label>
-            <input type="text" name="specialite" class="form-control" placeholder="Informatique">
+            <label>Catégorie</label>
+            <select name="categorie" class="form-control" required>
+                {% for code, libelle in categories %}
+                <option value="{{ code }}">{{ libelle }}</option>
+                {% endfor %}
+            </select>
         </div>
         <div class="filtre-champ">
             <label>Contact</label>
@@ -45,7 +49,7 @@
             <thead>
                 <tr>
                     <th>Prestataire</th>
-                    <th>Spécialité</th>
+                    <th>Catégorie</th>
                     <th>Contact</th>
                     <th>Interventions</th>
                     <th>Coût cumulé</th>
@@ -57,7 +61,7 @@
                 {% for p in prestataires %}
                 <tr>
                     <td data-label="Prestataire"><strong>{{ p.nom }}</strong></td>
-                    <td data-label="Spécialité">{{ p.specialite or '—' }}</td>
+                    <td data-label="Catégorie">{{ categories_dict.get(p.categorie, p.categorie) or '—' }}</td>
                     <td data-label="Contact">
                         {{ p.contact or '' }}
                         {% if p.telephone %}<br><span style="color:#64748b;">{{ p.telephone }}</span>{% endif %}
