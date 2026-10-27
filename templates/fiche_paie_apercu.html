@@ -1,0 +1,151 @@
+{% extends layout|default("base.html") %}
+{% from "base.html" import icon %}
+
+{% block content %}
+
+{# Barre d'outils : visible à l'écran, jamais sur le papier. #}
+<div class="no-print card" style="max-width:820px;margin:0 auto 16px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <button type="button" class="btn btn-primary" onclick="window.print()">
+            {{ icon('printer') }} Imprimer
+        </button>
+        <a class="btn" href="?{{ request.query_string.decode() }}&format=pdf"
+           onclick="this.href='{{ url_for('fiches_paie.pdf', employe_id=employe.id) }}?{{ request.query_string.decode() }}'">
+            {{ icon('download') }} Télécharger en PDF
+        </a>
+        <a class="btn btn-secondary" href="{{ url_for('fiches_paie.fiche_de_paie', employe_id=employe.id) }}">
+            Modifier
+        </a>
+        <a class="btn btn-secondary" href="{{ url_for('view_employee', id=employe.id) }}">
+            Retour à la fiche
+        </a>
+    </div>
+</div>
+
+{# ===== LE REÇU : cette partie seule part à l'impression ===== #}
+<div class="recu-papier">
+    {% if blocs.get('entete') %}
+        <div class="recu-entete">{{ entreprise }}</div>
+    {% endif %}
+
+    {# La période se place sous le titre, comme sur le reçu papier : elle
+       forme un seul bloc visuel avec lui. La case « Période » agit donc
+       ici, et non sur une ligne distincte plus bas. #}
+    {% if blocs.get('titre') or blocs.get('periode') %}
+        {% if blocs.get('titre') %}
+            <div class="recu-titre">{{ titre.upper() }}</div>
+        {% endif %}
+        {% if blocs.get('periode') %}
+            <div class="recu-sous-titre">{{ periode }}</div>
+        {% endif %}
+    {% endif %}
+
+    {% if blocs.get('identite') %}
+        <div class="recu-ligne"><span class="recu-label">Noms &amp; Prénoms :</span> {{ employe.prenom }} {{ employe.nom }}</div>
+        <div class="recu-ligne"><span class="recu-label">Fonction :</span> {{ employe.poste or '—' }}</div>
+    {% endif %}
+
+    {% if blocs.get('montant_lettres') %}
+        <div class="recu-corps">
+            Je soussigné(e) reconnais avoir reçu la somme de :<br>
+            <em>{{ montant_lettres }}</em>
+        </div>
+    {% endif %}
+
+    {% if blocs.get('montant_chiffres') %}
+        <div class="recu-ligne"><span class="recu-label">Montant :</span> {{ montant_formate }} {{ devise }}</div>
+    {% endif %}
+
+    {% if blocs.get('paiement') %}
+        <div class="recu-ligne"><span class="recu-label">Mode de paiement :</span> {{ mode_paiement }}</div>
+    {% endif %}
+
+    {% if blocs.get('date_lieu') %}
+        <div class="recu-lieu">{{ lieu }}, le {{ date_paiement_str }}</div>
+    {% endif %}
+
+    {% if blocs.get('signatures') %}
+        <table class="recu-signatures">
+            <tr>
+                <td class="recu-sign-label">{{ signature_1 }}</td>
+                <td class="recu-sign-label">{{ signature_2 }}</td>
+            </tr>
+            <tr>
+                <td class="recu-sign-trait"></td>
+                <td class="recu-sign-trait"></td>
+            </tr>
+            <tr>
+                <td class="recu-sign-mention">Signature</td>
+                <td class="recu-sign-mention">Signature</td>
+            </tr>
+        </table>
+    {% endif %}
+</div>
+
+<style>
+    /* Écran : le reçu est posé sur une feuille blanche, comme la photo. */
+    .recu-papier {
+        max-width: 820px;
+        margin: 0 auto;
+        background: #fff;
+        padding: 40px 46px;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, .08);
+        font-size: 14px;
+        line-height: 1.7;
+        color: #0f172a;
+    }
+    .recu-entete {
+        text-align: center;
+        font-size: 1.15rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+    .recu-titre {
+        text-align: center;
+        font-size: 1.05rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        margin-top: 26px;
+        text-decoration: underline;
+    }
+    .recu-sous-titre {
+        text-align: center;
+        font-weight: 600;
+        margin-top: 4px;
+    }
+    .recu-ligne { margin-top: 6px; }
+    .recu-label { font-weight: 700; }
+    .recu-corps {
+        margin-top: 22px;
+        padding: 12px 14px;
+        border-left: 3px solid #1e40af;
+        background: #f8fafc;
+    }
+    .recu-corps em { font-weight: 700; font-style: italic; text-transform: capitalize; }
+    .recu-lieu { margin-top: 26px; font-weight: 700; }
+    .recu-signatures { width: 100%; margin-top: 30px; border-collapse: collapse; }
+    .recu-signatures td { width: 50%; padding: 0 18px; }
+    .recu-sign-label { font-weight: 700; padding-bottom: 4px !important; }
+    .recu-sign-trait { height: 56px; border-bottom: 1px solid #9ca3af; }
+    .recu-sign-mention { font-size: .78rem; color: #6b7280; padding-top: 4px !important; }
+
+    /* Papier : plus de chrome applicatif, le reçu seul. */
+    @media print {
+        .no-print, nav, .sidebar, footer, .btn { display: none !important; }
+        body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+        .recu-papier {
+            max-width: none;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+            font-size: 12pt;
+        }
+        @page { size: A4 portrait; margin: 18mm 16mm; }
+    }
+</style>
+{% endblock %}

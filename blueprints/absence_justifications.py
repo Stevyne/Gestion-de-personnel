@@ -104,6 +104,33 @@ def creer_blueprint_justifications(deps):
                                statut_labels=ABSENCE_STATUT_LABELS,
                                peut_deposer=(ABSENCE_NON_JUSTIFIEE, ABSENCE_REFUSEE))
 
+    @bp.route('/self-service/absences/<int:absence_id>/justificatif', methods=['GET'])
+    @login_required
+    def formulaire_justificatif(absence_id):
+        """Formulaire de dépôt, rendu en popup quand l'URL porte ?modal=1.
+
+        Le même template sert donc la page classique et la fenêtre modale :
+        il n'existe qu'une seule définition du formulaire.
+        """
+        employe = get_current_employee()
+        if not employe:
+            flash("Aucun employé n'est lié à votre compte.", 'warning')
+            return redirect(url_for('self_service'))
+        with db_cursor() as (conn, cur):
+            cur.execute("""
+                SELECT id, date, motif, statut, justificatif_nom, motif_refus
+                  FROM absences WHERE id = %s AND employe_id = %s
+            """, (absence_id, employe['id']))
+            absence = cur.fetchone()
+        if not absence:
+            abort(404)
+        if absence['statut'] not in (ABSENCE_NON_JUSTIFIEE, ABSENCE_REFUSEE):
+            flash("Cette absence ne peut plus recevoir de justificatif.", "warning")
+            return redirect(url_for('.self_service_absences'))
+        return render_template('absence_justificatif_form.html',
+                               absence=absence,
+                               statut_labels=ABSENCE_STATUT_LABELS)
+
     @bp.route('/self-service/absences/<int:absence_id>/justificatif', methods=['POST'])
     @login_required
     def deposer_justificatif(absence_id):

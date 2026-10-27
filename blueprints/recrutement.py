@@ -502,16 +502,54 @@ def creer_blueprint_recrutement(deps):
     @role_required('rh')
     def candidats():
         recherche = (request.args.get('q') or '').strip().lower()
+        favoris_seuls = request.args.get('favoris') == '1'
         with db_cursor() as (_conn, cur):
             params, clause = [], ''
             if recherche:
                 clause = "WHERE LOWER(c.nom) LIKE %s OR LOWER(c.prenom) LIKE %s OR LOWER(c.email) LIKE %s"
                 motif = f'%{recherche}%'; params = [motif, motif, motif]
+            if favoris_seuls:
+                clause += (' AND ' if clause else 'WHERE ') + 'c.favori'
             cur.execute(f"""SELECT c.*,
                 (SELECT COUNT(*) FROM recrutement_candidatures ca WHERE ca.candidat_id=c.id) AS nb_candidatures
-                FROM recrutement_candidats c {clause} ORDER BY c.date_creation DESC""", params)
+                FROM recrutement_candidats c {clause}
+                ORDER BY c.favori DESC, c.date_creation DESC""", params)
             lignes = cur.fetchall()
-        return render_template('recrutement_candidats.html', candidats=lignes, recherche=recherche)
+            cur.execute("SELECT COUNT(*) AS nb FROM recrutement_candidats WHERE favori")
+            nb_favoris = cur.fetchone()['nb']
+        return render_template('recrutement_candidats.html', candidats=lignes,
+                               recherche=recherche, favoris_seuls=favoris_seuls,
+                               nb_favoris=nb_favoris)
+
+    @bp.route('/recrutement/candidats/<int:candidat_id>/favori', methods=['POST'])
+    @login_required
+    @role_required('rh')
+    def basculer_favori(candidat_id):
+        """Marque ou retire le coup de cœur RH. Ne présume d'aucune décision."""
+        with db_cursor(commit=True) as (conn, cur):
+            cur.execute(
+                "SELECT id, nom, prenom, favori FROM recrutement_candidats WHERE id = %s",
+                (candidat_id,))
+            candidat = cur.fetchone()
+            if not candidat:
+                flash("Candidat introuvable.", "danger")
+                return redirect(url_for('recrutement.candidats'))
+            nouveau = not bool(candidat['favori'])
+            cur.execute("""UPDATE recrutement_candidats
+                              SET favori = %s, date_modification = CURRENT_TIMESTAMP
+                            WHERE id = %s""", (nouveau, candidat_id))
+        log_action(session.get('user_id'), session.get('username'),
+                   "Favori candidat " + ("ajouté" if nouveau else "retiré"),
+                   "candidat", candidat_id,
+                   f"{candidat['prenom']} {candidat['nom']}")
+        flash("Ajouté aux favoris." if nouveau else "Retiré des favoris.", "info")
+        # Redirection sûre : le champ libre `retour` est écarté s'il n'est pas
+        # un chemin interne, sinon il permettrait une redirection ouverte.
+        retour = (request.form.get('retour') or '').strip()
+        if not retour.startswith('/') or retour.startswith('//'):
+            retour = url_for('recrutement.candidats')
+        return redirect(retour)
+
 
     @bp.route('/recrutement/candidats/nouveau', methods=['GET', 'POST'])
     @login_required

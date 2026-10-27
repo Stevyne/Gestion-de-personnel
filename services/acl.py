@@ -49,12 +49,17 @@ EMPLOYE = COMMUN | frozenset({
     'self_service_conges', 'self_service_presences', 'self_service_materiels',
     # Absences : uniquement le circuit de justification le concernant.
     'absence_justifications.self_service_absences',
+    'absence_justifications.formulaire_justificatif',
     'absence_justifications.deposer_justificatif',
     'absence_justifications.telecharger_justificatif',
     # Consultation.
     'calendrier_conges', 'presences.historique',
     'export_presences_pdf', 'export_presences_excel',
     'export_conges_pdf', 'export_conges_excel',
+    # Fiche de paie : composée ici, mais le cloisonnement fin est fait dans
+    # la route — un employé n'atteint que sa propre fiche, un manager celles
+    # de son département. L'ACL ne sait pas filtrer par enregistrement.
+    'fiches_paie.fiche_de_paie', 'fiches_paie.apercu', 'fiches_paie.pdf',
 })
 
 # --- MANAGER : temps et workflows RH, employés en lecture seule -------------

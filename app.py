@@ -34,6 +34,7 @@ from blueprints.absence_justifications import (
 )
 from blueprints.absences import creer_blueprint_absences
 from blueprints.messagerie import creer_blueprint_messagerie
+from blueprints.fiches_paie import creer_blueprint_fiches_paie
 from blueprints.notifications import creer_blueprint_notifications
 from blueprints.recherche import (
     RECHERCHE_PAGES, creer_blueprint_recherche,  # noqa: F401 — réexport public
@@ -2877,6 +2878,17 @@ app.register_blueprint(creer_blueprint_messagerie({
     'department_scope_sql': department_scope_sql,
     'object_storage': object_storage,
     'limiter': limiter,
+}))
+
+app.register_blueprint(creer_blueprint_fiches_paie({
+    'db_cursor': db_cursor,
+    'login_required': login_required,
+    'role_required': role_required,
+    'get_current_employee': get_current_employee,
+    'employee_in_scope': employee_in_scope,
+    'log_action': log_action,
+    'nom_entreprise': os.environ.get('NOM_ENTREPRISE', '').strip(),
+    'lieu_par_defaut': os.environ.get('LIEU_PAIEMENT', '').strip(),
 }))
 
 # Commandes d'exploitation : bootstrap transitoire du schéma historique,

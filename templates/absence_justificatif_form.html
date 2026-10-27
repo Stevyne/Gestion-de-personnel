@@ -1,0 +1,41 @@
+{% extends layout|default("base.html") %}
+{% from "base.html" import icon %}
+
+{% block content %}
+<div class="card" style="max-width: 640px; margin: 0 auto;">
+    <div class="card-header">
+        <h1>{{ icon('file', 18) }} Justifier une absence</h1>
+    </div>
+
+    <p style="margin:-6px 0 16px; color:#475569;">
+        Absence du <strong>{{ absence.date }}</strong>{% if absence.motif %} — motif enregistré : {{ absence.motif }}{% endif %}
+    </p>
+
+    {% if absence.statut == 'refusee' and absence.motif_refus %}
+    <div class="alert alert-danger" role="alert">Précédent refus : {{ absence.motif_refus }}</div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data"
+          action="{{ url_for('absence_justifications.deposer_justificatif', absence_id=absence.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+            <label for="justificatif">Justificatif (PDF, PNG ou JPEG — 8 Mo maximum)</label>
+            <input type="file" id="justificatif" name="justificatif" class="form-control"
+                   accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required>
+        </div>
+
+        <div class="form-group">
+            <label for="commentaire">Commentaire <small style="color:#94a3b8;">(facultatif)</small></label>
+            <input type="text" id="commentaire" name="commentaire" class="form-control"
+                   placeholder="Précision utile aux RH" maxlength="500">
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                {{ 'Déposer un nouveau justificatif' if absence.statut == 'refusee' else 'Déposer le justificatif' }}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -37,12 +37,12 @@
               <a class="btn btn-secondary" style="padding:5px 9px;font-size:.78rem;" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">📎 {{ a.justificatif_nom }}</a>
             {% endif %}
             {% if a.statut in peut_deposer %}
-              <form method="post" enctype="multipart/form-data" action="{{ url_for('absence_justifications.deposer_justificatif', absence_id=a.id) }}" style="margin-top:8px;display:grid;gap:7px;min-width:250px;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="file" name="justificatif" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" class="form-control" required>
-                <input type="text" name="commentaire" class="form-control" placeholder="Commentaire facultatif">
-                <button class="btn btn-primary" type="submit">{{ 'Déposer un nouveau justificatif' if a.statut == 'refusee' else 'Déposer le justificatif' }}</button>
-              </form>
+              <a data-modal-title="Justifier mon absence"
+                 href="{{ url_for('absence_justifications.formulaire_justificatif', absence_id=a.id) }}"
+                 class="js-modal-form btn btn-primary"
+                 style="padding:5px 9px;font-size:.78rem;margin-top:8px;">
+                {{ icon('file', 13) }} {{ 'Déposer un nouveau justificatif' if a.statut == 'refusee' else 'Justifier cette absence' }}
+              </a>
             {% elif not a.justificatif_nom %}
               <span style="color:#94a3b8;">—</span>
             {% endif %}

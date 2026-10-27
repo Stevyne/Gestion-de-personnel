@@ -1,0 +1,133 @@
+{% extends layout|default("base.html") %}
+{% from "base.html" import icon %}
+
+{% block content %}
+<div class="card" style="max-width: 780px; margin: 0 auto;">
+    <div class="card-header">
+        <h1>{{ icon('file-text') }} Fiche de paie — {{ employe.prenom }} {{ employe.nom }}</h1>
+    </div>
+
+    <p class="wf-circuit">
+        Les champs sont pré-remplis depuis la fiche de l'employé, mais tout reste modifiable :
+        le reçu n'est <strong>pas un bulletin détaillé</strong>, il atteste du versement d'un montant.
+        Décochez les blocs que vous ne voulez pas voir figurer à l'impression.
+    </p>
+
+    {# Le formulaire part en GET : le reçu devient une URL partageable,
+       et le bouton « retour » du navigateur conserve la saisie. #}
+    <form method="GET" action="{{ url_for('fiches_paie.apercu', employe_id=employe.id) }}">
+
+        <fieldset style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px;">
+            <legend style="font-weight:700;padding:0 6px;">Contenu du document</legend>
+
+            <div class="form-group">
+                <label for="entreprise">En-tête (nom de l'entreprise)</label>
+                <input type="text" id="entreprise" name="entreprise" class="form-control"
+                       value="{{ valeurs.entreprise }}" maxlength="120">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="titre">Titre du document</label>
+                    <input type="text" id="titre" name="titre" class="form-control"
+                           value="{{ valeurs.titre }}" maxlength="120"
+                           placeholder="FICHE DE PAIE, INDEMNITE DE STAGE…">
+                </div>
+                <div class="form-group">
+                    <label for="periode">Période</label>
+                    <input type="text" id="periode" name="periode" class="form-control"
+                           value="{{ valeurs.periode }}" maxlength="120"
+                           placeholder="Mois de septembre 2026">
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px;">
+            <legend style="font-weight:700;padding:0 6px;">Montant et paiement</legend>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="montant">Montant ({{ valeurs.devise }})</label>
+                    <input type="number" id="montant" name="montant" class="form-control"
+                           value="{{ valeurs.montant }}" step="0.01" min="0">
+                    <small style="color:#64748b;" id="apercu-lettres"></small>
+                </div>
+                <div class="form-group">
+                    <label for="mode_paiement">Mode de paiement</label>
+                    <select id="mode_paiement" name="mode_paiement" class="form-control">
+                        {% for mode in modes_paiement %}
+                            <option value="{{ mode }}"{% if mode == valeurs.mode_paiement %} selected{% endif %}>{{ mode }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="lieu">Lieu</label>
+                    <input type="text" id="lieu" name="lieu" class="form-control"
+                           value="{{ valeurs.lieu }}" maxlength="120">
+                </div>
+                <div class="form-group">
+                    <label for="date_paiement">Date de paiement</label>
+                    <input type="date" id="date_paiement" name="date_paiement" class="form-control"
+                           value="{{ valeurs.date_paiement }}">
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px;">
+            <legend style="font-weight:700;padding:0 6px;">Blocs à imprimer</legend>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 14px;">
+                {% for cle, libelle in sections %}
+                <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
+                    <input type="checkbox" name="sec_{{ cle }}" value="1"
+                           {% if valeurs.sections.get(cle) %}checked{% endif %}>
+                    {{ libelle }}
+                </label>
+                {% endfor %}
+            </div>
+            <small style="color:#64748b;">Une case décochée retire entièrement le bloc du reçu.</small>
+        </fieldset>
+
+        <fieldset style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px;">
+            <legend style="font-weight:700;padding:0 6px;">Signatures</legend>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="signature_1">Cadre de gauche</label>
+                    <input type="text" id="signature_1" name="signature_1" class="form-control"
+                           value="{{ valeurs.signature_1 }}" maxlength="80">
+                </div>
+                <div class="form-group">
+                    <label for="signature_2">Cadre de droite</label>
+                    <input type="text" id="signature_2" name="signature_2" class="form-control"
+                           value="{{ valeurs.signature_2 }}" maxlength="80">
+                </div>
+            </div>
+        </fieldset>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button type="submit" class="btn btn-primary">{{ icon('eye') }} Aperçu avant impression</button>
+            <a href="{{ url_for('view_employee', id=employe.id) }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+
+<script>
+/* Le montant en toutes lettres est recalculé côté serveur au rendu ; ici on
+   se contente d'annoncer la forme attendue pour éviter une surprise à
+   l'impression. La conversion exacte reste faite par le serveur. */
+(function () {
+    var champ = document.getElementById('montant');
+    var cible = document.getElementById('apercu-lettres');
+    if (!champ || !cible) return;
+    function Maj() {
+        var v = parseFloat(champ.value || '0');
+        cible.textContent = isNaN(v) ? '' : 'Sera imprimé en toutes lettres sur le reçu.';
+    }
+    champ.addEventListener('input', Maj);
+    Maj();
+})();
+</script>
+{% endblock %}

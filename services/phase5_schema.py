@@ -78,10 +78,21 @@ def appliquer_schema_phase5(cur):
         lettre_storage_sha256 VARCHAR(64),
         employe_id INTEGER UNIQUE REFERENCES employes(id) ON DELETE SET NULL,
         cree_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        -- Coup de cœur RH : remonte le candidat en tête de liste et
+        -- permet de filtrer dessus. Purement indicatif, jamais une décision.
+        favori BOOLEAN NOT NULL DEFAULT FALSE,
         date_creation TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         date_modification TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""")
     cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_recrutement_candidat_email ON recrutement_candidats(LOWER(email))")
+    # CREATE TABLE IF NOT EXISTS ne complète pas une table déjà créée.
+    cur.execute("""ALTER TABLE recrutement_candidats ADD COLUMN IF NOT EXISTS
+                   favori BOOLEAN NOT NULL DEFAULT FALSE""")
+    # Index partiel : seuls les coups de cœur sont indexés, la grande
+    # majorité des candidats ne l'est pas. Doit rester identique à la
+    # migration Alembic (test_schema_parity compare les deux schémas).
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_recrutement_candidat_favori "
+                 "ON recrutement_candidats(favori) WHERE favori")
 
     cur.execute("""CREATE TABLE IF NOT EXISTS recrutement_candidatures (
         id SERIAL PRIMARY KEY,

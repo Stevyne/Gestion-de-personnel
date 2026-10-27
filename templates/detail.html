@@ -134,6 +134,21 @@
                         </div>
                     </div>
                     {% endif %}
+
+                    {% if current_role in ['admin', 'rh', 'manager'] %}
+                    <div class="info-row">
+                        <div class="info-label">Fiche de paie</div>
+                        <div class="info-value">
+                            <a class="btn btn-primary"
+                               style="padding:6px 12px;font-size:.82rem;"
+                               href="{{ url_for('fiches_paie.fiche_de_paie', employe_id=employee.id) }}">
+                                🧾 Composer et imprimer
+                            </a>
+                            <br>
+                            <small class="text-muted">Reçu imprimable : montant en lettres, blocs à cocher avant impression.</small>
+                        </div>
+                    </div>
+                    {% endif %}
                     
                     <div class="info-row">
                         <div class="info-label">Date d'embauche</div>
