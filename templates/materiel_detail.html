@@ -55,7 +55,9 @@
     <!-- Entrée de stock -->
     <div class="card">
         <h3 style="margin-bottom:12px;">➕ Entrée de stock</h3>
-        <form action="{{ url_for('parc.add_mouvement_materiel', id=materiel.id) }}" method="post">
+        {# enctype obligatoire : le formulaire peut transporter un fichier #}
+        <form action="{{ url_for('parc.add_mouvement_materiel', id=materiel.id) }}" method="post"
+              enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="type_mouvement" value="entree">
             <div class="form-group">
@@ -66,6 +68,14 @@
                 <label>Motif</label>
                 <input type="text" name="motif" class="form-control"
                        placeholder="Achat, réapprovisionnement...">
+            </div>
+            <div class="form-group">
+                <label>Facture du fournisseur <small style="color:#94a3b8;">(facultatif)</small></label>
+                <input type="file" name="facture" class="form-control"
+                       accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg">
+                <small style="color:#64748b;">PDF, PNG ou JPEG — 8 Mo maximum.
+                    La pièce est jointe à cette entrée : chaque
+                    réapprovisionnement garde la sienne.</small>
             </div>
             <button type="submit" class="btn btn-primary" style="background:#16a34a;">
                 Enregistrer l'entrée
@@ -112,34 +122,10 @@
                 Enregistrer la sortie
             </button>
         </form>
-
-        <h3 style="margin:22px 0 12px;">🧾 Facture d'achat</h3>
-        {% if materiel.facture_nom %}
-        <p style="margin:0 0 10px;">
-            <a class="btn btn-secondary btn-sm"
-               href="{{ url_for('parc.telecharger_facture', id=materiel.id) }}">📎 {{ materiel.facture_nom }}</a>
-            {% if materiel.facture_date_upload %}
-            <span class="rc-muted" style="font-size:.82rem;">· ajoutée le {{ materiel.facture_date_upload.strftime('%d/%m/%Y') }}</span>
-            {% endif %}
+        <p class="rc-muted" style="margin:14px 0 0; font-size:.85rem;">
+            Une sortie est un mouvement interne : elle ne porte pas de facture.
+            Celle du fournisseur se joint à l'entrée en stock.
         </p>
-        <form method="post" action="{{ url_for('parc.supprimer_facture', id=materiel.id) }}"
-              onsubmit="return confirm('Supprimer la facture de cet article ?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-sm" style="background:#dc2626;color:#fff;">Supprimer la facture</button>
-        </form>
-        {% else %}
-        <p class="rc-muted" style="margin:0 0 10px; font-size:.88rem;">Aucune facture importée pour cet article.</p>
-        {% endif %}
-        <form method="post" enctype="multipart/form-data"
-              action="{{ url_for('parc.uploader_facture', id=materiel.id) }}"
-              style="margin-top:10px; display:grid; gap:7px;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="file" name="facture" class="form-control"
-                   accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required>
-            <button type="submit" class="btn btn-primary">
-                {{ 'Remplacer la facture' if materiel.facture_nom else 'Importer la facture' }}
-            </button>
-        </form>
     </div>
 </div>
 
@@ -377,7 +363,7 @@
             <thead>
                 <tr>
                     <th>Date</th><th>Type</th><th>Quantité</th>
-                    <th>Employé</th><th>Motif</th><th>Par</th>
+                    <th>Employé</th><th>Motif</th><th>Facture</th><th>Par</th>
                 </tr>
             </thead>
             <tbody>
@@ -398,11 +384,32 @@
                         {% if mv.emp_nom %}{{ mv.emp_prenom }} {{ mv.emp_nom }}{% else %}—{% endif %}
                     </td>
                     <td data-label="Motif"><small>{{ mv.motif or '—' }}</small></td>
+                    <td data-label="Facture">
+                        {% if mv.facture_nom %}
+                            <a class="btn btn-secondary btn-sm"
+                               href="{{ url_for('parc.telecharger_facture', mvt_id=mv.id) }}"
+                               title="Facture de cette entrée">📎 {{ mv.facture_nom }}</a>
+                            {% if current_role in ['admin', 'rh'] %}
+                            <form method="post" style="display:inline;"
+                                  action="{{ url_for('parc.supprimer_facture', mvt_id=mv.id) }}"
+                                  onsubmit="return confirm('Retirer la facture de cette entrée en stock ?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm"
+                                        style="background:#dc2626;color:#fff;padding:2px 6px;"
+                                        title="Retirer la facture">✕</button>
+                            </form>
+                            {% endif %}
+                        {% elif mv.type_mouvement == 'entree' %}
+                            <small style="color:#94a3b8;">—</small>
+                        {% else %}
+                            <small style="color:#cbd5e1;">sans objet</small>
+                        {% endif %}
+                    </td>
                     <td data-label="Par"><small style="color:#64748b;">{{ mv.username or '—' }}</small></td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" style="text-align:center; color:#94a3b8; padding:24px;">
+                    <td colspan="7" style="text-align:center; color:#94a3b8; padding:24px;">
                         Aucun mouvement enregistré pour l'instant.
                     </td>
                 </tr>

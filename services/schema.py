@@ -284,11 +284,37 @@ def initialiser_schema(get_db, get_cursor, logger, calculer_jours_acquis_prorata
         -- Département destinataire d'une sortie (transfert entre services).
         -- NULL pour une entrée ou une sortie sans destinataire identifié.
         departement_destinataire VARCHAR(120),
+        -- Facture d'achat. Elle appartient à l'ENTRÉE en stock : c'est en
+        -- recevant la marchandise qu'on obtient la pièce du fournisseur.
+        -- Une sortie n'a jamais de facture — c'est un transfert interne.
+        -- Un article peut donc cumuler plusieurs factures, une par
+        -- réapprovisionnement, ce qui colle à la réalité des achats.
+        facture_nom VARCHAR(255),
+        facture_contenu BYTEA,
+        facture_type VARCHAR(10),
+        facture_taille INTEGER,
+        facture_date_upload TIMESTAMP,
+        -- Emplacement externe du fichier, quand le stockage objet est activé.
+        facture_storage_key VARCHAR(1024),
+        facture_storage_etag VARCHAR(128),
+        facture_storage_sha256 VARCHAR(64),
         date_mouvement TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_mvt_materiel ON materiels_mouvements(materiel_id, date_mouvement DESC)")
     cur.execute("""ALTER TABLE materiels_mouvements ADD COLUMN IF NOT EXISTS
                    departement_destinataire VARCHAR(120)""")
+    # CREATE TABLE IF NOT EXISTS ne complète pas une table déjà créée.
+    for _colonne, _type in (
+            ('facture_nom', 'VARCHAR(255)'),
+            ('facture_contenu', 'BYTEA'),
+            ('facture_type', 'VARCHAR(10)'),
+            ('facture_taille', 'INTEGER'),
+            ('facture_date_upload', 'TIMESTAMP'),
+            ('facture_storage_key', 'VARCHAR(1024)'),
+            ('facture_storage_etag', 'VARCHAR(128)'),
+            ('facture_storage_sha256', 'VARCHAR(64)')):
+        cur.execute("ALTER TABLE materiels_mouvements ADD COLUMN IF NOT EXISTS %s %s"
+                    % (_colonne, _type))
 
     # Attributions durables (PC, téléphone, clés...) : remise à un employé
     # puis retour éventuel. Une attribution active a date_retour IS NULL.

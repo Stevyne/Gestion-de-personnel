@@ -371,8 +371,12 @@ def creer_blueprint_parc(deps):
 
     def _enregistrer_mouvement(cur, materiel_id, type_mouvement, quantite,
                                employe_id=None, motif=None, origine='manuel',
-                               departement_destinataire=None):
+                               departement_destinataire=None, facture=None):
         """Écrit un mouvement et met à jour le stock. Retourne le nouveau stock.
+
+        ``facture`` est un triplet ``(nom, contenu, type)`` tel que le renvoie
+        ``_lire_facture``. Il n'est enregistré que sur une **entrée** : une
+        sortie est un mouvement interne, il n'y a rien à y facturer.
 
         Lève ValueError si une sortie dépasse le stock disponible.
         """
@@ -390,14 +394,27 @@ def creer_blueprint_parc(deps):
             nouveau = stock + quantite
 
         cur.execute("UPDATE materiels SET quantite = %s WHERE id = %s", (nouveau, materiel_id))
+        # Filet de sécurité : même appelé avec une facture, une sortie ne la
+        # porte pas. Mieux vaut ignorer le fichier que l'associer à un
+        # mouvement auquel il n'a aucun sens.
+        if type_mouvement != 'entree':
+            facture = None
+
         cur.execute("""
             INSERT INTO materiels_mouvements
                 (materiel_id, type_mouvement, quantite, employe_id, motif, user_id,
-                 username, origine, departement_destinataire)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 username, origine, departement_destinataire,
+                 facture_nom, facture_contenu, facture_type,
+                 facture_taille, facture_date_upload)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (materiel_id, type_mouvement, quantite, employe_id, motif or None,
               session.get('user_id'), session.get('username'), origine,
-              departement_destinataire or None))
+              departement_destinataire or None,
+              facture[0] if facture else None,
+              psycopg2.Binary(facture[1]) if facture else None,
+              facture[2] if facture else None,
+              len(facture[1]) if facture else None,
+              datetime.now() if facture else None))
 
         _notifier_stock_bas(cur, materiel_id)
         return nouveau
@@ -713,6 +730,24 @@ def creer_blueprint_parc(deps):
         departement_destinataire = (
             request.form.get('departement_destinataire') or '').strip()[:120] or None
 
+        # La facture accompagne la marchandise reçue : elle appartient à
+        # l'entrée en stock. Une sortie est un transfert interne — un service
+        # qui cède du matériel à un autre n'établit pas de facture.
+        facture = None
+        if type_mvt == 'entree':
+            fichier = request.files.get('facture')
+            if fichier and fichier.filename:
+                try:
+                    facture = _lire_facture(fichier)
+                except ValueError as exc:
+                    flash(str(exc), "danger")
+                    return redirect(url_for('parc.view_materiel', id=id))
+        elif request.files.get('facture') and request.files['facture'].filename:
+            # On avertit plutôt que d'ignorer en silence : sinon l'utilisateur
+            # croit sa pièce jointe et ne la retrouve jamais.
+            flash("Une facture ne peut être jointe qu'à une entrée en stock, "
+                  "pas à une sortie.", "warning")
+
         if type_mvt not in ('entree', 'sortie'):
             flash("Type de mouvement invalide", "danger")
         elif quantite <= 0:
@@ -722,11 +757,15 @@ def creer_blueprint_parc(deps):
                 with db_cursor(commit=True) as (conn, cur):
                     nouveau = _enregistrer_mouvement(cur, id, type_mvt, quantite,
                                                      employe_id or None, motif,
-                                                     departement_destinataire=departement_destinataire)
+                                                     departement_destinataire=departement_destinataire,
+                                                     facture=facture)
                 libelle = "Entrée" if type_mvt == 'entree' else "Sortie"
                 log_action(session.get('user_id'), session.get('username'),
                            f"{libelle} stock", "materiel", id, f"{quantite}")
-                flash(f"{libelle} de {quantite} enregistrée — nouveau stock : {nouveau}", "success")
+                message = f"{libelle} de {quantite} enregistrée — nouveau stock : {nouveau}"
+                if facture:
+                    message += f" — facture « {facture[0]} » jointe"
+                flash(message, "success")
             except ValueError as e:
                 flash(str(e), "danger")
             except Exception as e:
@@ -736,73 +775,54 @@ def creer_blueprint_parc(deps):
         return redirect(url_for('parc.view_materiel', id=id))
 
 
-    @bp.route('/materiels/<int:id>/facture', methods=['POST'])
-    @login_required
-    @role_required('admin', 'rh')
-    def uploader_facture(id):
-        """Import de la facture d'achat de l'article (PDF, PNG ou JPEG)."""
-        fichier = request.files.get('facture')
-        if not fichier or not fichier.filename:
-            flash("Aucun fichier sélectionné.", "danger")
-            return redirect(url_for('parc.view_materiel', id=id))
+    def _lire_facture(fichier):
+        """Valide une pièce jointe et renvoie ``(nom, contenu, type)``.
 
-        # Le type est validé sur le contenu réel (magic-bytes), jamais sur
-        # l'extension fournie par le navigateur.
-        head = fichier.stream.read(8)
+        Le type est lu sur les premiers octets du fichier (magic-bytes),
+        jamais sur l'extension fournie par le navigateur : un exécutable
+        renommé en .pdf ne passe pas.
+
+        Lève ValueError avec un message prêt à être affiché à l'utilisateur.
+        """
+        if not fichier or not fichier.filename:
+            raise ValueError("Aucun fichier sélectionné.")
+
+        tete = fichier.stream.read(8)
         fichier.stream.seek(0)
         type_detecte = None
         for magic, extension in _FACTURE_MAGIC:
-            if head.startswith(magic):
+            if tete.startswith(magic):
                 type_detecte = extension
                 break
         if type_detecte is None:
-            flash("Format refusé : la facture doit être un PDF, un PNG ou un JPEG.",
-                  "danger")
-            return redirect(url_for('parc.view_materiel', id=id))
+            raise ValueError(
+                "Format refusé : la facture doit être un PDF, un PNG ou un JPEG.")
 
         contenu = fichier.read()
         if not contenu:
-            flash("Le fichier est vide.", "danger")
-            return redirect(url_for('parc.view_materiel', id=id))
+            raise ValueError("Le fichier est vide.")
         if len(contenu) > FACTURE_MAX_BYTES:
-            flash("Facture trop volumineuse (8 Mo maximum).", "danger")
-            return redirect(url_for('parc.view_materiel', id=id))
+            raise ValueError("Facture trop volumineuse (8 Mo maximum).")
 
-        nom_fichier = secure_filename(fichier.filename)[:255]
-        try:
-            with db_cursor(commit=True) as (conn, cur):
-                cur.execute("SELECT id FROM materiels WHERE id = %s", (id,))
-                if not cur.fetchone():
-                    flash("Matériel introuvable.", "danger")
-                    return redirect(url_for('parc.materiels'))
-                cur.execute("""
-                    UPDATE materiels
-                       SET facture_nom=%s, facture_contenu=%s, facture_type=%s,
-                           facture_taille=%s, facture_date_upload=CURRENT_TIMESTAMP
-                     WHERE id=%s
-                """, (nom_fichier, psycopg2.Binary(contenu), type_detecte,
-                      len(contenu), id))
-            log_action(session.get('user_id'), session.get('username'),
-                       "Import facture matériel", "materiel", id, nom_fichier)
-            flash("Facture importée.", "success")
-        except Exception as e:
-            logger.error("Erreur import facture: %s", e, exc_info=True)
-            flash(f"Erreur lors de l'import : {e}", "danger")
-        return redirect(url_for('parc.view_materiel', id=id))
+        return secure_filename(fichier.filename)[:255], contenu, type_detecte
 
 
-    @bp.route('/materiels/<int:id>/facture')
+    @bp.route('/mouvements/<int:mvt_id>/facture')
     @login_required
     @role_required('admin', 'rh')
-    def telecharger_facture(id):
-        """Téléchargement de la facture, réservé à admin et RH."""
+    def telecharger_facture(mvt_id):
+        """Téléchargement de la facture attachée à une entrée en stock."""
         with db_cursor() as (conn, cur):
-            cur.execute("""SELECT facture_nom, facture_contenu, facture_type
-                             FROM materiels WHERE id = %s""", (id,))
+            cur.execute("""SELECT materiel_id, facture_nom, facture_contenu,
+                                  facture_type
+                             FROM materiels_mouvements WHERE id = %s""", (mvt_id,))
             row = cur.fetchone()
-        if not row or not row['facture_contenu']:
-            flash("Aucune facture pour cet article.", "warning")
-            return redirect(url_for('parc.view_materiel', id=id))
+        if not row:
+            flash("Mouvement introuvable.", "danger")
+            return redirect(url_for('parc.materiels'))
+        if not row['facture_contenu']:
+            flash("Aucune facture sur ce mouvement.", "warning")
+            return redirect(url_for('parc.view_materiel', id=row['materiel_id']))
         return send_file(
             io.BytesIO(bytes(row['facture_contenu'])),
             mimetype=_mime_facture(row['facture_type']),
@@ -811,26 +831,35 @@ def creer_blueprint_parc(deps):
         )
 
 
-    @bp.route('/materiels/<int:id>/facture/supprimer', methods=['POST'])
+    @bp.route('/mouvements/<int:mvt_id>/facture/supprimer', methods=['POST'])
     @login_required
     @role_required('admin', 'rh')
-    def supprimer_facture(id):
-        """Retire la facture sans toucher à l'article ni à son stock."""
+    def supprimer_facture(mvt_id):
+        """Retire la facture du mouvement, sans toucher au stock."""
         try:
             with db_cursor(commit=True) as (conn, cur):
+                cur.execute("""SELECT materiel_id FROM materiels_mouvements
+                                WHERE id = %s""", (mvt_id,))
+                row = cur.fetchone()
+                if not row:
+                    flash("Mouvement introuvable.", "danger")
+                    return redirect(url_for('parc.materiels'))
                 cur.execute("""
-                    UPDATE materiels
-                       SET facture_nom=NULL, facture_contenu=NULL, facture_type=NULL,
-                           facture_taille=NULL, facture_date_upload=NULL
+                    UPDATE materiels_mouvements
+                       SET facture_nom=NULL, facture_contenu=NULL,
+                           facture_type=NULL, facture_taille=NULL,
+                           facture_date_upload=NULL
                      WHERE id=%s
-                """, (id,))
+                """, (mvt_id,))
             log_action(session.get('user_id'), session.get('username'),
-                       "Suppression facture matériel", "materiel", id, "")
-            flash("Facture supprimée.", "info")
+                       "Suppression facture entree", "materiel",
+                       row['materiel_id'], "")
+            flash("Facture retirée de l'entrée en stock.", "info")
+            return redirect(url_for('parc.view_materiel', id=row['materiel_id']))
         except Exception as e:
             logger.error("Erreur suppression facture: %s", e, exc_info=True)
             flash(f"Erreur : {e}", "danger")
-        return redirect(url_for('parc.view_materiel', id=id))
+        return redirect(url_for('parc.materiels'))
 
 
     def _mime_facture(type_fichier):
