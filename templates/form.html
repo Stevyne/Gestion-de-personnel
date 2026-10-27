@@ -61,7 +61,7 @@
                        value="{{ employee.date_embauche.strftime('%Y-%m-%d') if employee and employee.date_embauche else '' }}">
             </div>
             <div class="form-group">
-                <label for="salaire">Salaire annuel (Ar)</label>
+                <label for="salaire">Salaire mensuel brut (Ar)</label>
                 <input type="number" id="salaire" name="salaire" step="100" class="form-control" 
                        value="{{ employee.salaire if employee and employee.salaire else '' }}">
             </div>

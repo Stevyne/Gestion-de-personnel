@@ -1,6 +1,12 @@
 import io
+from datetime import date, timedelta
 
 import app as application
+
+
+def _dans(jours):
+    """Date relative à aujourd'hui : évite les tests qui périment."""
+    return (date.today() + timedelta(days=jours)).isoformat()
 
 
 def _login(client, username, password):
@@ -55,7 +61,7 @@ def test_workflow_complet_recrutement_jusqua_embauche(app):
             'niveau_experience': '3 ans', 'diplome_requis': 'Bac+3',
             'type_contrat': 'cdi', 'salaire_min': '50000',
             'salaire_max': '70000', 'localisation': 'Antananarivo',
-            'date_limite': '2026-09-15', 'nombre_postes': '2',
+            'date_limite': _dans(30), 'nombre_postes': '2',
         },
     )
     assert response.status_code in (301, 302)

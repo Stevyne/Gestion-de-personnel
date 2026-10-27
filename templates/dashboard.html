@@ -191,7 +191,7 @@
   <section class="dashboard-section">
     <div class="section-title"><h2>📅 Activité récente</h2><span>{{ dashboard_scope.label }}</span></div>
     <div class="recent-grid">
-      <div><h3>Derniers pointages</h3>{% for p in recent_presences %}<p>{{ p.prenom }} {{ p.nom }} — {{ p.date }}</p>{% else %}<p class="muted">Aucun</p>{% endfor %}</div>
+      <div><h3>Derniers pointages</h3>{% for p in recent_presences %}<p>{{ p.prenom }} {{ p.nom }} — {{ p.date }}{% if p.heure_arrivee %} · <strong>arrivée {{ (p.heure_arrivee|string)[:5] }}</strong>{% endif %}</p>{% else %}<p class="muted">Aucun</p>{% endfor %}</div>
       <div><h3>Dernières demandes de congé</h3>{% for c in recent_conges %}<p>{{ c.prenom }} {{ c.nom }} — {{ c.date_debut }} ({{ c.statut }})</p>{% else %}<p class="muted">Aucune</p>{% endfor %}</div>
     </div>
   </section>

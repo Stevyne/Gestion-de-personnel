@@ -236,11 +236,14 @@ def test_configuration_production_versionnee_sans_blocage_cd():
     assert 'flask bootstrap-db && flask db upgrade' in render
     assert render.count("autoDeployTrigger: 'off'") == 2
     assert 'autoDeployTrigger: checksPass' not in render
-    assert 'PUSH_COUNT_BASELINE: "14"' in workflow
-    assert 'position % 10 == 0' in workflow
-    assert "needs.cadence.outputs.run_tests == 'true'" in workflow
-    assert 'GITHUB_EVENT_NAME' in workflow
-    assert 'cancel-in-progress: false' in workflow
+    # La suite complète doit tourner à chaque push : toute logique de cadence
+    # rend le badge non représentatif de l'état réel de master.
+    assert 'PUSH_COUNT_BASELINE' not in workflow
+    assert 'position % 10' not in workflow
+    assert 'needs.cadence' not in workflow
+    assert 'if: needs.' not in workflow
+    assert 'GITHUB_EVENT_NAME' not in workflow
+    assert "cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}" in workflow
     assert 'workflow_dispatch:' in workflow
     assert 'pull_request:' in workflow
     assert 'sync: false' not in env_group

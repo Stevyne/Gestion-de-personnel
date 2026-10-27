@@ -1,4 +1,4 @@
-"""Workflow strict de départ d'un employé avec archivage."""
+"""Workflow strict de débauchage d'un employé (contraire de l'embauche)."""
 
 from datetime import date, datetime
 
@@ -59,10 +59,10 @@ def creer_blueprint_departs(deps):
         try:
             date_prevue = datetime.strptime(date_prevue_raw, '%Y-%m-%d').date()
         except ValueError:
-            flash("Date de départ prévue invalide.", 'danger')
+            flash("Date de débauchage prévue invalide.", 'danger')
             return redirect(url_for('departs.departs_liste'))
         if not motif:
-            flash("Le motif du départ est obligatoire.", 'danger')
+            flash("Le motif du débauchage est obligatoire.", 'danger')
             return redirect(url_for('departs.departs_liste'))
 
         user_id = None
@@ -93,16 +93,16 @@ def creer_blueprint_departs(deps):
                         (id, f"Prévu le {date_prevue}: {motif}", session.get('user_id'),
                          session.get('username')))
             if user_id:
-                create_notification(user_id, "Préparation de votre départ",
-                                    f"Votre départ est prévu le {date_prevue}. Les matériels doivent être restitués.",
+                create_notification(user_id, "Préparation de votre débauchage",
+                                    f"Votre débauchage est prévu le {date_prevue}. Les matériels doivent être restitués.",
                                     'warning', cur=cur)
-            queue_email(email, "Préparation de votre départ",
-                        f"Bonjour {employe['prenom']},\n\nVotre départ est prévu le {date_prevue}. "
+            queue_email(email, "Préparation de votre débauchage",
+                        f"Bonjour {employe['prenom']},\n\nVotre débauchage est prévu le {date_prevue}. "
                         "Merci de restituer tous les matériels avant la clôture.",
                         cur=cur, event_key=f"depart-initie:{id}:{date_prevue}")
         log_action(session.get('user_id'), session.get('username'), 'DEPART_INITIE',
                    'employe', id, f"{nom} — {date_prevue}")
-        flash("Départ initié. La clôture restera bloquée jusqu'au retour de tous les matériels.", 'success')
+        flash("Débauchage initié. La clôture restera bloquée jusqu'au retour de tous les matériels.", 'success')
         return redirect(url_for('departs.departs_liste'))
 
     @bp.route('/employes/<int:id>/depart/finaliser', methods=['POST'])
@@ -115,7 +115,7 @@ def creer_blueprint_departs(deps):
             try:
                 date_effective = datetime.strptime(date_effective_raw, '%Y-%m-%d').date()
             except ValueError:
-                flash("Date de départ effective invalide.", 'danger')
+                flash("Date de débauchage effective invalide.", 'danger')
                 return redirect(url_for('departs.departs_liste'))
 
         with db_cursor(commit=True) as (conn, cur):
@@ -125,7 +125,7 @@ def creer_blueprint_departs(deps):
                 flash("Employé introuvable.", 'danger')
                 return redirect(url_for('departs.departs_liste'))
             if employe['statut_depart'] != 'preparation' or not employe['actif']:
-                flash("Le départ doit d'abord être initié.", 'warning')
+                flash("Le débauchage doit d'abord être initié.", 'warning')
                 return redirect(url_for('departs.departs_liste'))
             attributions, exemplaires = _materiels_restants(cur, id)
             if attributions or exemplaires:
@@ -146,12 +146,12 @@ def creer_blueprint_departs(deps):
             cur.execute("""INSERT INTO depart_employe_logs
                 (employe_id,evenement,details,acteur_id,acteur_nom)
                 VALUES (%s,'finalise',%s,%s,%s)""",
-                        (id, f"Départ effectif le {date_effective}", session.get('user_id'),
+                        (id, f"Débauchage effectif le {date_effective}", session.get('user_id'),
                          session.get('username')))
             nom = f"{employe['prenom']} {employe['nom']}"
         log_action(session.get('user_id'), session.get('username'), 'DEPART_FINALISE',
                    'employe', id, f"{nom} — {date_effective}")
-        flash("Départ finalisé : fiche archivée, comptes désactivés et sessions fermées.", 'success')
+        flash("Débauchage finalisé : fiche archivée, comptes désactivés et sessions fermées.", 'success')
         return redirect(url_for('departs.departs_liste'))
 
     @bp.route('/employes/<int:id>/depart/annuler', methods=['POST'])
@@ -162,7 +162,7 @@ def creer_blueprint_departs(deps):
             cur.execute("SELECT statut_depart FROM employes WHERE id=%s FOR UPDATE", (id,))
             employe = cur.fetchone()
             if not employe or employe['statut_depart'] != 'preparation':
-                flash("Aucun départ en préparation pour cet employé.", 'warning')
+                flash("Aucun débauchage en préparation pour cet employé.", 'warning')
                 return redirect(url_for('departs.departs_liste'))
             cur.execute("""UPDATE employes SET statut_depart='annule', date_depart_prevue=NULL,
                            depart_initie_par=NULL, depart_initie_le=NULL WHERE id=%s""", (id,))
@@ -172,7 +172,7 @@ def creer_blueprint_departs(deps):
                         (id, session.get('user_id'), session.get('username')))
         log_action(session.get('user_id'), session.get('username'), 'DEPART_ANNULE',
                    'employe', id, None)
-        flash("Préparation du départ annulée.", 'info')
+        flash("Préparation du débauchage annulée.", 'info')
         return redirect(url_for('departs.departs_liste'))
 
     return bp

@@ -1,6 +1,4 @@
 """Tests du module Compétences."""
-import pytest
-from bs4 import BeautifulSoup
 
 
 _PASSWORDS = {

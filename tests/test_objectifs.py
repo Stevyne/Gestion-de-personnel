@@ -1,5 +1,4 @@
 """Tests du module Objectifs."""
-import pytest
 
 
 def _login(client, username):
@@ -38,7 +37,7 @@ def test_employe_peut_creer_son_objectif(app, client):
 def test_employe_ne_peut_creer_pour_autrui(app, client):
     """L'employé ne doit pas pouvoir choisir un autre employé."""
     _login(client, 'employe')
-    r = client.post('/objectifs/nouveau', data={
+    client.post('/objectifs/nouveau', data={
         'employe_id': 4,  # admin
         'titre': 'Tentative',
     }, follow_redirects=True)
@@ -48,9 +47,10 @@ def test_employe_ne_peut_creer_pour_autrui(app, client):
         with a.db_cursor() as (conn, cur):
             cur.execute("SELECT employe_id FROM objectifs WHERE titre='Tentative'")
             row = cur.fetchone()
+            # Sans objet créé, le test passerait sans rien vérifier.
+            assert row is not None, "aucun objectif créé : le test ne vérifie rien"
             # la fiche employé liée au compte employe doit être id=1 en seed
-            if row:
-                assert row['employe_id'] == 1
+            assert row['employe_id'] == 1
 
 
 def test_manager_peut_creer_pour_son_departement(app, client):

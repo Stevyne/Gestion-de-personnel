@@ -22,4 +22,7 @@ qrcode==8.2
 redis==8.1.0
 reportlab==4.1.0
 sentry-sdk[flask]==2.68.0
+# SQLAlchemy 2.1 change le dialecte PostgreSQL par défaut (psycopg v3) et
+# empêche le démarrage avec psycopg2-binary. On reste sur la branche 2.0.
+SQLAlchemy>=2.0,<2.1
 Werkzeug==3.0.3

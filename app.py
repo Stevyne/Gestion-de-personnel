@@ -27,6 +27,7 @@ from services.object_storage import object_storage
 from services.observability import configure_logging, init_sentry, register_observability
 from services.notifications import creer_service_notifications
 from services.roles import GLOBAL_DATA_ROLES, ROLE_LABELS
+from services.acl import endpoint_autorise
 from services.schema import initialiser_schema
 from blueprints.absence_justifications import (
     ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
@@ -157,7 +158,8 @@ def get_admin_email():
         cur.close()
         conn.close()
         if row and row.get('email'): return row['email']
-    except: pass
+    except Exception as exc:
+        logger.warning("Admin introuvable en base (%s), repli sur la configuration.", exc)
     return app.config.get('ADMIN_EMAIL') or 'admin@entreprise.fr'
 
 mail = Mail(app)
@@ -558,6 +560,30 @@ def enforce_department_resource_scope():
     return None
 
 
+@app.before_request
+def enforce_role_acl():
+    """Filet central : un rôle restreint n'accède qu'à ce qui est listé.
+
+    Complète les décorateurs ``role_required`` route par route : plutôt que
+    d'espérer qu'aucun décorateur n'a été oublié, on part du principe qu'un
+    rôle restreint ne voit que ce que ``services/acl.py`` autorise.
+    """
+    if not session.get('user_id'):
+        return None
+    endpoint = request.endpoint
+    if endpoint is None:
+        return None
+    role = session.get('role', 'employe')
+    if endpoint_autorise(role, endpoint):
+        return None
+    logger.warning("Accès refusé par l'ACL: user=%s role=%s endpoint=%s",
+                   session.get('username'), role, endpoint)
+    if endpoint == 'recherche.api_recherche':
+        return jsonify({'erreur': True, 'message': 'Accès refusé'}), 403
+    flash("Accès refusé : cette page n'est pas disponible pour votre rôle.", "danger")
+    return redirect(url_for('dashboard.dashboard'))
+
+
 # ==================== NOTIFICATIONS (Base de données - support multi-utilisateur réel) ====================
 # ==================== NOTIFICATIONS ====================
 (create_notification, get_unread_notifications, mark_all_read,
@@ -603,7 +629,8 @@ def inject_context():
     try:
         user_id = session.get('user_id')
         unread_count = len(get_unread_notifications(user_id)) if user_id else 0
-    except:
+    except Exception as exc:
+        logger.warning("Compteur de notifications indisponible: %s", exc)
         unread_count = 0
     # Mode « popup » : quand une page de formulaire est demandée avec ?modal=1
     # (par le JS d'ouverture de la fenêtre modale), on l'affiche via un layout
@@ -666,7 +693,11 @@ def log_action(user_id=None, username=None, action="", entity_type=None, entity_
                     (user_id, username, action, entity_type, entity_id, details, ip))
         conn.commit()
         cur.close(); conn.close()
-    except: pass
+    except Exception as exc:
+        # Une panne de journalisation ne doit pas interrompre l'action métier,
+        # mais elle doit rester visible : c'est la piste d'audit.
+        logger.error("Échec de journalisation d'audit (action=%s, entité=%s): %s",
+                     action, entity_type, exc, exc_info=True)
 
 def login_required(f):
     @wraps(f)
@@ -783,7 +814,9 @@ def get_current_employee():
         with db_cursor() as (conn, cur):
             cur.execute("SELECT e.* FROM employes e JOIN users u ON u.employe_id = e.id WHERE u.id = %s LIMIT 1", (session['user_id'],))
             return cur.fetchone()
-    except:
+    except Exception as exc:
+        logger.warning("Fiche employé du compte %s illisible: %s",
+                       session.get('user_id'), exc)
         return None
 
 Q_SOLDE = ("SELECT jours_acquis, jours_utilises FROM soldes_conges "
@@ -2389,8 +2422,9 @@ def delete_employee(id):
         # 5. Supprimer les notifications liées (si la table existe)
         try:
             cur.execute("DELETE FROM notifications WHERE user_id IN (SELECT id FROM users WHERE employe_id = %s)", (id,))
-        except:
-            pass
+        except Exception as exc:
+            logger.warning("Purge des notifications impossible (%s), "
+                           "poursuite de la suppression de l'employé.", exc, exc_info=True)
         
         # 6. Supprimer les utilisateurs liés (clé étrangère principale)
         cur.execute("DELETE FROM users WHERE employe_id = %s", (id,))

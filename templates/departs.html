@@ -4,7 +4,7 @@
 <div class="card">
   <div class="card-header">
     <div>
-      <h1>{{ icon('logout') }}<span>Départs des employés</span></h1>
+      <h1>{{ icon('logout') }}<span>Débauchage des employés</span></h1>
       <p>Archivage strict après restitution de tous les matériels.</p>
     </div>
     <a href="{{ url_for('index') }}" class="btn btn-secondary">← Employés</a>
@@ -19,7 +19,7 @@
         <td data-label="Département">{{ e.departement or '—' }}</td>
         <td data-label="Statut">
           {% if not e.actif %}<span class="badge badge-danger">Archivé</span><div class="wf-meta">{{ e.date_depart_effective or '' }}</div>
-          {% elif e.statut_depart == 'preparation' %}<span class="badge badge-warning">Départ en préparation</span><div class="wf-meta">Prévu le {{ e.date_depart_prevue }}</div>
+          {% elif e.statut_depart == 'preparation' %}<span class="badge badge-warning">Débauchage en préparation</span><div class="wf-meta">Prévu le {{ e.date_depart_prevue }}</div>
           {% else %}<span class="badge badge-success">Actif</span>{% endif %}
         </td>
         <td data-label="Matériel restant">
@@ -31,8 +31,8 @@
           <form method="post" action="{{ url_for('departs.depart_initier', id=e.id) }}" style="display:grid;gap:6px;min-width:230px;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="date" name="date_depart_prevue" class="form-control" min="{{ today }}" required>
-            <input type="text" name="motif_depart" class="form-control" placeholder="Motif du départ" required maxlength="500">
-            <button class="btn btn-primary btn-sm" type="submit">{{ icon('logout', 13) }} Initier le départ</button>
+            <input type="text" name="motif_depart" class="form-control" placeholder="Motif du débauchage" required maxlength="500">
+            <button class="btn btn-primary btn-sm" type="submit">{{ icon('logout', 13) }} Initier le débauchage</button>
           </form>
           {% elif e.actif and e.statut_depart == 'preparation' %}
           <div class="wf-actions" style="display:grid;gap:7px;">

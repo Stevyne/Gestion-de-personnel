@@ -329,7 +329,7 @@
                         <a href="{{ url_for('index') }}" class="nav-dropdown-link {% if request.endpoint == 'index' %}active{% endif %}">
                             {{ icon('users', 17) }}<span>Employés</span>
                         </a>
-                        {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+{% if session.get('role') in ['admin', 'rh'] %}
                         <a href="{{ url_for('recrutement.tableau_recrutement') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('recrutement.') %}active{% endif %}">
                             {{ icon('clipboard', 17) }}<span>Recrutement</span>
                         </a>
@@ -348,7 +348,7 @@
                         </a>
                         {% if session.get('role') in ['admin', 'rh'] %}
                         <a href="{{ url_for('departs.departs_liste') }}" class="nav-dropdown-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">
-                            {{ icon('logout', 17) }}<span>Départs</span>
+                            {{ icon('logout', 17) }}<span>Débauchages</span>
                         </a>
                         {% endif %}
                     </div>
@@ -554,7 +554,7 @@
 
                 <p class="drawer-section">Personnel</p>
                 <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">{{ icon('users') }}<span>Employés</span></a>
-                {%  if session.get('role') in ['admin', 'rh', 'manager'] %}
+{%  if session.get('role') in ['admin', 'rh'] %}
                 <a href="{{ url_for('recrutement.tableau_recrutement') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('recrutement.') %}active{% endif %}">{{ icon('clipboard') }}<span>Recrutement</span></a>
                 <a href="{{ url_for('departements.departements') }}" class="nav-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">{{ icon('building') }}<span>Départements</span></a>
                 <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">{{ icon('file') }}<span>Contrats</span></a>
@@ -562,11 +562,13 @@
                 {% endif %}
                 <a href="{{ url_for('objectifs.objectifs_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('objectifs.') %}active{% endif %}">{{ icon('target') }}<span>Objectifs</span></a>
                 {% if session.get('role') in ['admin', 'rh'] %}
-                <a href="{{ url_for('departs.departs_liste') }}" class="nav-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">{{ icon('logout') }}<span>Départs</span></a>
+                <a href="{{ url_for('departs.departs_liste') }}" class="nav-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">{{ icon('logout') }}<span>Débauchages</span></a>
                 {% endif %}
 
                 <p class="drawer-section">Temps</p>
+                {% if session.get('role') != 'employe' %}
                 <a href="{{ url_for('presences.presences') }}" class="nav-link {% if request.endpoint == 'presences.presences' %}active{% endif %}">{{ icon('clock') }}<span>Présences</span></a>
+                {% endif %}
                 <a href="{{ url_for('presences.historique') }}" class="nav-link {% if request.endpoint == 'presences.historique' %}active{% endif %}">{{ icon('history') }}<span>Historique</span></a>
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
                 <a href="{{ url_for('absences.absences') }}" class="nav-link {% if request.endpoint == 'absences.absences' %}active{% endif %}">{{ icon('user-x') }}<span>Absences</span></a>
@@ -581,9 +583,11 @@
                 {% endif %}
 
                 <p class="drawer-section">Ressources</p>
+                {% if session.get('role') in ['admin', 'rh'] %}
                 <a href="{{ url_for('parc.materiels') }}" class="nav-link {% if request.endpoint in ['parc.materiels', 'parc.add_materiel', 'parc.edit_materiel', 'parc.view_materiel', 'parc.materiels_departement'] %}active{% endif %}">{{ icon('box') }}<span>Matériels</span></a>
                 <a href="{{ url_for('parc.inventaires') }}" class="nav-link {% if request.endpoint in ['parc.inventaires', 'parc.add_inventaire', 'parc.view_inventaire'] %}active{% endif %}">{{ icon('clipboard') }}<span>Inventaire</span></a>
                 <a href="{{ url_for('parc.maintenances') }}" class="nav-link {% if request.endpoint in ['parc.maintenances', 'parc.view_exemplaire'] %}active{% endif %}">{{ icon('wrench') }}<span>Maintenance</span></a>
+                {% endif %}
                 {% if session.get('role') in ['admin', 'rh'] %}
                 <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs.utilisateurs_page', 'utilisateurs.register'] %}active{% endif %}">{{ icon('shield') }}<span>Utilisateurs</span></a>
                 {% endif %}

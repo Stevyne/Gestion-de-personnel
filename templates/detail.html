@@ -29,9 +29,9 @@
                         <span class="badge badge-info">Embauché le {{ employee.date_embauche }}</span>
                         {% endif %}
                         {% if not employee.actif %}
-                        <span class="badge badge-danger">Archivé · départ {{ employee.date_depart_effective }}</span>
+                        <span class="badge badge-danger">Archivé · débauchage {{ employee.date_depart_effective }}</span>
                         {% elif employee.statut_depart == 'preparation' %}
-                        <span class="badge badge-warning">Départ prévu le {{ employee.date_depart_prevue }}</span>
+                        <span class="badge badge-warning">Débauchage prévu le {{ employee.date_depart_prevue }}</span>
                         {% endif %}
                     </div>
                 </div>
@@ -43,7 +43,7 @@
                 <a href="{{ url_for('objectifs.objectifs_liste', employe_id=employee.id) }}" class="btn btn-secondary">{{ icon('target', 15) }}<span>Objectifs</span></a>
                 {% if current_role in ['admin','rh'] %}
                 <a href="{{ url_for('contrats.contrats_liste', employe_id=employee.id) }}" class="btn btn-secondary">{{ icon('file', 15) }}<span>Contrats</span></a>
-                <a href="{{ url_for('departs.departs_liste') }}" class="btn btn-secondary">{{ icon('logout', 15) }}<span>Départ</span></a>
+                <a href="{{ url_for('departs.departs_liste') }}" class="btn btn-secondary">{{ icon('logout', 15) }}<span>Débauchage</span></a>
                 {% endif %}
                 <a data-modal-title="Modifier l'employé" href="{{ url_for('edit_employee', id=employee.id) }}" class="js-modal-form btn btn-secondary">
                     {{ icon('wrench', 15) }}<span>Modifier</span>
@@ -122,7 +122,7 @@
                 <div class="info-grid">
                     {% if current_role in ['admin', 'rh'] %}
                     <div class="info-row">
-                        <div class="info-label">Salaire annuel</div>
+                        <div class="info-label">Salaire mensuel brut</div>
                         <div class="info-value">
                             {% if employee.salaire %}
                                 <span style="color:#166534; font-weight:700; font-size:1.25rem;">

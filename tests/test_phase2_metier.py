@@ -57,7 +57,7 @@ def test_depart_bloque_jusqu_au_retour_de_tout_materiel(admin_client):
     final = admin_client.post('/employes/1/depart/finaliser', data={
         'date_depart_effective': date.today().isoformat(),
     }, follow_redirects=True)
-    assert 'Départ finalisé'.encode('utf-8') in final.data
+    assert 'Débauchage finalisé'.encode('utf-8') in final.data
     with application.db_cursor() as (conn, cur):
         cur.execute("SELECT actif,statut_depart,date_depart_effective FROM employes WHERE id=1")
         employe = cur.fetchone()
