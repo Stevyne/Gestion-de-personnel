@@ -321,109 +321,155 @@
                 </a>
 
                 {# --- Personnel : employés + départements + contrats + recrutement + compétences + objectifs --- #}
+                {% if peut_une_de('index', 'recrutement.tableau_recrutement', 'departements.departements', 'contrats.contrats_liste', 'competences.competences_liste', 'objectifs.objectifs_liste', 'departs.departs_liste') %}
                 <div class="nav-dropdown">
                     <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['index','add_employee','edit_employee','employee_detail','departements.departements','departements.add_departement','departements.edit_departement','departs.departs_liste'] or (request.endpoint and (request.endpoint.startswith('recrutement.') or request.endpoint.startswith('competences.') or request.endpoint.startswith('objectifs.') or request.endpoint.startswith('contrats.') or request.endpoint.startswith('documents.'))) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('users') }}<span>Personnel</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
+{% if peut('index') %}
                         <a href="{{ url_for('index') }}" class="nav-dropdown-link {% if request.endpoint == 'index' %}active{% endif %}">
                             {{ icon('users', 17) }}<span>Employés</span>
                         </a>
+                        {% endif %}
 {% if session.get('role') in ['admin', 'rh'] %}
+{% if peut('recrutement.tableau_recrutement') %}
                         <a href="{{ url_for('recrutement.tableau_recrutement') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('recrutement.') %}active{% endif %}">
                             {{ icon('clipboard', 17) }}<span>Recrutement</span>
                         </a>
+                        {% endif %}
+{% if peut('departements.departements') %}
                         <a href="{{ url_for('departements.departements') }}" class="nav-dropdown-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">
                             {{ icon('building', 17) }}<span>Départements</span>
                         </a>
+                        {% endif %}
+{% if peut('contrats.contrats_liste') %}
                         <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">
                             {{ icon('file', 17) }}<span>Contrats</span>
                         </a>
+                        {% endif %}
+{% if peut('competences.competences_liste') %}
                         <a href="{{ url_for('competences.competences_liste') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('competences.') %}active{% endif %}">
                             {{ icon('brain', 17) }}<span>Compétences</span>
                         </a>
                         {% endif %}
+                        {% endif %}
+{% if peut('objectifs.objectifs_liste') %}
                         <a href="{{ url_for('objectifs.objectifs_liste') }}" class="nav-dropdown-link {% if request.endpoint and request.endpoint.startswith('objectifs.') %}active{% endif %}">
                             {{ icon('target', 17) }}<span>Objectifs</span>
                         </a>
+                        {% endif %}
                         {% if session.get('role') in ['admin', 'rh'] %}
+{% if peut('departs.departs_liste') %}
                         <a href="{{ url_for('departs.departs_liste') }}" class="nav-dropdown-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">
                             {{ icon('logout', 17) }}<span>Débauchages</span>
                         </a>
                         {% endif %}
+                        {% endif %}
                     </div>
                 </div>
 
+                {% endif %}
                 {# --- Temps : présences, historique, absences --- #}
+                {% if peut_une_de('presences.presences', 'presences.historique', 'absences.absences') %}
                 <div class="nav-dropdown">
                     <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('presences.') or request.endpoint.startswith('absences.') or request.endpoint.startswith('absence_justifications.')) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('clock') }}<span>Temps</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
+{% if peut('presences.presences') %}
                         <a href="{{ url_for('presences.presences') }}" class="nav-dropdown-link {% if request.endpoint in ['presences.presences','presences.add_presence'] %}active{% endif %}">
                             {{ icon('clock', 17) }}<span>Présences</span>
                         </a>
+                        {% endif %}
+{% if peut('presences.historique') %}
                         <a href="{{ url_for('presences.historique') }}" class="nav-dropdown-link {% if request.endpoint == 'presences.historique' %}active{% endif %}">
                             {{ icon('history', 17) }}<span>Historique</span>
                         </a>
+                        {% endif %}
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+{% if peut('absences.absences') %}
                         <a href="{{ url_for('absences.absences') }}" class="nav-dropdown-link {% if request.endpoint and (request.endpoint.startswith('absences.') or request.endpoint.startswith('absence_justifications.')) %}active{% endif %}">
                             {{ icon('user-x', 17) }}<span>Absences</span>
                         </a>
                         {% endif %}
+                        {% endif %}
                     </div>
                 </div>
 
+                {% endif %}
                 {# --- Congés : congés, permissions, soldes, calendrier --- #}
+                {% if peut_une_de('conges.conges', 'permissions', 'calendrier_conges', 'soldes_conges_page') %}
                 <div class="nav-dropdown">
                     <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['conges.conges','permissions','soldes_conges_page','calendrier_conges','conges.add_conge','add_permission','self_service_conges'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('palm') }}<span>Congés</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
+{% if peut('conges.conges') %}
                         <a href="{{ url_for('conges.conges') }}" class="nav-dropdown-link {% if request.endpoint == 'conges.conges' %}active{% endif %}">
                             {{ icon('palm', 17) }}<span>Congés</span>
                         </a>
+                        {% endif %}
+{% if peut('permissions') %}
                         <a href="{{ url_for('permissions') }}" class="nav-dropdown-link {% if request.endpoint == 'permissions' %}active{% endif %}">
                             {{ icon('file', 17) }}<span>Permissions</span>
                         </a>
+                        {% endif %}
+{% if peut('calendrier_conges') %}
                         <a href="{{ url_for('calendrier_conges') }}" class="nav-dropdown-link {% if request.endpoint == 'calendrier_conges' %}active{% endif %}">
                             {{ icon('calendar', 17) }}<span>Calendrier</span>
                         </a>
+                        {% endif %}
                         {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+{% if peut('soldes_conges_page') %}
                         <a href="{{ url_for('soldes_conges_page') }}" class="nav-dropdown-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">
                             {{ icon('wallet', 17) }}<span>Soldes</span>
                         </a>
                         {% endif %}
+                        {% endif %}
                     </div>
                 </div>
 
+                {% endif %}
                 {# --- Matériels : stock et inventaire physique --- #}
+                {% if peut_une_de('parc.materiels', 'parc.inventaires', 'parc.maintenances', 'parc.prestataires_page') %}
                 <div class="nav-dropdown">
                     <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('parc.') or request.endpoint.startswith('rapports_parc.')) %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
                         {{ icon('box') }}<span>Matériels</span>{{ icon('chevron', 14) }}
                     </button>
                     <div class="nav-dropdown-menu">
+{% if peut('parc.materiels') %}
                         <a href="{{ url_for('parc.materiels') }}" class="nav-dropdown-link {% if request.endpoint in ['parc.materiels', 'parc.add_materiel', 'parc.edit_materiel', 'parc.view_materiel', 'parc.materiels_departement'] %}active{% endif %}">
                             {{ icon('box', 17) }}<span>Stock</span>
                         </a>
+                        {% endif %}
+{% if peut('parc.inventaires') %}
                         <a href="{{ url_for('parc.inventaires') }}" class="nav-dropdown-link {% if request.endpoint in ['parc.inventaires', 'parc.add_inventaire', 'parc.view_inventaire'] %}active{% endif %}">
                             {{ icon('clipboard', 17) }}<span>Inventaire</span>
                         </a>
+                        {% endif %}
+{% if peut('parc.maintenances') %}
                         <a href="{{ url_for('parc.maintenances') }}" class="nav-dropdown-link {% if request.endpoint in ['parc.maintenances', 'parc.view_exemplaire'] %}active{% endif %}">
                             {{ icon('wrench', 17) }}<span>Maintenance</span>
                         </a>
+                        {% endif %}
                         {% if session.get('role') in ['admin', 'rh'] %}
+{% if peut('parc.prestataires_page') %}
                         <a href="{{ url_for('parc.prestataires_page') }}" class="nav-dropdown-link {% if request.endpoint == 'parc.prestataires_page' %}active{% endif %}">
                             {{ icon('building', 17) }}<span>Prestataires</span>
                         </a>
                         {% endif %}
+                        {% endif %}
                     </div>
                 </div>
 
+                {% endif %}
                 {% if session.get('role') in ['admin', 'rh'] %}
+{% if peut('utilisateurs.utilisateurs_page') %}
                 <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs.utilisateurs_page', 'utilisateurs.register'] %}active{% endif %}">
                     {{ icon('shield') }}<span>Utilisateurs</span>
                 </a>
+                {% endif %}
                 {% endif %}
             </div>
 
@@ -499,9 +545,11 @@
                             {% endif %}
                         </a>
                         {% if session.get('role') in ['admin', 'rh'] %}
+{% if peut('utilisateurs.utilisateurs_page') %}
                         <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-dropdown-link">
                             {{ icon('shield', 17) }}<span>Gestion des accès</span>
                         </a>
+                        {% endif %}
                         {% endif %}
                         <a href="{{ url_for('auth.logout') }}" class="nav-dropdown-link danger">
                             {{ icon('logout', 17) }}<span>Déconnexion</span>
@@ -553,43 +601,79 @@
                 <a href="{{ url_for('dashboard.dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}">{{ icon('dashboard') }}<span>Tableau de bord</span></a>
 
                 <p class="drawer-section">Personnel</p>
+{% if peut('index') %}
                 <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">{{ icon('users') }}<span>Employés</span></a>
+                {% endif %}
 {%  if session.get('role') in ['admin', 'rh'] %}
+{% if peut('recrutement.tableau_recrutement') %}
                 <a href="{{ url_for('recrutement.tableau_recrutement') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('recrutement.') %}active{% endif %}">{{ icon('clipboard') }}<span>Recrutement</span></a>
+                {% endif %}
+{% if peut('departements.departements') %}
                 <a href="{{ url_for('departements.departements') }}" class="nav-link {% if request.endpoint == 'departements.departements' %}active{% endif %}">{{ icon('building') }}<span>Départements</span></a>
+                {% endif %}
+{% if peut('contrats.contrats_liste') %}
                 <a href="{{ url_for('contrats.contrats_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('contrats.') %}active{% endif %}">{{ icon('file') }}<span>Contrats</span></a>
+                {% endif %}
+{% if peut('competences.competences_liste') %}
                 <a href="{{ url_for('competences.competences_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('competences.') %}active{% endif %}">{{ icon('brain') }}<span>Compétences</span></a>
                 {% endif %}
+                {% endif %}
+{% if peut('objectifs.objectifs_liste') %}
                 <a href="{{ url_for('objectifs.objectifs_liste') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('objectifs.') %}active{% endif %}">{{ icon('target') }}<span>Objectifs</span></a>
+                {% endif %}
                 {% if session.get('role') in ['admin', 'rh'] %}
+{% if peut('departs.departs_liste') %}
                 <a href="{{ url_for('departs.departs_liste') }}" class="nav-link {% if request.endpoint == 'departs.departs_liste' %}active{% endif %}">{{ icon('logout') }}<span>Débauchages</span></a>
+                {% endif %}
                 {% endif %}
 
                 <p class="drawer-section">Temps</p>
                 {% if session.get('role') != 'employe' %}
+{% if peut('presences.presences') %}
                 <a href="{{ url_for('presences.presences') }}" class="nav-link {% if request.endpoint == 'presences.presences' %}active{% endif %}">{{ icon('clock') }}<span>Présences</span></a>
                 {% endif %}
+                {% endif %}
+{% if peut('presences.historique') %}
                 <a href="{{ url_for('presences.historique') }}" class="nav-link {% if request.endpoint == 'presences.historique' %}active{% endif %}">{{ icon('history') }}<span>Historique</span></a>
+                {% endif %}
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+{% if peut('absences.absences') %}
                 <a href="{{ url_for('absences.absences') }}" class="nav-link {% if request.endpoint == 'absences.absences' %}active{% endif %}">{{ icon('user-x') }}<span>Absences</span></a>
+                {% endif %}
                 {% endif %}
 
                 <p class="drawer-section">Congés</p>
+{% if peut('conges.conges') %}
                 <a href="{{ url_for('conges.conges') }}" class="nav-link {% if request.endpoint == 'conges.conges' %}active{% endif %}">{{ icon('palm') }}<span>Congés</span></a>
+                {% endif %}
+{% if peut('permissions') %}
                 <a href="{{ url_for('permissions') }}" class="nav-link {% if request.endpoint == 'permissions' %}active{% endif %}">{{ icon('file') }}<span>Permissions</span></a>
+                {% endif %}
+{% if peut('calendrier_conges') %}
                 <a href="{{ url_for('calendrier_conges') }}" class="nav-link {% if request.endpoint == 'calendrier_conges' %}active{% endif %}">{{ icon('calendar') }}<span>Calendrier</span></a>
+                {% endif %}
                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+{% if peut('soldes_conges_page') %}
                 <a href="{{ url_for('soldes_conges_page') }}" class="nav-link {% if request.endpoint == 'soldes_conges_page' %}active{% endif %}">{{ icon('wallet') }}<span>Soldes</span></a>
+                {% endif %}
                 {% endif %}
 
                 <p class="drawer-section">Ressources</p>
                 {% if session.get('role') in ['admin', 'rh'] %}
+{% if peut('parc.materiels') %}
                 <a href="{{ url_for('parc.materiels') }}" class="nav-link {% if request.endpoint in ['parc.materiels', 'parc.add_materiel', 'parc.edit_materiel', 'parc.view_materiel', 'parc.materiels_departement'] %}active{% endif %}">{{ icon('box') }}<span>Matériels</span></a>
+                {% endif %}
+{% if peut('parc.inventaires') %}
                 <a href="{{ url_for('parc.inventaires') }}" class="nav-link {% if request.endpoint in ['parc.inventaires', 'parc.add_inventaire', 'parc.view_inventaire'] %}active{% endif %}">{{ icon('clipboard') }}<span>Inventaire</span></a>
+                {% endif %}
+{% if peut('parc.maintenances') %}
                 <a href="{{ url_for('parc.maintenances') }}" class="nav-link {% if request.endpoint in ['parc.maintenances', 'parc.view_exemplaire'] %}active{% endif %}">{{ icon('wrench') }}<span>Maintenance</span></a>
                 {% endif %}
+                {% endif %}
                 {% if session.get('role') in ['admin', 'rh'] %}
+{% if peut('utilisateurs.utilisateurs_page') %}
                 <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs.utilisateurs_page', 'utilisateurs.register'] %}active{% endif %}">{{ icon('shield') }}<span>Utilisateurs</span></a>
+                {% endif %}
                 {% endif %}
 
                 <div class="drawer-user-section">

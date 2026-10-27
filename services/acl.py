@@ -56,6 +56,22 @@ EMPLOYE = COMMUN | frozenset({
     'calendrier_conges', 'presences.historique',
     'export_presences_pdf', 'export_presences_excel',
     'export_conges_pdf', 'export_conges_excel',
+    # Objectifs : ce module ne pose aucun role_required, il applique ses
+    # propres contrôles enregistrement par enregistrement — le propriétaire
+    # pour la progression et la soumission, le manager ou les RH pour la
+    # validation, 403 pour tout le reste (voir _verifier_ecriture). L'ACL
+    # lui ouvre donc la porte telle quelle : c'est lui qui trie, et le faire
+    # ici en double reviendrait à masquer un bouton que le module sait
+    # parfaitement refuser.
+    'objectifs.objectifs_liste', 'objectifs.objectif_nouveau',
+    'objectifs.objectif_detail', 'objectifs.objectif_modifier',
+    'objectifs.objectif_demarrer', 'objectifs.objectif_progression',
+    'objectifs.objectif_soumettre', 'objectifs.objectif_annuler',
+    'objectifs.objectif_valider', 'objectifs.objectif_non_atteint',
+    'objectifs.objectif_reactiver',
+    # Compétences de la fiche employé : lecture seule de son propre profil.
+    # Le catalogue, lui, reste réservé à admin/RH.
+    'competences.employe_competences',
     # Fiche de paie : composée ici, mais le cloisonnement fin est fait dans
     # la route — un employé n'atteint que sa propre fiche, un manager celles
     # de son département. L'ACL ne sait pas filtrer par enregistrement.
@@ -73,6 +89,12 @@ MANAGER = EMPLOYE | frozenset({
     # Employés : lecture seule. Ni add_employee, ni add_employee_alt,
     # ni edit_employee, ni delete_employee.
     'index', 'view_employee',
+    # Niveaux de compétences des employés de son département, en lecture et
+    # en écriture — mais pas le catalogue, qui reste à admin/RH. Les routes
+    # vérifient elles-mêmes l'appartenance au département (403 sinon).
+    'competences.employe_competence_ajouter',
+    'competences.employe_competence_modifier',
+    'competences.employe_competence_supprimer',
 })
 
 # Rôles soumis au filtre central. admin et rh ont un accès global.

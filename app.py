@@ -28,6 +28,7 @@ from services.observability import configure_logging, init_sentry, register_obse
 from services.notifications import creer_service_notifications
 from services.roles import GLOBAL_DATA_ROLES, ROLE_LABELS
 from services.acl import endpoint_autorise
+from services.masquage_liens import MasqueurLiens
 from services.schema import initialiser_schema
 from blueprints.absence_justifications import (
     ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
@@ -583,6 +584,58 @@ def enforce_role_acl():
         return jsonify({'erreur': True, 'message': 'Accès refusé'}), 403
     flash("Accès refusé : cette page n'est pas disponible pour votre rôle.", "danger")
     return redirect(url_for('dashboard.dashboard'))
+
+
+# ==================== MASQUAGE DES LIENS INTERDITS ====================
+# Complément visible du filet ci-dessus : plutôt que de laisser l'utilisateur
+# cliquer sur un lien qui sera refusé, on le retire de la page envoyée.
+masqueur_liens = MasqueurLiens(app)
+
+
+@app.after_request
+def masquer_liens_interdits(response):
+    """Retire du HTML rendu tout lien vers une page que le rôle ne peut ouvrir.
+
+    Ne s'applique qu'aux réponses HTML réellement rendues et aux rôles
+    filtrés : admin/RH ont un accès global et gardent une page intacte.
+    """
+    try:
+        if response.status_code != 200 or not session.get('user_id'):
+            return response
+        if not (response.content_type or '').startswith('text/html'):
+            return response
+        role = session.get('role', 'employe')
+        corps = response.get_data()
+        filtre = masqueur_liens.filtrer(corps, role)
+        if filtre != corps:
+            response.set_data(filtre)
+    except Exception as exc:
+        # Un échec de réécriture ne doit jamais casser une page : on la
+        # renvoie telle quelle, le filet before_request reste en place.
+        logger.warning("Masquage des liens impossible: %s", exc)
+    return response
+
+
+# ------------------------------------------------------------------ helpers Jinja
+def _role_courant():
+    return session.get('role', 'employe')
+
+
+@app.template_global('peut')
+def peut(endpoint):
+    """Vrai si le rôle courant peut ouvrir ``endpoint`` (usage : {% if peut('index') %})."""
+    return endpoint_autorise(_role_courant(), endpoint)
+
+
+@app.template_global('peut_une_de')
+def peut_une_de(*endpoints):
+    """Vrai si le rôle courant peut ouvrir au moins un des endpoints cités.
+
+    Sert à masquer un menu déroulant entier quand plus aucune de ses entrées
+    n'est accessible, plutôt que de laisser un menu vide.
+    """
+    role = _role_courant()
+    return any(endpoint_autorise(role, e) for e in endpoints)
 
 
 # ==================== NOTIFICATIONS (Base de données - support multi-utilisateur réel) ====================
