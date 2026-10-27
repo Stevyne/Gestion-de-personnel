@@ -31,7 +31,8 @@ from services.acl import endpoint_autorise
 from services.masquage_liens import MasqueurLiens
 from services.schema import initialiser_schema
 from blueprints.absence_justifications import (
-    ABSENCE_ACCEPTEE, ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
+    ABSENCE_ACCEPTEE, ABSENCE_NON_JUSTIFIEE, ABSENCE_REFUSEE,
+    ABSENCE_STATUT_LABELS, creer_blueprint_justifications,
 )
 from blueprints.absences import creer_blueprint_absences
 from blueprints.messagerie import creer_blueprint_messagerie
@@ -2883,8 +2884,11 @@ app.register_blueprint(creer_blueprint_absences({
     'notifier_employe_evenement': _notifier_employe_evenement,
     'generer_absences_automatiques': generer_absences_automatiques,
     'get_department_scope': get_department_scope,
+    'get_current_employee': get_current_employee,
     'ABSENCE_STATUT_LABELS': ABSENCE_STATUT_LABELS,
     'ABSENCE_ACCEPTEE': ABSENCE_ACCEPTEE,
+    'ABSENCE_NON_JUSTIFIEE': ABSENCE_NON_JUSTIFIEE,
+    'ABSENCE_REFUSEE': ABSENCE_REFUSEE,
 }))
 
 app.register_blueprint(creer_blueprint_justifications({

@@ -16,14 +16,26 @@ def creer_blueprint_absences(deps):
     notifier_employe_evenement = deps['notifier_employe_evenement']
     generer_absences_automatiques = deps['generer_absences_automatiques']
     get_department_scope = deps['get_department_scope']
+    get_current_employee = deps['get_current_employee']
     ABSENCE_STATUT_LABELS = deps['ABSENCE_STATUT_LABELS']
     ABSENCE_ACCEPTEE = deps['ABSENCE_ACCEPTEE']
+    ABSENCE_NON_JUSTIFIEE = deps['ABSENCE_NON_JUSTIFIEE']
+    ABSENCE_REFUSEE = deps['ABSENCE_REFUSEE']
     _notifier_employe_evenement = notifier_employe_evenement
 
     @bp.route('/absences')
     @login_required
-    @role_required('admin', 'rh', 'manager')
+    @role_required('admin', 'rh', 'manager', 'employe')
     def absences():
+        # Même page pour tous, mais chacun y voit ce qui le regarde :
+        # l'employé son propre dossier avec un bouton « Justifier », le
+        # manager son département, les RH l'ensemble avec la décision.
+        #
+        # Le cloisonnement par département ne suffit pas pour un employé :
+        # il verrait les absences de ses collègues, ce qui ne les regarde
+        # pas. On restreint donc à son propre identifiant, et on ignore
+        # volontairement le filtre « employe_id » de la querystring — sinon
+        # il suffirait de passer ?employe_id=… pour lire un autre dossier.
         # NOTE : la génération automatique se faisait ici, à CHAQUE affichage de la
         # page. Conséquence : supprimer une absence "aucune présence enregistrée"
         # ne servait à rien, puisque la condition (toujours aucune présence ce
@@ -39,13 +51,26 @@ def creer_blueprint_absences(deps):
         page = max(1, request.args.get('page', 1, type=int))
         per_page = 10
 
+        est_employe = session.get('role') == 'employe'
+        mon_employe_id = None
+        if est_employe:
+            moi = get_current_employee()
+            if not moi:
+                flash("Aucun employé n'est lié à votre compte.", 'warning')
+                return redirect(url_for('self_service'))
+            mon_employe_id = moi['id']
+
         where = ""
         params = []
-        if search:
-            where += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
-            params += [f"%{search.lower()}%", f"%{search.lower()}%"]
-        if employe_id and employe_id.isdigit():
-            where += " AND a.employe_id = %s"; params.append(int(employe_id))
+        if est_employe:
+            where += " AND a.employe_id = %s"
+            params.append(mon_employe_id)
+        else:
+            if search:
+                where += " AND (LOWER(e.nom) LIKE %s OR LOWER(e.prenom) LIKE %s)"
+                params += [f"%{search.lower()}%", f"%{search.lower()}%"]
+            if employe_id and employe_id.isdigit():
+                where += " AND a.employe_id = %s"; params.append(int(employe_id))
         if date_debut:
             where += " AND a.date >= %s"; params.append(date_debut)
         if date_fin:
@@ -54,9 +79,15 @@ def creer_blueprint_absences(deps):
             where += " AND a.statut = %s"; params.append(statut)
 
         with db_cursor() as (conn, cur):
-            scope_where, scope_params = department_scope_sql('e', cur=cur)
-            where += f" AND {scope_where}"
-            params += scope_params
+            if est_employe:
+                # Son identifiant suffit : appliquer la portée département
+                # en plus n'ajouterait rien et ferait dépendre l'affichage
+                # de la saisie du département sur sa fiche.
+                employees = []
+            else:
+                scope_where, scope_params = department_scope_sql('e', cur=cur)
+                where += f" AND {scope_where}"
+                params += scope_params
             from_ = "absences a JOIN employes e ON a.employe_id = e.id"
             cur.execute(f"SELECT COUNT(*) AS nb FROM {from_} WHERE 1=1{where}", params)
             total = cur.fetchone()['nb']
@@ -64,13 +95,17 @@ def creer_blueprint_absences(deps):
             offset = (pg['page'] - 1) * per_page
             cur.execute(f"SELECT a.*, e.nom, e.prenom FROM {from_} WHERE 1=1{where} ORDER BY a.date DESC LIMIT %s OFFSET %s", params + [per_page, offset])
             absences_list = cur.fetchall()
-            cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
-                        scope_params)
-            employees = cur.fetchall()
+            if not est_employe:
+                cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom",
+                            scope_params)
+                employees = cur.fetchall()
         filters = {'search': search, 'employe_id': employe_id, 'date_debut': date_debut,
                    'date_fin': date_fin, 'statut': statut}
         return render_template('absences.html', absences=absences_list, employees=employees,
                                nb_total=total, filters=filters,
+                               est_employe=est_employe,
+                               mon_employe_id=mon_employe_id,
+                               peut_deposer=(ABSENCE_NON_JUSTIFIEE, ABSENCE_REFUSEE),
                                statut_labels=ABSENCE_STATUT_LABELS,
                                pg=pg, page_items=page_list(pg['page'], pg['pages']),
                                base_qs=urlencode({k: v for k, v in filters.items() if v}))

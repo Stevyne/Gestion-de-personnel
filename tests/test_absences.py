@@ -1,3 +1,4 @@
+import re
 from datetime import date, timedelta
 
 import app as application
@@ -96,6 +97,52 @@ def test_generation_est_idempotente(admin_client):
     assert n2 == 0  # déjà créé -> rien de nouveau
 
 
-def test_absences_page_interdite_aux_employes(employe_client):
-    resp = employe_client.get('/absences', follow_redirects=False)
-    assert resp.status_code in (301, 302)
+def test_absences_page_employe_limitee_a_son_propre_dossier(employe_client):
+    """/absences est ouverte à l'employé, mais il n'y voit que ses lignes.
+
+    Le cloisonnement par département ne suffit pas ici : il laisserait
+    l'employé lire les absences de ses collègues, ce qui ne le regarde pas.
+    La vue restreint donc sur son identifiant, et le filtre « employe_id »
+    de la querystring ne doit pas permettre de contourner cela.
+    """
+    with application.db_cursor(commit=True) as (conn, cur):
+        cur.execute("SELECT employe_id FROM users WHERE username = %s", ('employe',))
+        mon_id = cur.fetchone()['employe_id']
+        cur.execute("SELECT id FROM employes WHERE id != %s ORDER BY id LIMIT 1", (mon_id,))
+        autre = cur.fetchone()
+        autre_id = autre['id'] if autre else None
+        cur.execute("DELETE FROM absences WHERE motif LIKE %s", ('TEST-H %',))
+        cur.execute("""
+            INSERT INTO absences (employe_id, date, motif, statut)
+            VALUES (%s, DATE '2020-03-02', 'TEST-H mienne', 'non_justifiee')
+        """, (mon_id,))
+        if autre_id:
+            cur.execute("""
+                INSERT INTO absences (employe_id, date, motif, statut)
+                VALUES (%s, DATE '2020-03-03', 'TEST-H collegue', 'non_justifiee')
+            """, (autre_id,))
+
+    with application.db_cursor() as (conn, cur):
+        cur.execute("SELECT prenom, nom FROM employes WHERE id = %s", (mon_id,))
+        moi = cur.fetchone()
+    mon_nom = f"{moi['prenom']} {moi['nom']}"
+
+    def _noms_lignes(page):
+        return {m.strip() for m in re.findall(
+            r'<td data-label="Employé"><strong>(.*?)</strong></td>', page)}
+
+    resp = employe_client.get('/absences')
+    assert resp.status_code == 200
+    page = resp.data.decode('utf-8')
+    # Son absence y figure, avec de quoi la justifier lui-même.
+    assert 'Justifier cette absence' in page
+    # Celles de ses collègues n'y figurent jamais.
+    assert _noms_lignes(page) == {mon_nom}
+
+    # Passer ?employe_id=<un collègue> ne change rien.
+    if autre_id:
+        resp = employe_client.get(f'/absences?employe_id={autre_id}')
+        assert _noms_lignes(resp.data.decode('utf-8')) == {mon_nom}
+
+    with application.db_cursor(commit=True) as (conn, cur):
+        cur.execute("DELETE FROM absences WHERE motif LIKE %s", ('TEST-H %',))

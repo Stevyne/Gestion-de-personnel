@@ -52,6 +52,10 @@ EMPLOYE = COMMUN | frozenset({
     'absence_justifications.formulaire_justificatif',
     'absence_justifications.deposer_justificatif',
     'absence_justifications.telecharger_justificatif',
+    # Page « Absences » : l'employé n'y voit que son propre dossier, la route
+    # restreint elle-même sur son identifiant. L'ACL ne sait pas filtrer
+    # ligne à ligne, c'est la vue qui cloisonne.
+    'absences.absences',
     # Consultation.
     'calendrier_conges', 'presences.historique',
     'export_presences_pdf', 'export_presences_excel',

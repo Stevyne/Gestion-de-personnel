@@ -6,14 +6,16 @@
     <div class="card-header">
         <div>
           <h1>{{ icon('user-x') }}<span>Absences et justificatifs</span></h1>
-          <p>Suivi de la détection à la décision RH. Les justificatifs médicaux sont visibles uniquement par l'employé concerné et les RH.</p>
+          {% if est_employe %}<p>Vos absences. Depuis cette page vous déposez vous-même la pièce justificative ; les RH l'acceptent ou la refusent.</p>{% else %}<p>Suivi de la détection à la décision RH. Les justificatifs médicaux sont visibles uniquement par l'employé concerné et les RH.</p>{% endif %}
         </div>
         <div>
+            {% if not est_employe %}
             <form action="{{ url_for('absences.synchroniser_absences') }}" method="post" style="display:inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-secondary">{{ icon('refresh', 15) }}<span>Synchroniser</span></button>
             </form>
             <a data-modal-title="Enregistrer une absence" href="{{ url_for('absences.add_absence') }}" class="js-modal-form btn btn-primary">{{ icon('plus', 15) }}<span>Enregistrer une absence</span></a>
+            {% endif %}
             <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
         </div>
     </div>
@@ -23,8 +25,10 @@
     </p>
 
     <form method="get" action="{{ url_for('absences.absences') }}" class="materiels-filtres" style="background:#f8fbfd;border:1px solid #e1e9f0;border-radius:14px;padding:16px 18px;margin-bottom:18px;">
+      {% if not est_employe %}
       <div class="filtre-champ"><label>Rechercher</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Nom ou prénom…" class="form-control" style="min-width:190px;"></div>
       <div class="filtre-champ"><label>Employé</label><select name="employe_id" class="form-control"><option value="">Tous</option>{% for emp in employees %}<option value="{{ emp.id }}" {{ 'selected' if filters.employe_id == emp.id|string }}>{{ emp.prenom }} {{ emp.nom }}</option>{% endfor %}</select></div>
+      {% endif %}
       <div class="filtre-champ"><label>Statut</label><select name="statut" class="form-control"><option value="">Tous</option>{% for code, label in statut_labels.items() %}<option value="{{ code }}" {{ 'selected' if filters.statut == code }}>{{ label }}</option>{% endfor %}</select></div>
       <div class="filtre-champ"><label>Du</label><input type="date" name="date_debut" value="{{ filters.date_debut }}" class="form-control"></div>
       <div class="filtre-champ"><label>Au</label><input type="date" name="date_fin" value="{{ filters.date_fin }}" class="form-control"></div>
@@ -48,11 +52,14 @@
                     </td>
                     <td data-label="Justificatif">
                       {% if a.justificatif_nom %}
-                        {% if session.get('role') in ['admin','rh'] %}<a class="btn btn-sm btn-secondary" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">{{ icon('paperclip', 13) }} Télécharger</a>{% else %}<span class="rc-muted">Déposé 🔒</span>{% endif %}
+                        {% if session.get('role') in ['admin','rh'] or a.employe_id == mon_employe_id %}<a class="btn btn-sm btn-secondary" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">{{ icon('paperclip', 13) }} Télécharger</a>{% else %}<span class="rc-muted">Déposé 🔒</span>{% endif %}
                         {% if a.date_depot_justificatif %}<br><small class="rc-muted">{{ a.date_depot_justificatif.strftime('%d/%m/%Y %H:%M') }}</small>{% endif %}
                       {% else %}<span class="rc-muted">—</span>{% endif %}
                     </td>
                     <td data-label="Actions">
+                      {% if a.employe_id == mon_employe_id and a.statut in peut_deposer %}
+                        <a data-modal-title="Justifier mon absence" href="{{ url_for('absence_justifications.formulaire_justificatif', absence_id=a.id) }}" class="js-modal-form btn btn-primary btn-sm" style="display:inline-flex;margin-bottom:7px;">{{ icon('paperclip', 13) }} {{ 'Déposer un nouveau justificatif' if a.statut == 'refusee' else 'Justifier cette absence' }}</a>
+                      {% endif %}
                       {% if a.statut == 'justificatif_depose' and session.get('role') in ['admin','rh'] %}
                         <form action="{{ url_for('absence_justifications.decider_justificatif', absence_id=a.id) }}" method="post" style="display:grid;gap:5px;min-width:230px;margin-bottom:7px;">
                           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -67,7 +74,7 @@
                         <form action="{{ url_for('absences.delete_absence', id=a.id) }}" method="post" style="display:inline;" class="confirm-form" data-confirm-title="Supprimer cette absence ?" data-confirm-subtitle="Action irréversible" data-confirm-icon="🚫">
                           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-danger btn-sm">{{ icon('trash', 13) }}</button>
                         </form>
-                      {% else %}<span class="rc-muted">—</span>{% endif %}
+                      {% elif not (a.employe_id == mon_employe_id and a.statut in peut_deposer) %}<span class="rc-muted">—</span>{% endif %}
                     </td>
                 </tr>
                 {% else %}
