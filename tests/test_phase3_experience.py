@@ -71,9 +71,10 @@ def test_impression_etiquettes_qr_et_format_physique(admin_client):
 
 def test_tableaux_specialises_respectent_les_roles(app):
     manager=app.test_client(); _login(manager,'manager','manager123')
-    assert manager.get('/dashboard/parc').status_code==200
-    assert manager.get('/dashboard/rh',follow_redirects=False).status_code in (301,302)
-    assert manager.get('/dashboard/direction',follow_redirects=False).status_code in (301,302)
+    # Le parc matériel est sorti du périmètre du manager (accès strict) :
+    # les trois tableaux de bord spécialisés lui sont donc fermés.
+    for route in ('/dashboard/parc','/dashboard/rh','/dashboard/direction'):
+        assert manager.get(route,follow_redirects=False).status_code in (301,302), route
     rh=app.test_client(); _login(rh,'rh','rh123')
     for route in ('/dashboard/rh','/dashboard/parc','/dashboard/direction'):
         response=rh.get(route)

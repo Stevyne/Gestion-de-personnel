@@ -80,6 +80,15 @@ EMPLOYE = COMMUN | frozenset({
     # la route — un employé n'atteint que sa propre fiche, un manager celles
     # de son département. L'ACL ne sait pas filtrer par enregistrement.
     'fiches_paie.fiche_de_paie', 'fiches_paie.apercu', 'fiches_paie.pdf',
+    # Contrats : exactement le même raisonnement. Les routes posent leur
+    # propre garde (_peut_voir : les RH, ou l'employé propriétaire du
+    # contrat — 403 sinon) et la liste se restreint d'elle-même à
+    # c.employe_id hors admin/RH. Fermer ici revenait à interdire à un
+    # salarié la lecture de son propre contrat, alors qu'il accède à sa
+    # fiche de paie et au matériel qui lui est attribué — tout en doublant
+    # un contrôle que le module fait déjà.
+    'contrats.contrats_liste', 'contrats.contrat_voir',
+    'contrats.contrat_fichier',
 })
 
 # --- MANAGER : temps et workflows RH, employés en lecture seule -------------

@@ -141,17 +141,23 @@ def test_api_recherche_ne_retourne_pas_autre_departement(client):
 def test_selecteurs_et_formulaires_ne_proposent_que_le_departement(client):
     ids = _seed_scope_data()
     _login_manager(client)
+    # Seuls les écrans encore ouverts au manager depuis le périmètre strict.
+    # Sans follow_redirects : suivre la redirection rendait ce test muet,
+    # l'accueil répondant 200 sans jamais rien prouver sur le département.
     routes = (
         '/presences/add', '/conges/add', '/permissions/add', '/absences/add',
-        '/materiels/add', '/inventaires/nouveau',
-        f"/materiels/{ids['it']['materiel']}",
-        f"/exemplaires/{ids['it']['exemplaire']}",
     )
     for route in routes:
-        response = client.get(route, follow_redirects=True)
+        response = client.get(route, follow_redirects=False)
         assert response.status_code == 200, route
         assert MARK_RH.encode() not in response.data, route
         assert 'Ressources Humaines'.encode() not in response.data, route
+
+    # Le matériel et l'inventaire ne sont plus de son ressort du tout.
+    for route in ('/materiels/add', '/inventaires/nouveau',
+                  f"/materiels/{ids['it']['materiel']}",
+                  f"/exemplaires/{ids['it']['exemplaire']}"):
+        assert client.get(route, follow_redirects=False).status_code in (301, 302), route
 
 
 def test_acces_direct_interdepartement_est_refuse(client):
@@ -173,7 +179,11 @@ def test_acces_direct_interdepartement_est_refuse(client):
 
     # Une ressource du département courant reste accessible.
     assert client.get(f"/employes/{ids['emp_it']}").status_code == 200
-    assert client.get(f"/materiels/{ids['it']['materiel']}").status_code == 200
+    # Le matériel et l'inventaire, en revanche, sont sortis du périmètre du
+    # manager : même ceux de son propre département lui sont fermés.
+    for route in (f"/materiels/{ids['it']['materiel']}",
+                  f"/exemplaires/{ids['it']['exemplaire']}"):
+        assert client.get(route, follow_redirects=False).status_code in (301, 302), route
 
 
 def test_formulaires_forges_ne_peuvent_ecrire_hors_departement(client):

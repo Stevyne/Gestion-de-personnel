@@ -25,12 +25,14 @@ def test_workflow_complet_recrutement_jusqua_embauche(app):
     admin = app.test_client()
     _login(manager, 'manager', 'manager123')
     _login(admin, 'admin', 'admin123')
-    assert manager.get('/recrutement').status_code == 200
+    # Le recrutement est sorti du périmètre du manager (accès strict) :
+    # le circuit est porté de bout en bout par l'admin ou les RH.
+    assert manager.get('/recrutement', follow_redirects=False).status_code in (301, 302)
     assert admin.get('/recrutement').status_code == 200
     informatique = _departement_id('Informatique')
 
-    # Le manager exprime le besoin de son département.
-    response = manager.post('/recrutement/demandes/nouvelle', data={
+    # Le besoin est exprimé pour le département, par l'admin.
+    response = admin.post('/recrutement/demandes/nouvelle', data={
         'poste': 'Développeur Flask', 'departement_id': str(informatique),
         'nombre_postes': '2', 'type_contrat': 'cdi',
         'date_souhaitee': '2026-10-01', 'salaire_min': '50000',
@@ -182,13 +184,24 @@ def test_workflow_complet_recrutement_jusqua_embauche(app):
     assert comptes == 0
 
 
-def test_manager_ne_peut_demander_que_pour_son_departement(app):
+def test_manager_ne_peut_plus_creer_de_demande_recrutement(app):
+    """Le recrutement n'est plus de son ressort : sa demande est refusée.
+
+    Ce test vérifiait auparavant qu'il ne pouvait demander que pour son
+    propre département. Le périmètre strict lui ayant retiré le module
+    entier, il vérifie désormais le refus. L'ancienne version continuait
+    de passer, mais pour la mauvaise raison : le POST était bloqué par
+    l'ACL avant même d'atteindre le contrôle de département, si bien
+    qu'elle n'a plus jamais prouvé ce que son nom annonçait.
+    """
     manager = app.test_client(); _login(manager, 'manager', 'manager123')
     rh_dept = _departement_id('Ressources Humaines')
-    manager.post('/recrutement/demandes/nouvelle', data={
+    response = manager.post('/recrutement/demandes/nouvelle', data={
         'poste': 'Intrusion', 'departement_id': str(rh_dept),
         'nombre_postes': '1', 'type_contrat': 'cdi', 'motif': 'Test',
     })
+    assert response.status_code in (301, 302)
+    assert manager.get('/recrutement', follow_redirects=False).status_code in (301, 302)
     with application.db_cursor() as (_conn, cur):
         cur.execute("SELECT COUNT(*) AS nb FROM recrutement_demandes")
         assert cur.fetchone()['nb'] == 0

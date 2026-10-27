@@ -150,7 +150,7 @@
                 <select name="prestataire_id" class="form-control">
                     <option value="">— Choisir —</option>
                     {% for p in prestataires %}
-                    <option value="{{ p.id }}">{{ p.nom }}{% if p.specialite %} — {{ p.specialite }}{% endif %}</option>
+                    <option value="{{ p.id }}">{{ p.nom }}{% if p.categorie %} — {{ prestataire_categories_dict.get(p.categorie, p.categorie) }}{% endif %}</option>
                     {% endfor %}
                 </select>
                 <a href="{{ url_for('parc.prestataires_page') }}" style="font-size:0.8rem;">Gérer les prestataires</a>

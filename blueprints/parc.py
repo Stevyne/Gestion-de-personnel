@@ -1591,7 +1591,7 @@ def creer_blueprint_parc(deps):
             """, emp_params)
             assignables = cur.fetchall()
             if get_department_scope(cur)['is_global']:
-                cur.execute("""SELECT id, nom, specialite FROM prestataires
+                cur.execute("""SELECT id, nom, categorie FROM prestataires
                                WHERE actif ORDER BY nom""")
                 prestataires = cur.fetchall()
             else:
@@ -1612,6 +1612,7 @@ def creer_blueprint_parc(deps):
                                statuts_dict=MAINTENANCE_STATUTS_DICT,
                                priorites=MAINTENANCE_PRIORITES,
                                priorites_dict=MAINTENANCE_PRIORITES_DICT,
+                               prestataire_categories_dict=PRESTATAIRE_CATEGORIES_DICT,
                                maintenance_ouverts=MAINTENANCE_OUVERTS,
                                maintenance_indisponible=MAINTENANCE_INDISPONIBLE,
                                validation_jours=MAINTENANCE_VALIDATION_JOURS,

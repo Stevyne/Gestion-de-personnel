@@ -133,21 +133,36 @@ def test_assignation_et_resolution_renseignent_sla(admin_client):
     assert row['sla_respecte'] is True
 
 
-def test_export_materiel_pdf_et_excel_respecte_departement(client):
+def test_export_materiel_refuse_au_manager_et_global_pour_rh(app):
+    """Le matériel n'est plus du ressort du manager (périmètre strict).
+
+    Ce test vérifiait auparavant qu'un manager n'exportait que son propre
+    département. Aucun rôle cloisonné par département n'ayant plus accès
+    au module, on vérifie le refus qui en découle pour le manager, et que
+    les rôles globaux exportent bien l'ensemble des départements.
+    """
     with application.db_cursor(commit=True) as (conn, cur):
         for dept, marker in (('Informatique','VISIBLE-P2'),('Ressources Humaines','SECRET-P2')):
             cur.execute("INSERT INTO departements(nom) VALUES (%s) ON CONFLICT(nom) DO UPDATE SET nom=EXCLUDED.nom RETURNING id", (dept,))
             dept_id = cur.fetchone()['id']
             cur.execute("INSERT INTO materiels(nom,categorie,departement_id,quantite) VALUES (%s,'autre',%s,3)", (marker,dept_id))
-    client.post('/login', data={'username': 'manager', 'password': 'manager123'})
-    pdf = client.get('/export/materiels/pdf')
+
+    manager = app.test_client()
+    manager.post('/login', data={'username': 'manager', 'password': 'manager123'})
+    for route in ('/export/materiels/pdf', '/export/materiels/excel'):
+        assert manager.get(route, follow_redirects=False).status_code in (301, 302), route
+
+    rh = app.test_client()
+    rh.post('/login', data={'username': 'rh', 'password': 'rh123'})
+    pdf = rh.get('/export/materiels/pdf')
     assert pdf.status_code == 200 and pdf.data.startswith(b'%PDF')
-    excel = client.get('/export/materiels/excel')
+    excel = rh.get('/export/materiels/excel')
     assert excel.status_code == 200
     workbook = openpyxl.load_workbook(io.BytesIO(excel.data))
     values = ' '.join(str(c.value or '') for row in workbook.active.iter_rows() for c in row)
+    # Les RH portent tous les départements : les deux marqueurs figurent.
     assert 'VISIBLE-P2' in values
-    assert 'SECRET-P2' not in values
+    assert 'SECRET-P2' in values
 
 
 def test_contrat_complet_document_et_acces_proprietaire(admin_client, app):
