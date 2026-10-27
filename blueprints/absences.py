@@ -113,7 +113,7 @@ def creer_blueprint_absences(deps):
 
     @bp.route('/absences/add', methods=['GET', 'POST'])
     @login_required
-    @role_required('admin', 'rh', 'manager')
+    @role_required('admin', 'rh', 'manager', 'employe')
     def add_absence():
         if request.method == 'POST':
             employe_id = request.form.get('employe_id')
