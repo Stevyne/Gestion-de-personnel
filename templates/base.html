@@ -387,7 +387,7 @@
                             {{ icon('history', 17) }}<span>Historique</span>
                         </a>
                         {% endif %}
-                        {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+                        {% if session.get('role') in ['admin', 'rh', 'manager', 'employee'] %}
 {% if peut('absences.absences') %}
                         <a href="{{ url_for('absences.absences') }}" class="nav-dropdown-link {% if request.endpoint and (request.endpoint.startswith('absences.') or request.endpoint.startswith('absence_justifications.')) %}active{% endif %}">
                             {{ icon('user-x', 17) }}<span>Absences</span>
@@ -636,7 +636,7 @@
 {% if peut('presences.historique') %}
                 <a href="{{ url_for('presences.historique') }}" class="nav-link {% if request.endpoint == 'presences.historique' %}active{% endif %}">{{ icon('history') }}<span>Historique</span></a>
                 {% endif %}
-                {% if session.get('role') in ['admin', 'rh', 'manager'] %}
+                {% if session.get('role') in ['admin', 'rh', 'manager', 'employee'] %}
 {% if peut('absences.absences') %}
                 <a href="{{ url_for('absences.absences') }}" class="nav-link {% if request.endpoint == 'absences.absences' %}active{% endif %}">{{ icon('user-x') }}<span>Absences</span></a>
                 {% endif %}
