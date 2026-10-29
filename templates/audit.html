@@ -6,6 +6,11 @@
     <div class="card-header">
         <h1>{{ icon('log') }} Journal d'audit</h1>
         <div>
+            {# L'export reprend les filtres affichés : base_qs les porte déjà,
+               et exclut volontairement la page, qui n'a pas de sens dans un
+               fichier. #}
+            <a href="{{ url_for('audit_export_excel') }}{% if base_qs %}?{{ base_qs }}{% endif %}"
+               class="btn btn-primary">{{ icon('download', 15) }} Exporter en Excel</a>
             <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="btn btn-secondary">{{ icon('shield', 15) }} Utilisateurs</a>
             <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Retour</a>
         </div>

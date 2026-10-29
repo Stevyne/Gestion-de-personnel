@@ -220,6 +220,8 @@
 <path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M17 8l5 5M22 8l-5 5"/>
 {%- elif name == 'palm' -%}
 <path d="M8 2h8v2a4 4 0 0 1-4 4 4 4 0 0 1-4-4Z"/><path d="M12 8v13"/><path d="M5 21h14"/><path d="M12 8c-3 0-5 1.5-6 4M12 8c3 0 5 1.5 6 4"/>
+{%- elif name == 'download' -%}
+<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>
 {%- elif name == 'file' -%}
 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>
 {%- elif name == 'wallet' -%}
@@ -466,15 +468,25 @@
                 {% endif %}
                 {% if session.get('role') in ['admin', 'rh'] %}
 {% if peut('utilisateurs.utilisateurs_page') %}
-                <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs.utilisateurs_page', 'utilisateurs.register'] %}active{% endif %}">
-                    {{ icon('shield') }}<span>Utilisateurs</span>
-                </a>
+                <div class="nav-dropdown">
+                    <button type="button" class="nav-link nav-dropdown-toggle {% if request.endpoint in ['utilisateurs.utilisateurs_page','utilisateurs.register','audit','audit_export_excel'] %}active{% endif %}" aria-haspopup="true" aria-expanded="false">
+                        {{ icon('shield') }}<span>Utilisateurs</span>{{ icon('chevron', 14) }}
+                    </button>
+                    <div class="nav-dropdown-menu">
+                        <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-dropdown-link {% if request.endpoint in ['utilisateurs.utilisateurs_page','utilisateurs.register'] %}active{% endif %}">
+                            {{ icon('shield', 17) }}<span>Comptes utilisateurs</span>
+                        </a>
+                        {# Le rôle RH contourne l'ACL (accès global) : le
+                           masquage automatique des liens ne peut donc pas
+                           cacher cette entrée, d'où la condition explicite. #}
+                        {% if session.get('role') == 'admin' %}
+                        <a href="{{ url_for('audit') }}" class="nav-dropdown-link {% if request.endpoint in ['audit','audit_export_excel'] %}active{% endif %}">
+                            {{ icon('log', 17) }}<span>Journal d'audit</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
                 {% endif %}
-                {% endif %}
-                {% if session.get('role') == 'admin' %}
-                <a href="{{ url_for('audit') }}" class="nav-link {% if request.endpoint == 'audit' %}active{% endif %}">
-                    {{ icon('log') }}<span>Journal d'audit</span>
-                </a>
                 {% endif %}
             </div>
 

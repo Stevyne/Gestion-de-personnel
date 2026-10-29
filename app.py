@@ -2261,19 +2261,13 @@ def _couleur_action(action):
     return '#64748b'
 
 
-@app.route('/audit')
-@login_required
-@role_required('admin')
-def audit():
-    """Journal d'audit — réservé à l'administrateur.
+def _filtres_audit():
+    """Filtres du journal, lus dans la querystring.
 
-    La page existait déjà, mais restait introuvable : aucun lien n'y
-    menait, ni dans le menu ni depuis les utilisateurs.
-
-    Ses filtres étaient de plus affichés sans jamais être appliqués : la
-    requête renvoyait systématiquement les 150 dernières lignes, quoi
-    qu'on demande dans le formulaire. Ils sont désormais réellement pris
-    en compte, et la liste est paginée au lieu d'être tronquée.
+    Mutualisés entre la page et l'export Excel : les deux doivent produire
+    exactement la même sélection. Un export qui ne reprendrait pas les
+    filtres de l'écran ne correspondrait pas aux lignes que
+    l'administrateur avait sous les yeux — trompeur pour une pièce d'audit.
     """
     action = (request.args.get('action') or '').strip()
     username = (request.args.get('username') or '').strip()
@@ -2301,6 +2295,27 @@ def audit():
         where.append("a.timestamp < %s::date + INTERVAL '1 day'")
         params.append(date_to)
     clause = ("WHERE " + " AND ".join(where)) if where else ""
+
+    filters = {'action': action, 'username': username, 'entity_type': entity_type,
+               'date_from': date_from, 'date_to': date_to}
+    return filters, clause, params
+
+
+@app.route('/audit')
+@login_required
+@role_required('admin')
+def audit():
+    """Journal d'audit — réservé à l'administrateur.
+
+    La page existait déjà, mais restait introuvable : aucun lien n'y
+    menait, ni dans le menu ni depuis les utilisateurs.
+
+    Ses filtres étaient de plus affichés sans jamais être appliqués : la
+    requête renvoyait systématiquement les 150 dernières lignes, quoi
+    qu'on demande dans le formulaire. Ils sont désormais réellement pris
+    en compte, et la liste est paginée au lieu d'être tronquée.
+    """
+    filters, clause, params = _filtres_audit()
 
     per_page = 25
     page = max(1, request.args.get('page', 1, type=int))
@@ -2336,13 +2351,83 @@ def audit():
     for ligne in logs:
         ligne['couleur'] = _couleur_action(ligne['action'])
 
-    filters = {'action': action, 'username': username, 'entity_type': entity_type,
-               'date_from': date_from, 'date_to': date_to}
     return render_template('audit.html', logs=logs, actions=actions,
                            entity_types=entity_types, nb_total=total,
                            filters=filters, pg=pg,
                            page_items=page_list(pg['page'], pg['pages']),
                            base_qs=urlencode({k: v for k, v in filters.items() if v}))
+
+
+@app.route('/audit/export/excel')
+@login_required
+@role_required('admin')
+def audit_export_excel():
+    """Export Excel du journal, sur la sélection affichée à l'écran.
+
+    Reprend exactement les mêmes filtres que la page (helper commun) : un
+    export qui ignorerait la sélection donnerait un fichier ne
+    correspondant pas aux lignes que l'administrateur avait sous les yeux,
+    ce qui est trompeur dès qu'il sert de pièce.
+    """
+    filters, clause, params = _filtres_audit()
+    with db_cursor() as (conn, cur):
+        cur.execute(f"""
+            SELECT a.timestamp, COALESCE(a.username, u.username) AS username,
+                   a.action, a.entity_type, a.entity_id, a.details, a.ip_address
+              FROM audit_logs a
+              LEFT JOIN users u ON u.id = a.user_id
+              {clause}
+             ORDER BY a.timestamp DESC, a.id DESC
+        """, params)
+        lignes = cur.fetchall()
+
+    classeur = openpyxl.Workbook()
+    feuille = classeur.active
+    feuille.title = "Journal d'audit"
+    feuille.append(["Journal d'audit — export du "
+                    + datetime.now().strftime('%d/%m/%Y à %H:%M')])
+    # Sans le rappel des filtres, le fichier perd la moitié de sa valeur :
+    # on ne saurait plus à quelle sélection il correspond.
+    actifs = [f"{cle} = {valeur}" for cle, valeur in filters.items() if valeur]
+    feuille.append(["Filtres : "
+                    + (", ".join(actifs) if actifs else "aucun — journal complet")])
+    feuille.append([f"{len(lignes)} entrée(s)"])
+    feuille.append([])
+
+    entetes = ["Date", "Heure", "Utilisateur", "Action", "Entité",
+               "ID entité", "Détails", "Adresse IP"]
+    feuille.append(entetes)
+    for cellule in feuille[5]:
+        cellule.font = Font(bold=True, color="FFFFFF")
+        cellule.fill = PatternFill("solid", fgColor="1E40AF")
+
+    for ligne in lignes:
+        horodatage = ligne["timestamp"]
+        feuille.append([
+            horodatage.strftime("%d/%m/%Y") if horodatage else "",
+            horodatage.strftime("%H:%M:%S") if horodatage else "",
+            # Le nom consigné prime, comme à l'écran. « Système » lorsqu'il
+            # n'y en a aucun : la ligne n'est pas rattachée à un compte.
+            ligne["username"] or "Système",
+            ligne["action"] or "",
+            ligne["entity_type"] or "",
+            ligne["entity_id"],
+            ligne["details"] or "",
+            ligne["ip_address"] or "",
+        ])
+
+    for colonne in feuille.columns:
+        largeur = min(60, max(len(str(cellule.value or "")) for cellule in colonne) + 2)
+        feuille.column_dimensions[colonne[0].column_letter].width = largeur
+
+    tampon = io.BytesIO()
+    classeur.save(tampon)
+    response = make_response(tampon.getvalue())
+    response.headers["Content-Type"] = (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response.headers["Content-Disposition"] = (
+        f"attachment; filename=journal_audit_{date.today().isoformat()}.xlsx")
+    return response
 
 
 
