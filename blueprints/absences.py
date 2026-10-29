@@ -4,6 +4,8 @@ from urllib.parse import urlencode
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
+from services.common import TYPES_CONGE, TYPE_CONGE_AUCUN, TYPE_CONGE_DEFAUT
+
 
 def creer_blueprint_absences(deps):
     bp = Blueprint('absences', __name__)
@@ -106,6 +108,9 @@ def creer_blueprint_absences(deps):
                                est_employe=est_employe,
                                mon_employe_id=mon_employe_id,
                                peut_deposer=(ABSENCE_NON_JUSTIFIEE, ABSENCE_REFUSEE),
+                               types_conges=TYPES_CONGE,
+                               type_defaut=TYPE_CONGE_DEFAUT,
+                               type_aucun=TYPE_CONGE_AUCUN,
                                statut_labels=ABSENCE_STATUT_LABELS,
                                pg=pg, page_items=page_list(pg['page'], pg['pages']),
                                base_qs=urlencode({k: v for k, v in filters.items() if v}))

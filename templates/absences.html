@@ -63,6 +63,13 @@
                       {% if a.statut == 'justificatif_depose' and session.get('role') in ['admin','rh'] %}
                         <form action="{{ url_for('absence_justifications.decider_justificatif', absence_id=a.id) }}" method="post" style="display:grid;gap:5px;min-width:230px;margin-bottom:7px;">
                           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <select name="type_justification" class="form-control" aria-label="Nature retenue" title="Nature retenue">
+                            {% set propose = a.justification_type or type_defaut %}
+                            {% for t in types_conges %}
+                            <option value="{{ t }}" {% if propose == t %}selected{% endif %}>{{ t|capitalize }}</option>
+                            {% endfor %}
+                            <option value="{{ type_aucun }}" {% if propose == type_aucun %}selected{% endif %}>Aucune — excuser sans créer de congé</option>
+                          </select>
                           <button name="decision" value="accepter" class="btn btn-success btn-sm" type="submit">{{ icon('check', 13) }} Accepter</button>
                         </form>
                         <form action="{{ url_for('absence_justifications.decider_justificatif', absence_id=a.id) }}" method="post" style="display:grid;gap:5px;min-width:230px;">

@@ -5,6 +5,32 @@ from datetime import date
 
 TAUX_ACQUISITION_CONGES_PAR_MOIS = 25 / 12
 
+# Types de congé — source unique de vérité. Le formulaire de congé, le
+# circuit de justification d'absence et les filtres lisent cette liste.
+#
+# Elle était jusqu'ici répétée à la main dans un gabarit, et le circuit
+# d'absence créait pour sa part « congé maladie » là où le formulaire
+# proposait « maladie » : deux écritures du même type, qui se retrouvaient
+# côte à côte dans les calendriers et les exportations. Une seule liste
+# évite que l'écart ne se reproduise.
+TYPES_CONGE = (
+    'congé payé',
+    'congé sans solde',
+    'maladie',
+    'maternité / paternité',
+    'récupération',
+    'autre',
+)
+
+# Type retenu quand personne n'en a proposé : la maladie reste le motif le
+# plus fréquent derrière une pièce justificative.
+TYPE_CONGE_DEFAUT = 'maladie'
+
+# Accepter un justificatif sans rien créer dans les congés. L'absence est
+# excusée, mais elle n'entre ni dans le calendrier ni dans les soldes —
+# utile pour une absence régularisée qui ne doit rien consommer.
+TYPE_CONGE_AUCUN = 'aucun'
+
 
 def pagination_info(total, page, per_page=10):
     pages = max(1, (total + per_page - 1) // per_page) if per_page else 1

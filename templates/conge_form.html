@@ -31,12 +31,7 @@
         <div class="form-group">
             <label for="type_conge">Type de congé *</label>
             <select name="type_conge" id="type_conge" class="form-control" required>
-                <option value="congé payé">Congé payé</option>
-                <option value="congé sans solde">Congé sans solde</option>
-                <option value="maladie">Maladie</option>
-                <option value="maternité / paternité">Maternité / Paternité</option>
-                <option value="récupération">Récupération</option>
-                <option value="autre">Autre</option>
+                {% for t in types_conges %}<option value="{{ t }}">{{ t|capitalize }}</option>{% endfor %}
             </select>
             <small style="color:#64748b;">Seuls les <strong>congés payés</strong> sont décomptés de votre solde. Les permissions relèvent d'un <a href="{{ url_for('add_permission') }}">formulaire distinct</a>.</small>
         </div>

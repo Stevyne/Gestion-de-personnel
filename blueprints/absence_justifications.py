@@ -11,6 +11,8 @@ from flask import (Blueprint, abort, flash, redirect, render_template, request,
                    session, url_for)
 from werkzeug.utils import secure_filename
 
+from services.common import (TYPES_CONGE, TYPE_CONGE_AUCUN,
+                              TYPE_CONGE_DEFAUT)
 from services.object_storage import ObjectStorageError
 
 
@@ -22,7 +24,7 @@ ABSENCE_REFUSEE = 'refusee'
 ABSENCE_STATUT_LABELS = {
     ABSENCE_NON_JUSTIFIEE: 'Non justifiée',
     ABSENCE_JUSTIFICATIF_DEPOSE: 'Justificatif déposé — décision RH attendue',
-    ABSENCE_ACCEPTEE: 'Justificatif accepté — congé maladie créé',
+    ABSENCE_ACCEPTEE: 'Justificatif accepté',
     ABSENCE_REFUSEE: 'Justificatif refusé',
 }
 
@@ -118,7 +120,8 @@ def creer_blueprint_justifications(deps):
             return redirect(url_for('self_service'))
         with db_cursor() as (conn, cur):
             cur.execute("""
-                SELECT id, date, motif, statut, justificatif_nom, motif_refus
+                SELECT id, date, motif, statut, justificatif_nom, motif_refus,
+                       justification_type
                   FROM absences WHERE id = %s AND employe_id = %s
             """, (absence_id, employe['id']))
             absence = cur.fetchone()
@@ -129,6 +132,9 @@ def creer_blueprint_justifications(deps):
             return redirect(url_for('.self_service_absences'))
         return render_template('absence_justificatif_form.html',
                                absence=absence,
+                               types_conges=TYPES_CONGE,
+                               type_defaut=TYPE_CONGE_DEFAUT,
+                               type_aucun=TYPE_CONGE_AUCUN,
                                statut_labels=ABSENCE_STATUT_LABELS)
 
     @bp.route('/self-service/absences/<int:absence_id>/justificatif', methods=['POST'])
@@ -142,6 +148,14 @@ def creer_blueprint_justifications(deps):
         justificatif, erreur = _lire_justificatif(
             request.files.get('justificatif'), detect_file_type)
         commentaire = (request.form.get('commentaire') or '').strip()
+        # Nature proposée par l'employé. Elle n'est qu'une proposition : les
+        # RH la voient au moment de la décision et peuvent la corriger. Une
+        # valeur hors liste est ignorée plutôt que refusée — ce n'est pas
+        # une saisie critique, et bloquer le dépôt d'une pièce pour un
+        # champ malformé serait disproportionné.
+        nature = (request.form.get('justification_type') or '').strip()
+        if nature not in TYPES_CONGE and nature != TYPE_CONGE_AUCUN:
+            nature = None
         if erreur:
             flash(erreur, 'danger')
             return redirect(url_for('.self_service_absences'))
@@ -176,12 +190,14 @@ def creer_blueprint_justifications(deps):
                            justificatif_storage_sha256 = %s,
                            date_depot_justificatif = CURRENT_TIMESTAMP,
                            justification_commentaire = %s,
+                           justification_type = %s,
                            motif_refus = NULL, decide_par = NULL, decide_le = NULL
                      WHERE id = %s
                 """, (ABSENCE_JUSTIFICATIF_DEPOSE, justificatif['nom'],
                       justificatif['type'], justificatif['taille'],
                       stored.content, stored.storage_key, stored.storage_etag,
-                      stored.storage_sha256, commentaire or None, absence_id))
+                      stored.storage_sha256, commentaire or None, nature,
+                      absence_id))
 
                 nom = f"{employe['prenom']} {employe['nom']}"
                 cur.execute("""
@@ -271,23 +287,41 @@ def creer_blueprint_justifications(deps):
                 return redirect(url_for('absences.absences'))
 
             cible = _cible_employe(cur, absence['employe_id'])
+            # Congé éventuellement créé par l'acceptation ; reste None si les
+            # RH retiennent « aucun » ou si elles refusent.
+            conge_id = None
             if decision == 'accepter':
-                # L'absence reste dans son dossier d'audit, mais elle est
-                # requalifiée en congé maladie approuvé pour les calendriers et
-                # rapports RH. Ce type ne consomme pas le solde de congés payés.
-                cur.execute("""
-                    INSERT INTO conges
-                        (employe_id, type_conge, date_debut, date_fin,
-                         nombre_jours, motif, statut, date_demande,
-                         demande_par_id, decide_par, decide_le)
-                    VALUES (%s, 'congé maladie', %s, %s, 1, %s, 'approuvé',
-                            CURRENT_DATE, %s, %s, CURRENT_DATE)
-                    RETURNING id
-                """, (absence['employe_id'], absence['date'], absence['date'],
-                      f"Requalification de l'absence #{absence_id} après justificatif accepté",
-                      cible.get('user_id') if cible else None,
-                      session.get('username')))
-                conge_id = cur.fetchone()['id']
+                # Nature retenue : celle que les RH choisissent ici, qui
+                # reprend par défaut ce que l'employé avait proposé en
+                # déposant sa pièce — et la maladie s'il n'avait rien
+                # indiqué. « aucun » excuse l'absence sans rien créer dans
+                # les congés : aucun calendrier, aucun solde touché.
+                type_retenu = (request.form.get('type_justification') or '').strip()
+                if type_retenu not in TYPES_CONGE and type_retenu != TYPE_CONGE_AUCUN:
+                    type_retenu = (absence.get('justification_type')
+                                   or TYPE_CONGE_DEFAUT)
+
+                if type_retenu == TYPE_CONGE_AUCUN:
+                    conge_id = None
+                else:
+                    # L'absence reste dans son dossier d'audit, mais elle est
+                    # requalifiée en congé approuvé de cette nature pour les
+                    # calendriers et rapports RH.
+                    cur.execute("""
+                        INSERT INTO conges
+                            (employe_id, type_conge, date_debut, date_fin,
+                             nombre_jours, motif, statut, date_demande,
+                             demande_par_id, decide_par, decide_le)
+                        VALUES (%s, %s, %s, %s, 1, %s, 'approuvé',
+                                CURRENT_DATE, %s, %s, CURRENT_DATE)
+                        RETURNING id
+                    """, (absence['employe_id'], type_retenu, absence['date'],
+                          absence['date'],
+                          f"Requalification de l'absence #{absence_id} "
+                          f"après justificatif accepté",
+                          cible.get('user_id') if cible else None,
+                          session.get('username')))
+                    conge_id = cur.fetchone()['id']
                 cur.execute("""
                     UPDATE absences
                        SET statut = %s, decide_par = %s,
@@ -297,8 +331,14 @@ def creer_blueprint_justifications(deps):
                 """, (ABSENCE_ACCEPTEE, session.get('user_id'), conge_id,
                       absence_id))
                 titre = "Justificatif d'absence accepté"
-                message = (f"Votre justificatif pour le {absence['date']} a été accepté. "
-                           "L'absence est requalifiée en congé maladie.")
+                if conge_id:
+                    message = (f"Votre justificatif pour le {absence['date']} "
+                               f"a été accepté. L'absence est requalifiée en "
+                               f"{type_retenu}.")
+                else:
+                    message = (f"Votre justificatif pour le {absence['date']} "
+                               f"a été accepté. L'absence est excusée, sans "
+                               f"incidence sur vos congés.")
                 type_notification = 'success'
             else:
                 cur.execute("""
@@ -325,7 +365,9 @@ def creer_blueprint_justifications(deps):
         log_action(session.get('user_id'), session.get('username'),
                    "Décision justificatif absence", 'absence', absence_id,
                    decision if decision == 'accepter' else f"refuser: {motif_refus[:120]}")
-        flash("Justificatif accepté et absence requalifiée en congé maladie."
+        flash(f"Justificatif accepté — absence requalifiée en {type_retenu}."
+              if decision == 'accepter' and conge_id
+              else "Justificatif accepté — absence excusée, aucun congé créé."
               if decision == 'accepter'
               else "Justificatif refusé : l'employé a été informé.",
               'success' if decision == 'accepter' else 'info')

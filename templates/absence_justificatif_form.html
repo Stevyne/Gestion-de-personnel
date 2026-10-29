@@ -20,6 +20,18 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="form-group">
+            <label for="justification_type">Nature de l'absence <small style="color:#94a3b8;">(facultatif)</small></label>
+            <select id="justification_type" name="justification_type" class="form-control">
+                <option value="">— Laisser les RH choisir —</option>
+                {% for t in types_conges %}
+                <option value="{{ t }}" {% if absence.justification_type == t %}selected{% endif %}>{{ t|capitalize }}</option>
+                {% endfor %}
+                <option value="{{ type_aucun }}" {% if absence.justification_type == type_aucun %}selected{% endif %}>Aucune — simplement excuser l'absence</option>
+            </select>
+            <small style="color:#64748b;">Votre réponse <strong>propose</strong> une nature : les RH la voient au moment de la décision et peuvent la corriger. « Aucune » signifie que l'absence doit être excusée sans créer de congé.</small>
+        </div>
+
+        <div class="form-group">
             <label for="justificatif">Justificatif (PDF, PNG ou JPEG — 8 Mo maximum)</label>
             <input type="file" id="justificatif" name="justificatif" class="form-control"
                    accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required>

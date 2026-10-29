@@ -75,6 +75,11 @@ def initialiser_schema(get_db, get_cursor, logger, calculer_jours_acquis_prorata
         ('decide_le', 'TIMESTAMP'),
         ('motif_refus', 'TEXT'),
         ('conge_id', 'INTEGER REFERENCES conges(id) ON DELETE SET NULL'),
+        # Nature de l'absence proposée par l'employé au moment du dépôt.
+        # Les RH la voient et peuvent la corriger en décidant : ce qui est
+        # retenu, c'est le type du congé créé (conges.type_conge), pas
+        # cette colonne. On garde les deux : la proposition et la décision.
+        ('justification_type', 'VARCHAR(30)'),
     ):
         cur.execute(f"ALTER TABLE absences ADD COLUMN IF NOT EXISTS {col} {typ}")
     cur.execute("UPDATE absences SET statut = 'non_justifiee' WHERE statut IS NULL")

@@ -5,6 +5,8 @@ from urllib.parse import urlencode
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
+from services.common import TYPES_CONGE
+
 
 def creer_blueprint_conges(deps):
     bp = Blueprint('conges', __name__)
@@ -148,7 +150,8 @@ def creer_blueprint_conges(deps):
                         flash("La date de fin ne peut pas être avant la date de début", "danger")
                         cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
                         return render_template('conge_form.html', employees=cur.fetchall(),
-                                               moi=moi, gestionnaire=gestionnaire)
+                                               moi=moi, gestionnaire=gestionnaire,
+                                               types_conges=TYPES_CONGE)
                     nombre_jours = (d2 - d1).days + 1
 
                     # Contrôle du solde : on prévient avant d'engager le circuit,
@@ -164,7 +167,8 @@ def creer_blueprint_conges(deps):
                                   % (nombre_jours, restant, annee), "danger")
                             cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
                             return render_template('conge_form.html', employees=cur.fetchall(),
-                                                   moi=moi, gestionnaire=gestionnaire)
+                                                   moi=moi, gestionnaire=gestionnaire,
+                                                   types_conges=TYPES_CONGE)
 
                     cur.execute("""
                         INSERT INTO conges (employe_id, type_conge, date_debut, date_fin,
@@ -203,7 +207,8 @@ def creer_blueprint_conges(deps):
             cur.execute(f"SELECT id, nom, prenom FROM employes e WHERE {scope_where} ORDER BY nom", scope_params)
             employees = cur.fetchall()
         return render_template('conge_form.html', employees=employees,
-                               moi=moi, gestionnaire=gestionnaire)
+                               moi=moi, gestionnaire=gestionnaire,
+                               types_conges=TYPES_CONGE)
 
 
     @bp.route('/conges/avis/<int:id>', methods=['POST'])
