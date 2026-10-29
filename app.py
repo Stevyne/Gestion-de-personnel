@@ -2243,13 +2243,106 @@ def update_solde_conges(employe_id):
     return redirect(url_for('soldes_conges_page', annee=annee))
 
 
+def _couleur_action(action):
+    """Couleur du badge d'action, par famille plutôt qu'au libellé exact.
+
+    Les actions journalisées sont libres — « CREATE_USER », « Dépôt
+    justificatif absence »… — une table de correspondance exacte laisserait
+    donc la plupart des lignes en gris.
+    """
+    a = (action or '').strip().upper()
+    for prefixe, couleur in (('LOGIN', '#16a34a'), ('LOGOUT', '#ca8a04'),
+                             ('CLOCK_IN', '#16a34a'), ('CLOCK_OUT', '#ca8a04'),
+                             ('CREATE', '#2563eb'), ('UPDATE', '#7c3aed'),
+                             ('DELETE', '#dc2626'), ('SUPPR', '#dc2626'),
+                             ('REFUS', '#dc2626')):
+        if a.startswith(prefixe):
+            return couleur
+    return '#64748b'
+
+
 @app.route('/audit')
-@role_required('admin', 'rh')
+@login_required
+@role_required('admin')
 def audit():
+    """Journal d'audit — réservé à l'administrateur.
+
+    La page existait déjà, mais restait introuvable : aucun lien n'y
+    menait, ni dans le menu ni depuis les utilisateurs.
+
+    Ses filtres étaient de plus affichés sans jamais être appliqués : la
+    requête renvoyait systématiquement les 150 dernières lignes, quoi
+    qu'on demande dans le formulaire. Ils sont désormais réellement pris
+    en compte, et la liste est paginée au lieu d'être tronquée.
+    """
+    action = (request.args.get('action') or '').strip()
+    username = (request.args.get('username') or '').strip()
+    entity_type = (request.args.get('entity_type') or '').strip()
+    date_from = (request.args.get('date_from') or '').strip()
+    date_to = (request.args.get('date_to') or '').strip()
+
+    where, params = [], []
+    if action:
+        where.append("a.action = %s")
+        params.append(action)
+    if entity_type:
+        where.append("a.entity_type = %s")
+        params.append(entity_type)
+    if username:
+        # Le nom est figé dans le log : on l'y cherche d'abord, et l'on
+        # retombe sur le compte courant s'il n'était pas renseigné.
+        where.append("LOWER(COALESCE(a.username, u.username, '')) LIKE %s")
+        params.append(f"%{username.lower()}%")
+    if date_from:
+        where.append("a.timestamp >= %s::date")
+        params.append(date_from)
+    if date_to:
+        # « Jusqu'au 12 » doit couvrir la journée du 12 entière.
+        where.append("a.timestamp < %s::date + INTERVAL '1 day'")
+        params.append(date_to)
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+
+    per_page = 25
+    page = max(1, request.args.get('page', 1, type=int))
     with db_cursor() as (conn, cur):
-        cur.execute("SELECT a.*, u.username FROM audit_logs a LEFT JOIN users u ON a.user_id = u.id ORDER BY a.timestamp DESC LIMIT 150")
+        cur.execute(
+            "SELECT COUNT(*) AS nb FROM audit_logs a "
+            "LEFT JOIN users u ON u.id = a.user_id " + clause, params)
+        total = cur.fetchone()['nb']
+        pg = pagination_info(total, page, per_page)
+        offset = (pg['page'] - 1) * per_page
+        cur.execute(f"""
+            SELECT a.id, a.action, a.entity_type, a.entity_id, a.details,
+                   a.ip_address, a.timestamp, a.user_id,
+                   -- Le nom consigné dans le log prime : c'est une
+                   -- photographie prise au moment du fait. Celui du compte a
+                   -- pu changer depuis, ou le compte être supprimé.
+                   COALESCE(a.username, u.username) AS username
+              FROM audit_logs a
+              LEFT JOIN users u ON u.id = a.user_id
+              {clause}
+             ORDER BY a.timestamp DESC, a.id DESC
+             LIMIT %s OFFSET %s
+        """, params + [per_page, offset])
         logs = cur.fetchall()
-    return render_template('audit.html', logs=logs)
+        cur.execute("""SELECT DISTINCT action FROM audit_logs
+                        WHERE action IS NOT NULL AND action <> '' ORDER BY action""")
+        actions = [r['action'] for r in cur.fetchall()]
+        cur.execute("""SELECT DISTINCT entity_type FROM audit_logs
+                        WHERE entity_type IS NOT NULL AND entity_type <> ''
+                        ORDER BY entity_type""")
+        entity_types = [r['entity_type'] for r in cur.fetchall()]
+
+    for ligne in logs:
+        ligne['couleur'] = _couleur_action(ligne['action'])
+
+    filters = {'action': action, 'username': username, 'entity_type': entity_type,
+               'date_from': date_from, 'date_to': date_to}
+    return render_template('audit.html', logs=logs, actions=actions,
+                           entity_types=entity_types, nb_total=total,
+                           filters=filters, pg=pg,
+                           page_items=page_list(pg['page'], pg['pages']),
+                           base_qs=urlencode({k: v for k, v in filters.items() if v}))
 
 
 

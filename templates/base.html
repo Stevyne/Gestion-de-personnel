@@ -471,6 +471,11 @@
                 </a>
                 {% endif %}
                 {% endif %}
+                {% if session.get('role') == 'admin' %}
+                <a href="{{ url_for('audit') }}" class="nav-link {% if request.endpoint == 'audit' %}active{% endif %}">
+                    {{ icon('log') }}<span>Journal d'audit</span>
+                </a>
+                {% endif %}
             </div>
 
             <div class="nav-user-section desktop-nav">
@@ -550,6 +555,11 @@
                             {{ icon('shield', 17) }}<span>Gestion des accès</span>
                         </a>
                         {% endif %}
+                        {% endif %}
+                        {% if session.get('role') == 'admin' %}
+                        <a href="{{ url_for('audit') }}" class="nav-dropdown-link {% if request.endpoint == 'audit' %}active{% endif %}">
+                            {{ icon('log', 17) }}<span>Journal d'audit</span>
+                        </a>
                         {% endif %}
                         <a href="{{ url_for('auth.logout') }}" class="nav-dropdown-link danger">
                             {{ icon('logout', 17) }}<span>Déconnexion</span>
@@ -674,6 +684,9 @@
 {% if peut('utilisateurs.utilisateurs_page') %}
                 <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="nav-link {% if request.endpoint in ['utilisateurs.utilisateurs_page', 'utilisateurs.register'] %}active{% endif %}">{{ icon('shield') }}<span>Utilisateurs</span></a>
                 {% endif %}
+                {% endif %}
+                {% if session.get('role') == 'admin' %}
+                <a href="{{ url_for('audit') }}" class="nav-link {% if request.endpoint == 'audit' %}active{% endif %}">{{ icon('log') }}<span>Journal d'audit</span></a>
                 {% endif %}
 
                 <div class="drawer-user-section">

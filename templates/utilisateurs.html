@@ -6,6 +6,12 @@
     <div class="card-header">
         <h1>{{ icon('shield') }} Gestion des Utilisateurs</h1>
         <div>
+            {# Le journal est réservé à l'administrateur : le rôle RH contourne
+               l'ACL (accès global), le masquage automatique des liens ne peut
+               donc pas le cacher. On le conditionne explicitement au rôle. #}
+            {% if session.get('role') == 'admin' %}
+            <a href="{{ url_for('audit') }}" class="btn btn-secondary">{{ icon('log', 15) }} Journal d'audit</a>
+            {% endif %}
             <a href="{{ url_for('utilisateurs.register') }}" class="js-modal-form btn btn-primary"
                data-modal-title="Créer un compte utilisateur">{{ icon('plus', 16) }} Nouvel utilisateur</a>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">{{ icon('arrow-left', 14) }} Retour</a>
@@ -98,6 +104,17 @@
                                   title="Seul un administrateur peut modifier un compte administrateur">
                                 🔒 Modifier
                             </span>
+                            {% endif %}
+
+                            {# Chaque compte ouvre le journal filtré sur lui :
+                               c'est le moyen le plus direct de répondre à
+                               « qu'a fait cet utilisateur ? ». #}
+                            {% if session.get('role') == 'admin' %}
+                            <a class="btn btn-secondary btn-xs"
+                               href="{{ url_for('audit', username=u.username) }}"
+                               title="Voir les actions journalisées pour {{ u.username }}">
+                                {{ icon('history', 13) }} Historique
+                            </a>
                             {% endif %}
 
                             {% if session.get('role') == 'admin' and not is_self and u.nb_sessions and u.nb_sessions > 0 %}
