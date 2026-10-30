@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "base.html" import icon %}
+{% block title %}Mes congés et permissions · TeamSphere{% endblock %}
 {% macro etat(demande) %}
   {% set st = demande.statut %}
   {% set cls = {'en attente':'badge-warning','avis rendu':'badge-info','approuvé':'badge-success','refusé':'badge-danger','annulé':'badge-secondary'} %}

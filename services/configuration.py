@@ -65,6 +65,9 @@ def configurer_application(app, logger):
         )
     except ValueError as exc:
         raise RuntimeError("TRUSTED_PROXY_COUNT doit être un entier.") from exc
+    # Publié dans la configuration : l'helper d'adresse IP doit savoir si des
+    # mandataires sont déclarés de confiance avant de se fier à remote_addr.
+    app.config['TRUSTED_PROXY_COUNT'] = trusted_proxies
     if trusted_proxies:
         app.wsgi_app = ProxyFix(
             app.wsgi_app,

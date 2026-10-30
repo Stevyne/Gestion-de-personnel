@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "base.html" import icon %}
+{% block title %}{{ 'Renouveler le contrat' if renouvellement else 'Nouveau contrat' }} · TeamSphere{% endblock %}
 {% block content %}
 <div class="card" style="max-width:760px;margin:auto;">
   <div class="card-header"><h1>{{ icon('file') }} {{ 'Renouveler le contrat' if renouvellement else 'Nouveau contrat' }} — {{ employe.prenom }} {{ employe.nom }}</h1></div>

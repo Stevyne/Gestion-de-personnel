@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, jsonify, g
+from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, jsonify, g, current_app, has_request_context
 from werkzeug.utils import secure_filename
 from psycopg2.extras import execute_values
 import os
@@ -254,11 +254,46 @@ def get_role_label(role):
 # ni expirée ni révoquée).
 SESSION_ONLINE_WINDOW_MIN = int(os.environ.get('SESSION_ONLINE_WINDOW_MIN', 5))
 
+# Émis une seule fois : voir _client_ip(). Un avertissement par requête
+# noierait les journaux sans rien apprendre de plus.
+_AVERTISSEMENT_PROXY_EMIS = False
+
+
 def _client_ip():
-    fwd = request.headers.get('X-Forwarded-For', '')
-    if fwd:
-        return fwd.split(',')[0].strip()[:45]
-    return (request.remote_addr or '')[:45]
+    """Adresse IP du poste à l'origine de la requête (None si indisponible).
+
+    La résolution s'appuie exclusivement sur request.remote_addr, que ProxyFix
+    a déjà corrigé lorsque des mandataires de confiance sont déclarés
+    (TRUSTED_PROXY_COUNT > 0). Lire X-Forwarded-For directement serait une
+    faille : cet en-tête est fourni par le client, n'importe qui peut y écrire
+    l'adresse de son choix et faire inscrire une fausse provenance.
+
+    Renvoie None hors contexte de requête, pour qu'un appel depuis une tâche
+    de fond ne fasse pas échouer — et perdre — l'entrée de journal concernée.
+
+    La valeur est tronquée à 45 caractères, largeur de la colonne : une
+    adresse plus longue ferait échouer l'INSERT et supprimerait l'entrée.
+    """
+    global _AVERTISSEMENT_PROXY_EMIS
+    if not has_request_context():
+        return None
+
+    if (
+        not _AVERTISSEMENT_PROXY_EMIS
+        and request.headers.get('X-Forwarded-For')
+        and not current_app.config.get('TRUSTED_PROXY_COUNT')
+    ):
+        _AVERTISSEMENT_PROXY_EMIS = True
+        logger.warning(
+            "En-tête X-Forwarded-For reçu alors qu'aucun mandataire de "
+            "confiance n'est déclaré (TRUSTED_PROXY_COUNT=0) : les adresses "
+            "IP enregistrées seront celles du mandataire, pas celles des "
+            "postes. Régler TRUSTED_PROXY_COUNT sur le nombre de mandataires "
+            "situés devant l'application (1 sur Render, 1 derrière un nginx)."
+        )
+
+    adresse = request.remote_addr
+    return adresse[:45] if adresse else None
 
 
 def enregistrer_session(user_id, username):
@@ -743,7 +778,7 @@ def log_action(user_id=None, username=None, action="", entity_type=None, entity_
     try:
         conn = get_db()
         cur = get_cursor(conn)
-        ip = getattr(request, 'remote_addr', None)
+        ip = _client_ip()
         cur.execute('INSERT INTO audit_logs (user_id, username, action, entity_type, entity_id, details, ip_address) VALUES (%s,%s,%s,%s,%s,%s,%s)',
                     (user_id, username, action, entity_type, entity_id, details, ip))
         conn.commit()
