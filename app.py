@@ -29,6 +29,7 @@ from services.notifications import creer_service_notifications
 from services.roles import GLOBAL_DATA_ROLES, ROLE_LABELS
 from services.acl import endpoint_autorise
 from services.masquage_liens import MasqueurLiens
+from services.navigation import configurer_navigation
 from services.schema import initialiser_schema
 from blueprints.absence_justifications import (
     ABSENCE_ACCEPTEE, ABSENCE_NON_JUSTIFIEE, ABSENCE_REFUSEE,
@@ -622,6 +623,7 @@ def enforce_role_acl():
     return redirect(url_for('dashboard.dashboard'))
 
 
+configurer_navigation(app)
 # ==================== MASQUAGE DES LIENS INTERDITS ====================
 # Complément visible du filet ci-dessus : plutôt que de laisser l'utilisateur
 # cliquer sur un lien qui sera refusé, on le retire de la page envoyée.
@@ -2963,6 +2965,7 @@ app.register_blueprint(creer_blueprint_dashboard({
 }))
 
 app.register_blueprint(creer_blueprint_dashboards_roles({
+    'calculer_retard': calculer_retard,
     'db_cursor': db_cursor,
     'login_required': login_required,
     'role_required': role_required,

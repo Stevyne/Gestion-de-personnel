@@ -165,14 +165,17 @@ Système de gestion du personnel multi-utilisateur avec suivi des présences, co
 - Les prestataires constituent un référentiel global sans département : leur gestion est donc réservée à admin/RH
 - Le rôle est relu en base à chaque requête : une rétrogradation prend effet immédiatement, sans attendre une reconnexion
 
-### 📊 Tableaux de bord spécialisés
-- Tableau général conservé, complété par `/dashboard/rh`, `/dashboard/parc` et `/dashboard/direction`
-- RH et Direction : admin/RH en vue globale ; Parc : admin/RH global, manager/technicien limités à leur département
+### 📊 Tableau de bord à onglets préchargés
+- Général, RH, Parc et Direction sont des **onglets locaux** : tous les panneaux autorisés sont chargés à l’ouverture, puis la bascule se fait sans requête, rechargement ni voile de chargement
+- Les URL `/`, `/dashboard/rh`, `/dashboard/parc` et `/dashboard/direction` restent utilisables directement ; l’historique Précédent/Suivant, le clavier et le repli sans JavaScript sont conservés
+- RH et Direction : admin/RH en vue globale ; Parc : admin/RH global, technicien limité à son département. L’ACL centrale actuelle maintient le manager sur l’onglet Général uniquement
+- Les panneaux interdits ne sont ni interrogés ni envoyés dans le HTML. Le lien **Actualiser** recharge les statistiques ; les bascules seules conservent les données chargées à l’ouverture. [Architecture, droits et limites](docs/dashboard-onglets.md)
 - Couverture des modules exploitables : personnel, présences/temps, congés/soldes, permissions, absences/justificatifs, contrats, documents, matériels/parc, SLA maintenance et inventaires
 - La vue globale ajoute les statistiques d'accès, sessions, audit, notifications et outbox e-mail
 - Les données salariales et les coûts consolidés restent réservés aux vues admin/RH
 
 ### 🪟 Interface
+- **Navigation progressive sur toutes les pages de lecture** : l’en-tête et les panneaux persistants restent en place ; seul le contenu central est remplacé après un GET authentifié. Filtres, pagination, historique, scripts de page et graphiques sont réinitialisés proprement. Aucun préchargement de la base ni cache de données privées ; formulaires POST, exports, impression et connexion restent natifs. [Périmètre, installation et architecture](docs/navigation-globale.md)
 - **Connexion responsive et accessible** : écran dédié TeamSphere, champs compatibles gestionnaires de mots de passe, affichage/masquage du secret, alerte Verr. Maj et état de chargement anti-double-clic
 - **Icônes SVG harmonisées** : même style de trait que la navbar dans les titres, cartes, boutons, confirmations, compétences, objectifs et messagerie ; catalogue local unique, états AJAX inclus, sans CDN ni police d’icônes. [Ajouter ou personnaliser une icône](docs/icones-svg.md)
 - **Chargement bloquant type Google/Material** : voile sombre plein écran et barre animée dans une fenêtre centrée ; clics, tactile, clavier et défilement du fond bloqués jusqu'à la fin des navigations, formulaires et requêtes AJAX suivis, avec déblocage automatique même en cas d'erreur/annulation. Téléchargements et polling restent silencieux. [Fonctionnement et personnalisation](docs/chargement.md)

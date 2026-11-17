@@ -1,0 +1,170 @@
+{% from "_icons.html" import icon %}
+  {% if dashboard_scope.is_empty %}
+  <div class="dashboard-warning">
+    <strong>Aucune statistique accessible.</strong> Votre compte n'est rattaché à aucun département. Demandez aux RH de lier votre compte à une fiche employé correctement renseignée.
+  </div>
+  {% endif %}
+
+  <div class="coverage-line">
+    <span><strong>{{ modules_couverts }}/{{ modules_couverts }}</strong> modules statistiques disponibles sont représentés.</span>
+    <small>{{ "Personnel, temps, workflows RH, documents, parc et exploitation système." if dashboard_scope.is_global else "Personnel, temps, workflows RH, documents, parc, maintenance et inventaires de votre département." }}</small>
+  </div>
+
+  <!-- Indicateurs principaux -->
+  <div class="stats-grid dashboard-kpis">
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="employees">{{ total_employes }}</div>
+      <div class="stat-label">{{ icon('users', '1em') }} Employés {{ 'de l’entreprise' if dashboard_scope.is_global else 'du département' }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="departments">{{ total_departements }}</div>
+      <div class="stat-label">{{ icon('building', '1em') }} {{ 'Départements' if dashboard_scope.is_global else 'Département couvert' }}</div>
+    </div>
+    {% if peut_voir_salaires %}
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="salary">{{ "%.0f"|format(salaire_moyen) }} Ar</div>
+      <div class="stat-label">{{ icon('wallet', '1em') }} Salaire moyen</div>
+    </div>
+    {% endif %}
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="attendance-rate">{{ taux_presence }}%</div>
+      <div class="stat-label">{{ icon('calendar', '1em') }} Présence aujourd’hui</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="monthly-hours">{{ "%.1f"|format(heures_totales) }} h</div>
+      <div class="stat-label">{{ icon('clock', '1em') }} Heures pointées ce mois</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" data-kpi="seniority">{{ anciennete_moyenne }} an(s)</div>
+      <div class="stat-label">{{ icon('calendar', '1em') }} Ancienneté moyenne</div>
+    </div>
+  </div>
+
+  <!-- Retards -->
+  {% if nb_retards > 0 %}
+  <div class="delay-alert">
+    <div class="delay-title"><span>{{ icon('alert', '1em') }}</span><strong>Retards aujourd’hui</strong><b>{{ nb_retards }}</b></div>
+    <div class="delay-list">
+      {% for r in retards_aujourdhui[:5] %}
+      <span><strong>{{ r.prenom }} {{ r.nom }}</strong> +{{ r.retard_minutes }} min</span>
+      {% endfor %}
+      {% if nb_retards > 5 %}<span>+ {{ nb_retards - 5 }} autre(s)</span>{% endif %}
+    </div>
+    <small>Total : {{ total_retards_minutes }} min ({{ "%.1f"|format(total_retards_minutes / 60) }} h)</small>
+  </div>
+  {% else %}
+  <div class="dashboard-success">{{ icon('check-circle', '1em') }} Aucun retard enregistré aujourd’hui dans ce périmètre.</div>
+  {% endif %}
+
+  <!-- Présences du jour -->
+  <section class="dashboard-section">
+    <div class="section-title"><h2>{{ icon('clock', '1em') }} Présences du jour</h2><span>{{ total_presences_aujourdhui }}/{{ total_employes }} personne(s) couverte(s)</span></div>
+    <div class="mini-stats">
+      <div class="mini green"><strong data-stat="present">{{ presences_stat.present }}</strong><span>Présent</span></div>
+      <div class="mini red"><strong data-stat="absent">{{ presences_stat.absent }}</strong><span>Absent / non pointé</span></div>
+      <div class="mini yellow"><strong data-stat="remote">{{ presences_stat.teletravail }}</strong><span>Télétravail</span></div>
+    </div>
+  </section>
+
+  <!-- Tous les modules métier exploitables -->
+  <div class="module-grid">
+    <section class="module-card">
+      <h2>{{ icon('palm', '1em') }} Congés et soldes</h2>
+      <div class="metric-row"><span>À traiter</span><strong data-stat="leave-pending">{{ conges_stat.en_attente }}</strong></div>
+      <div class="metric-row"><span>Approuvés en {{ today.year }}</span><strong>{{ conges_stat.approuve }}</strong></div>
+      <div class="metric-row"><span>Jours approuvés</span><strong>{{ conges_stat.jours_approuves }} j</strong></div>
+      <div class="metric-row"><span>Solde restant cumulé</span><strong>{{ solde_conges_restant }} j</strong></div>
+    </section>
+
+    <section class="module-card">
+      <h2>{{ icon('receipt', '1em') }} Permissions</h2>
+      <div class="metric-row"><span>À traiter</span><strong data-stat="permission-pending">{{ permissions_stat.en_attente }}</strong></div>
+      <div class="metric-row"><span>Approuvées en {{ today.year }}</span><strong>{{ permissions_stat.approuve }}</strong></div>
+      <div class="metric-row"><span>Refusées en {{ today.year }}</span><strong>{{ permissions_stat.refuse }}</strong></div>
+    </section>
+
+    <section class="module-card {{ 'module-alert' if absences_stat.a_regulariser or absences_stat.justificatifs_attente }}">
+      <h2>{{ icon('ban', '1em') }} Absences</h2>
+      <div class="metric-row"><span>Total {{ today.year }}</span><strong>{{ absences_stat.total }}</strong></div>
+      <div class="metric-row"><span>À régulariser</span><strong data-stat="absence-open">{{ absences_stat.a_regulariser }}</strong></div>
+      <div class="metric-row"><span>Justificatifs à décider</span><strong data-stat="absence-proof-pending">{{ absences_stat.justificatifs_attente }}</strong></div>
+      <div class="metric-row"><span>Requalifiées maladie</span><strong>{{ absences_stat.acceptees }}</strong></div>
+    </section>
+
+    <section class="module-card {{ 'module-alert' if documents_stat.expires }}">
+      <h2>{{ icon('folder', '1em') }} Documents</h2>
+      <div class="metric-row"><span>Documents</span><strong>{{ documents_stat.total }}</strong></div>
+      <div class="metric-row"><span>Expirés</span><strong data-stat="documents-expired">{{ documents_stat.expires }}</strong></div>
+      <div class="metric-row"><span>Échéance ≤ 30 jours</span><strong>{{ documents_stat.expirent_bientot }}</strong></div>
+    </section>
+
+    <section class="module-card {{ 'module-alert' if materiels_stat.alertes_stock }}">
+      <h2>{{ icon('box', '1em') }} Matériels et parc</h2>
+      <div class="metric-row"><span>Articles / stock</span><strong data-stat="material-articles">{{ materiels_stat.articles }} / {{ materiels_stat.stock_total }}</strong></div>
+      <div class="metric-row"><span>Stocks bas</span><strong>{{ materiels_stat.alertes_stock }}</strong></div>
+      <div class="metric-row"><span>Attributions actives</span><strong>{{ materiels_stat.attributions_actives }}</strong></div>
+      {% if dashboard_scope.is_global %}<div class="metric-row"><span>Valeur estimée du parc</span><strong>{{ "%.0f"|format(materiels_stat.valeur_parc) }} Ar</strong></div>{% endif %}
+    </section>
+
+    <section class="module-card {{ 'module-alert' if maintenances_stat.ouvertes }}">
+      <h2>{{ icon('wrench', '1em') }} Maintenance</h2>
+      <div class="metric-row"><span>Interventions ouvertes</span><strong data-stat="maintenance-open">{{ maintenances_stat.ouvertes }}</strong></div>
+      <div class="metric-row"><span>Retours à valider</span><strong>{{ maintenances_stat.a_valider }}</strong></div>
+      {% if dashboard_scope.is_global %}<div class="metric-row"><span>Coût {{ today.year }}</span><strong>{{ "%.0f"|format(maintenances_stat.cout_annee) }} Ar</strong></div>{% endif %}
+    </section>
+
+    <section class="module-card {{ 'module-alert' if inventaires_stat.ecarts }}">
+      <h2>{{ icon('clipboard', '1em') }} Inventaires</h2>
+      <div class="metric-row"><span>Campagnes en cours</span><strong data-stat="inventory-open">{{ inventaires_stat.en_cours }}</strong></div>
+      <div class="metric-row"><span>Écarts constatés</span><strong>{{ inventaires_stat.ecarts }}</strong></div>
+    </section>
+
+    {% if systeme_stat %}
+    <section class="module-card">
+      <h2>{{ icon('shield', '1em') }} Accès et exploitation</h2>
+      <div class="metric-row"><span>Comptes / sessions actives</span><strong>{{ systeme_stat.utilisateurs }} / {{ systeme_stat.sessions_actives }}</strong></div>
+      <div class="metric-row"><span>Actions d’audit aujourd’hui</span><strong>{{ systeme_stat.actions_audit }}</strong></div>
+      <div class="metric-row"><span>Notifications non lues</span><strong>{{ systeme_stat.notifications_non_lues }}</strong></div>
+      <div class="metric-row"><span>E-mails attente / échec</span><strong>{{ systeme_stat.emails_attente }} / {{ systeme_stat.emails_echec }}</strong></div>
+    </section>
+    {% endif %}
+  </div>
+
+  <!-- Graphiques -->
+  <section class="dashboard-section">
+    <div class="section-title"><h2>{{ icon('chart', '1em') }} Tendance des présences — 30 jours</h2><span>{{ dashboard_scope.label }}</span></div>
+    <div class="chart-box"><canvas id="chartTendance"></canvas></div>
+  </section>
+
+  <div class="charts-grid">
+    <section class="card dashboard-chart-card">
+      <h2>{{ icon('clock', '1em') }} Présences du jour</h2>
+      <div class="chart-box chart-box--donut"><canvas id="chartPresencesJour"></canvas></div>
+    </section>
+    <section class="card dashboard-chart-card">
+      <h2>{{ icon('palm', '1em') }} Congés</h2>
+      <div class="chart-box chart-box--donut"><canvas id="chartConges"></canvas></div>
+    </section>
+  </div>
+
+  {% if dashboard_scope.is_global %}
+  <section class="dashboard-section">
+    <div class="section-title"><h2>{{ icon('building', '1em') }} Répartition des effectifs</h2><span>{{ total_departements }} département(s)</span></div>
+    <div class="chart-box"><canvas id="chartDepartements"></canvas></div>
+    <div class="table-container">
+      <table>
+        <thead><tr><th>Département</th><th>Employés</th><th>Part</th></tr></thead>
+        <tbody>{% for dept in dept_stats %}<tr><td data-label="Département"><strong>{{ dept.nom }}</strong></td><td data-label="Employés">{{ dept.nb_employes }}</td><td data-label="Part">{{ dept.pourcentage }}%</td></tr>{% else %}<tr><td colspan="3">Aucune donnée</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- Activité récente déjà filtrée au niveau SQL -->
+  <section class="dashboard-section">
+    <div class="section-title"><h2>{{ icon('calendar', '1em') }} Activité récente</h2><span>{{ dashboard_scope.label }}</span></div>
+    <div class="recent-grid">
+      <div><h3>Derniers pointages</h3>{% for p in recent_presences %}<p>{{ p.prenom }} {{ p.nom }} — {{ p.date }}{% if p.heure_arrivee %} · <strong>arrivée {{ (p.heure_arrivee|string)[:5] }}</strong>{% endif %}</p>{% else %}<p class="muted">Aucun</p>{% endfor %}</div>
+      <div><h3>Dernières demandes de congé</h3>{% for c in recent_conges %}<p>{{ c.prenom }} {{ c.nom }} — {{ c.date_debut }} ({{ c.statut }})</p>{% else %}<p class="muted">Aucune</p>{% endfor %}</div>
+    </div>
+  </section>

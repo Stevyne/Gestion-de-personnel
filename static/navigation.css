@@ -1,0 +1,8 @@
+/* La coque reste affichée ; le voile bloquant existant assure l'attente. */
+#appMain { min-width:0; }
+.app-navigation-status { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
+.navigation-error { display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:0 0 20px;padding:16px 18px;border:1px solid #f2b9b9;border-radius:12px;background:#fff3f3;color:#8f2929; }
+.navigation-error p { flex:1 1 280px;margin:0;font-size:.9rem; }
+.navigation-error .btn { font-size:.8rem; }
+#appMain h1[tabindex="-1"]:focus, #appMain h2[tabindex="-1"]:focus { outline:none; }
+@media print { .navigation-error,.app-navigation-status { display:none!important; } }

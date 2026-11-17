@@ -5,8 +5,36 @@
 <form class="rc-inline-form" method="post" action="{{ url_for('recrutement.offre_statut', offre_id=offre.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label for="statut">Changer le statut</label><select id="statut" name="statut">{% for code,label in statuts.items() %}<option value="{{ code }}" {% if offre.statut==code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button class="rc-btn rc-btn-sm">Enregistrer</button></form>
 </section>
 <section class="rc-card"><div class="rc-card-head"><div><h2>Grille pondérée</h2><p class="rc-muted">Aide à la décision uniquement — aucune acceptation automatique.</p></div></div>
-<form method="post" action="{{ url_for('recrutement.offre_criteres', offre_id=offre.id) }}" id="criteriaForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="rc-criteria" id="criteriaRows">{% for c in criteres %}<div class="rc-criterion-row"><input name="critere_libelle" value="{{ c.libelle }}" required maxlength="150"><input name="critere_poids" type="number" min="0.01" max="100" step="0.01" value="{{ c.poids }}" required><button type="button" class="rc-btn rc-btn-danger rc-btn-sm" onclick="this.parentElement.remove();updateWeight()">Retirer</button></div>{% endfor %}</div><div class="rc-weight-total">Total : <span id="weightTotal">0</span> %</div><div class="rc-form-actions"><button type="button" class="rc-btn rc-btn-muted" id="addCriterion">+ Critère</button><button class="rc-btn rc-btn-green">Enregistrer la grille</button></div></form>
+<form method="post" action="{{ url_for('recrutement.offre_criteres', offre_id=offre.id) }}" id="criteriaForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="rc-criteria" id="criteriaRows">{% for c in criteres %}<div class="rc-criterion-row"><input name="critere_libelle" value="{{ c.libelle }}" required maxlength="150"><input name="critere_poids" type="number" min="0.01" max="100" step="0.01" value="{{ c.poids }}" required><button type="button" class="rc-btn rc-btn-danger rc-btn-sm" data-remove-criterion>Retirer</button></div>{% endfor %}</div><div class="rc-weight-total">Total : <span id="weightTotal">0</span> %</div><div class="rc-form-actions"><button type="button" class="rc-btn rc-btn-muted" id="addCriterion">+ Critère</button><button class="rc-btn rc-btn-green">Enregistrer la grille</button></div></form>
 </section>
 <section class="rc-card"><div class="rc-card-head"><div><h2>Candidatures ({{ candidatures|length }})</h2></div></div>{% if candidatures %}<div class="rc-table-wrap"><table class="rc-table"><thead><tr><th>Candidat</th><th>Statut</th><th>Dossier</th><th>Entretiens</th><th>Global</th><th>Recommandation</th></tr></thead><tbody>{% for c in candidatures %}{% set reco,classe=recommandation(c.score_global) %}<tr><td><a href="{{ url_for('recrutement.candidature_detail', candidature_id=c.id) }}">{{ c.prenom }} {{ c.nom }}</a><br><small>{{ c.email }}</small></td><td><span class="rc-badge rc-badge-{{ c.statut }}">{{ candidature_statuts[c.statut] }}</span></td><td>{{ c.score_dossier|round(1) if c.score_dossier is not none else '—' }}</td><td>{{ c.score_entretien|round(1) if c.score_entretien is not none else '—' }}</td><td>{% if c.score_global is not none %}<span class="rc-score">{{ c.score_global|round(1) }}</span>{% else %}—{% endif %}</td><td class="rc-reco rc-reco-{{ classe }}">{{ reco }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="rc-empty">Aucune candidature. Créez d'abord un candidat.</div>{% endif %}</section>
 </div>{% endblock %}
-{% block extra_scripts %}<script>function updateWeight(){let t=0;document.querySelectorAll('[name="critere_poids"]').forEach(e=>t+=Number(e.value||0));document.getElementById('weightTotal').textContent=t.toFixed(2)}document.getElementById('addCriterion')?.addEventListener('click',()=>{const r=document.createElement('div');r.className='rc-criterion-row';r.innerHTML='<input name="critere_libelle" required maxlength="150" placeholder="Critère"><input name="critere_poids" type="number" min="0.01" max="100" step="0.01" required placeholder="Poids %"><button type="button" class="rc-btn rc-btn-danger rc-btn-sm">Retirer</button>';r.querySelector('button').onclick=()=>{r.remove();updateWeight()};document.getElementById('criteriaRows').appendChild(r)});document.getElementById('criteriaForm')?.addEventListener('input',updateWeight);updateWeight();</script>{% endblock %}
+{% block extra_scripts %}
+<script>
+(function () {
+    const form = document.getElementById('criteriaForm');
+    if (!form) return;
+    const rows = document.getElementById('criteriaRows');
+    function updateWeight() {
+        let total = 0;
+        form.querySelectorAll('[name="critere_poids"]').forEach(input => total += Number(input.value || 0));
+        document.getElementById('weightTotal').textContent = total.toFixed(2);
+    }
+    document.getElementById('addCriterion').addEventListener('click', () => {
+        const row = document.createElement('div');
+        row.className = 'rc-criterion-row';
+        row.innerHTML = '<input name="critere_libelle" required maxlength="150" placeholder="Critère"><input name="critere_poids" type="number" min="0.01" max="100" step="0.01" required placeholder="Poids %"><button type="button" class="rc-btn rc-btn-danger rc-btn-sm" data-remove-criterion>Retirer</button>';
+        rows.appendChild(row);
+        updateWeight();
+    });
+    form.addEventListener('click', event => {
+        const button = event.target.closest('[data-remove-criterion]');
+        if (!button) return;
+        button.closest('.rc-criterion-row').remove();
+        updateWeight();
+    });
+    form.addEventListener('input', updateWeight);
+    updateWeight();
+})();
+</script>
+{% endblock %}

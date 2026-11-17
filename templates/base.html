@@ -173,7 +173,17 @@
             background: #b91c1c;
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='navigation.css') }}">
+    <script src="{{ url_for('static', filename='page-lifecycle.js') }}"></script>
+    <script src="{{ url_for('static', filename='navigation-policy.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='navigation.js') }}" defer></script>
+    <script id="appNavigationConfig" type="application/json">{{ app_navigation_config|default({'enabled': false})|tojson }}</script>
+    <script id="appNavigationCounts" type="application/json">{{ {'messages': messages_non_lus|default(0), 'notifications': unread_notifications|default(0)}|tojson }}</script>
+    <meta name="app-page-styles" content="start">
+    <!-- app-navigation:styles:start -->
     {% block extra_styles %}{% endblock %}
+    <!-- app-navigation:styles:end -->
+    <meta name="app-page-styles" content="end">
 </head>
 <body class="{% block body_class %}{% endblock %}">
     {{ icon_bank() }}
@@ -251,7 +261,7 @@
                  Les rubriques proches sont regroupées en menus déroulants, ce qui
                  tient sur une seule ligne même sur un écran d'ordinateur portable. -->
             <div class="nav-links desktop-nav">
-                <a href="{{ url_for('dashboard.dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}">
+                <a href="{{ url_for('dashboard.dashboard') }}" class="nav-link {% if request.endpoint in ['dashboard.dashboard', 'dashboards_roles.dashboard_rh', 'dashboards_roles.dashboard_parc', 'dashboards_roles.dashboard_direction'] %}active{% endif %}">
                     {{ icon('dashboard') }}<span>Tableau de bord</span>
                 </a>
 
@@ -553,7 +563,7 @@
                 {# La barre de recherche n'existe pas en mobile : on y accède par ce lien #}
                 <a href="{{ url_for('recherche.recherche_page') }}" class="nav-link {% if request.endpoint == 'recherche.recherche_page' %}active{% endif %}">{{ icon('search') }}<span>Rechercher</span></a>
 
-                <a href="{{ url_for('dashboard.dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}">{{ icon('dashboard') }}<span>Tableau de bord</span></a>
+                <a href="{{ url_for('dashboard.dashboard') }}" class="nav-link {% if request.endpoint in ['dashboard.dashboard', 'dashboards_roles.dashboard_rh', 'dashboards_roles.dashboard_parc', 'dashboards_roles.dashboard_direction'] %}active{% endif %}">{{ icon('dashboard') }}<span>Tableau de bord</span></a>
 
                 <p class="drawer-section">Personnel</p>
 {% if peut('index') %}
@@ -697,7 +707,8 @@
     </div>
     {% endif %}
 
-    <div class="container">
+    <!-- app-navigation:main:start -->
+    <main id="appMain" class="container">
         {% from "_flash_message.html" import flash_message %}
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -708,7 +719,9 @@
         {% endwith %}
 
         {% block content %}{% endblock %}
-    </div>
+    </main>
+    <!-- app-navigation:main:end -->
+    <div id="appNavigationAnnouncer" class="app-navigation-status" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <footer>
         <p>Gestion du Personnel • 2026 • By Stevyne Ny Aina</p>
@@ -1162,11 +1175,8 @@
             if (formModalLastFocus) formModalLastFocus.focus();
         }
 
-        function setupFormModal() {
-            const modal = document.getElementById('formModal');
-            if (!modal) return;
-
-            document.querySelectorAll('a.js-modal-form').forEach(link => {
+        function setupFormModalTriggers(root = document) {
+            root.querySelectorAll('a.js-modal-form').forEach(link => {
                 link.addEventListener('click', e => {
                     // Respecte ctrl/cmd/clic-milieu : ouverture dans un onglet.
                     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -1175,6 +1185,14 @@
                     openFormModal(link.getAttribute('href'), link.dataset.modalTitle);
                 });
             });
+
+        }
+
+        function setupFormModal() {
+            const modal = document.getElementById('formModal');
+            if (!modal) return;
+
+            setupFormModalTriggers();
 
             const closeBtn = document.getElementById('formModalClose');
             if (closeBtn) closeBtn.addEventListener('click', closeFormModal);
@@ -1216,8 +1234,8 @@
             currentGenericForm = null;
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('form.delete-employee-form').forEach(form => {
+        function setupPageControls(root = document) {
+            root.querySelectorAll('form.delete-employee-form').forEach(form => {
                 const btn = form.querySelector('button[type="submit"]');
                 if (!btn) return;
                 form.onsubmit = null;
@@ -1227,7 +1245,7 @@
                 });
             });
 
-            document.querySelectorAll('form.confirm-form').forEach(form => {
+            root.querySelectorAll('form.confirm-form').forEach(form => {
                 const btn = form.querySelector('button[type="submit"]');
                 if (!btn) return;
                 form.onsubmit = null;
@@ -1236,6 +1254,27 @@
                     showGenericConfirm(form);
                 });
             });
+        }
+
+        document.addEventListener('app:page-ready', event => {
+            const root = event.detail.main;
+            setupPageControls(root);
+            setupFormModalTriggers(root);
+            if (window.initRegisterForm) window.initRegisterForm(root);
+        });
+        document.addEventListener('app:page-before-change', () => {
+            closeDrawer(true);
+            if (document.getElementById('formModal').classList.contains('show')) closeFormModal();
+            closeDeleteModal();
+            closeGenericConfirm();
+            document.querySelectorAll('.nav-dropdown.open').forEach(dropdown => {
+                dropdown.classList.remove('open');
+                dropdown.querySelector('.nav-dropdown-toggle')?.setAttribute('aria-expanded', 'false');
+            });
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setupPageControls();
             const genericBtn = document.getElementById('genericConfirmBtn');
             if (genericBtn) {
                 genericBtn.addEventListener('click', () => {
@@ -1387,6 +1426,8 @@
             });
         }
 
+        document.addEventListener('app:page-before-change', fermer);
+
         input.addEventListener('input', () => {
             const terme = input.value.trim();
             clearTimeout(debounce);
@@ -1429,6 +1470,8 @@
     })();
     </script>
 
-    {% block extra_scripts %}{% endblock %}
+    <!-- app-navigation:scripts:start -->
+    <div id="appPageScripts" hidden>{% block extra_scripts %}{% endblock %}</div>
+    <!-- app-navigation:scripts:end -->
 </body>
 </html>

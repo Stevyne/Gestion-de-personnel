@@ -88,6 +88,10 @@ jobs:
           node --check static/loading.js
           node --check static/activity-panel.js
           node --check static/flash-messages.js
+          node --check static/dashboard-tabs.js
+          node --check static/page-lifecycle.js
+          node --check static/navigation-policy.js
+          node --check static/navigation.js
           node --test tests/js/*.test.cjs
 
       - name: Installer les dépendances

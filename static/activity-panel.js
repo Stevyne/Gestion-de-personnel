@@ -15,6 +15,9 @@
     let currentKind = null;
     let currentUrl = null;
     let controller = null;
+    let closeTimer = null;
+    let focusTimer = null;
+    let badgeController = null;
 
     function panelUrl(url) {
         const parsed = new URL(url, window.location.origin);
@@ -56,16 +59,20 @@
     }
 
     function openLayer() {
+        clearTimeout(closeTimer);
+        clearTimeout(focusTimer);
         layer.hidden = false;
         panel.setAttribute('aria-hidden', 'false');
         document.body.classList.add('activity-panel-open');
         requestAnimationFrame(() => layer.classList.add('is-open'));
         setExpanded(true);
         if (typeof window.closeDrawer === 'function') window.closeDrawer(true);
-        setTimeout(() => closeButton && closeButton.focus({preventScroll: true}), 260);
+        focusTimer = setTimeout(() => closeButton && closeButton.focus({preventScroll: true}), 260);
     }
 
-    function closeLayer() {
+    function closeLayer(restoreFocus = true, immediate = false) {
+        clearTimeout(closeTimer);
+        clearTimeout(focusTimer);
         if (controller) controller.abort();
         controller = null;
         layer.classList.remove('is-open');
@@ -73,12 +80,14 @@
         document.body.classList.remove('activity-panel-open');
         setExpanded(false);
         const restore = activeTrigger;
-        setTimeout(() => {
+        const finish = () => {
             layer.hidden = true;
             body.innerHTML = '<div class="activity-panel-loader"><span></span><p>Chargement…</p></div>';
-            if (restore) restore.focus({preventScroll: true});
+            if (restoreFocus && restore?.isConnected) restore.focus({preventScroll: true});
             activeTrigger = null;
-        }, 240);
+        };
+        if (immediate) finish();
+        else closeTimer = setTimeout(finish, 240);
     }
 
     function showLoader() {
@@ -118,12 +127,14 @@
 
     async function refreshMessageBadge() {
         const url = panel.dataset.messageCountUrl;
-        if (!url || document.hidden) return;
+        if (!url || document.hidden || badgeController || document.getElementById('appLoadingOverlay')?.open) return;
+        const active = new AbortController();
+        badgeController = active;
         try {
             const response = await fetch(url, {
                 credentials: 'same-origin',
                 headers: {'X-Requested-With': 'XMLHttpRequest'},
-                cache: 'no-store',
+                cache: 'no-store', signal: active.signal,
             });
             if (!response.ok) return;
             const data = await response.json();
@@ -131,8 +142,19 @@
         } catch (error) {
             // Le compteur est non critique : le prochain rafraîchissement ou
             // rechargement de page réessaiera sans perturber l'utilisateur.
+        } finally {
+            if (badgeController === active) badgeController = null;
         }
     }
+
+    // Une réponse de polling démarrée avant un POST ne doit pas réécrire
+    // ensuite un ancien cookie de session et faire disparaître son flash.
+    // Le même observateur couvre les pages, les popups et les panneaux ;
+    // il appartient à la coque et n'est jamais recréé entre deux vues.
+    const loadingOverlay = document.getElementById('appLoadingOverlay');
+    if (loadingOverlay) new MutationObserver(() => {
+        if (loadingOverlay.open) badgeController?.abort();
+    }).observe(loadingOverlay, {attributes: true, attributeFilter: ['open']});
 
     function normalize(value) {
         return (value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -345,8 +367,12 @@
         if (!document.hidden) refreshMessageBadge();
     });
 
-    closeButton?.addEventListener('click', closeLayer);
-    backdrop?.addEventListener('click', closeLayer);
+    window.AppActivityPanel = Object.freeze({updateBadges: updateKindBadges});
+    document.addEventListener('app:page-before-change', () => {
+        if (!layer.hidden) closeLayer(false, true);
+    });
+    closeButton?.addEventListener('click', () => closeLayer());
+    backdrop?.addEventListener('click', () => closeLayer());
     document.addEventListener('keydown', event => {
         if (!layer.classList.contains('is-open')) return;
         if (event.key === 'Escape') { event.preventDefault(); closeLayer(); return; }

@@ -150,7 +150,7 @@
 </div>
 <script>
 // Synchroniser le slider et le champ numérique sur le formulaire d'ajout
-document.addEventListener('DOMContentLoaded', function() {
+window.AppPage.ready(function() {
   document.querySelectorAll('.skill-inline-form input[type=range]').forEach(function(r){
     var n = r.parentElement.querySelector('input[type=number]');
     if(n){ r.addEventListener('input', function(){ n.value = r.value; }); }
