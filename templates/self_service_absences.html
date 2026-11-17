@@ -35,7 +35,7 @@
           </td>
           <td data-label="Justificatif">
             {% if a.justificatif_nom %}
-              <a class="btn btn-secondary" style="padding:5px 9px;font-size:.78rem;" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">📎 {{ a.justificatif_nom }}</a>
+              <a data-no-loading class="btn btn-secondary" style="padding:5px 9px;font-size:.78rem;" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">📎 {{ a.justificatif_nom }}</a>
             {% endif %}
             {% if a.statut in peut_deposer %}
               <a data-modal-title="Justifier mon absence"

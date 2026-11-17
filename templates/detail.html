@@ -291,7 +291,7 @@
                                 {% endif %}
                             </div>
                         </div>
-                        <a href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;">📄</a>
+                        <a data-no-loading href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;">📄</a>
                     </div>
                     {% endfor %}
                 </div>

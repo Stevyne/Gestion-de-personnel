@@ -91,7 +91,7 @@
                         {% endif %}
                     </td>
                     <td data-label="Fichier">
-                        <a href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm btn-primary">
+                        <a data-no-loading href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm btn-primary">
                             {{ icon('file', 13) }} Télécharger
                         </a>
                     </td>

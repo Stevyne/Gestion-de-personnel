@@ -387,7 +387,7 @@
                     <td data-label="Motif"><small>{{ mv.motif or '—' }}</small></td>
                     <td data-label="Facture">
                         {% if mv.facture_nom %}
-                            <a class="btn btn-secondary btn-sm"
+                            <a data-no-loading class="btn btn-secondary btn-sm"
                                href="{{ url_for('parc.telecharger_facture', mvt_id=mv.id) }}"
                                title="Facture de cette entrée">📎 {{ mv.facture_nom }}</a>
                             {% if current_role in ['admin', 'rh'] %}

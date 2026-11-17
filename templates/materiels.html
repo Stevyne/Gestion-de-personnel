@@ -14,8 +14,8 @@
             <a href="{{ url_for('parc.etiquettes_departement', id=filters.departement) }}"
                class="btn btn-secondary" target="_blank">{{ icon('printer', 16) }} Étiquettes du service</a>
             {% endif %}
-            <a href="{{ url_for('rapports_parc.export_materiels_pdf') }}" class="btn btn-secondary">{{ icon('file', 16) }} PDF</a>
-            <a href="{{ url_for('rapports_parc.export_materiels_excel') }}" class="btn btn-secondary">{{ icon('chart', 16) }} Excel</a>
+            <a data-no-loading href="{{ url_for('rapports_parc.export_materiels_pdf') }}" class="btn btn-secondary">{{ icon('file', 16) }} PDF</a>
+            <a data-no-loading href="{{ url_for('rapports_parc.export_materiels_excel') }}" class="btn btn-secondary">{{ icon('chart', 16) }} Excel</a>
             <a href="{{ url_for('parc.inventaires') }}" class="btn btn-secondary">{{ icon('clipboard', 16) }} Inventaire</a>
             <a href="{{ url_for('departements.departements') }}" class="btn btn-secondary">{{ icon('building', 16) }} Départements</a>
         </div>

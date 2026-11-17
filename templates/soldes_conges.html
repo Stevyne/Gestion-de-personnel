@@ -9,7 +9,7 @@
         <div>
             <form method="get" style="display:inline-flex; gap:8px; align-items:center;">
                 <label for="annee" style="font-size:0.85rem; color:#64748b;">Année :</label>
-                <select name="annee" id="annee" onchange="this.form.submit()" style="padding:6px 10px; border-radius:6px; border:1px solid #cbd5e1;">
+                <select name="annee" id="annee" onchange="this.form.requestSubmit()" style="padding:6px 10px; border-radius:6px; border:1px solid #cbd5e1;">
                     {% for a in annees_disponibles %}
                         <option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}</option>
                     {% endfor %}

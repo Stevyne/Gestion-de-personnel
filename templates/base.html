@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='recrutement.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='activity-panel.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='ui-polish.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='loading.css') }}">
+    <script src="{{ url_for('static', filename='loading.js') }}" defer></script>
     <style>
         /* ===== BEAUTIFUL DELETE CONFIRMATION MODAL ===== */
         .modal-backdrop {
@@ -169,6 +171,13 @@
     {% block extra_styles %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
+    <div id="appLoading" class="app-loading" role="progressbar"
+         aria-label="Chargement en cours" hidden>
+        <span class="app-loading-segment" aria-hidden="true"></span>
+        <span class="app-loading-segment app-loading-segment--secondary" aria-hidden="true"></span>
+    </div>
+    <span id="appLoadingStatus" class="app-loading-status" role="status"
+          aria-live="polite" aria-atomic="true"></span>
 {% macro pagination(endpoint, base_qs, pg, page_items) %}
 {% if pg and pg.pages > 1 %}
 <nav style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin:20px 0 6px;">
@@ -1027,7 +1036,7 @@
             preview.innerHTML = `<div class="preview-avatar">${initials}</div><div><div class="preview-name">${name}</div><div class="preview-id">Employé #${id}</div></div>`;
             currentForm = formElement;
             modal.classList.add('show');
-            btn.onclick = () => { if (currentForm) { btn.disabled = true; btn.textContent = 'Suppression...'; currentForm.submit(); } };
+            btn.onclick = () => { if (currentForm) { btn.disabled = true; btn.textContent = 'Suppression...'; currentForm.requestSubmit(); } };
             modal.onclick = e => { if (e.target === modal) closeDeleteModal(); };
         }
         function closeDeleteModal() {
@@ -1054,6 +1063,7 @@
            de formulaire existantes continuent de fonctionner.
         */
         let formModalLastFocus = null;
+        let formModalController = null;
 
         function openFormModal(url, title) {
             const modal = document.getElementById('formModal');
@@ -1067,20 +1077,31 @@
             modal.setAttribute('aria-hidden', 'false');
             document.body.style.overflow = 'hidden';
 
+            if (formModalController) formModalController.abort();
+            const controller = new AbortController();
+            formModalController = controller;
+            const stopLoading = window.AppLoading.start();
             const sep = url.includes('?') ? '&' : '?';
             fetch(url + sep + 'modal=1', {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin'
+                credentials: 'same-origin',
+                signal: controller.signal
             })
                 .then(r => {
                     if (!r.ok) throw new Error('HTTP ' + r.status);
                     return r.text();
                 })
-                .then(html => injectFormModal(html, url))
-                .catch(() => {
-                    // En cas d'échec (réseau, session expirée…), on retombe sur
-                    // la navigation classique plutôt que de bloquer l'utilisateur.
-                    window.location.href = url;
+                .then(html => {
+                    if (!controller.signal.aborted) injectFormModal(html, url);
+                })
+                .catch(error => {
+                    if (error.name === 'AbortError') return;
+                    // En cas d'échec, conserver le repli en page complète.
+                    window.AppLoading.navigate(url);
+                })
+                .finally(() => {
+                    stopLoading();
+                    if (formModalController === controller) formModalController = null;
                 });
         }
 
@@ -1140,38 +1161,49 @@
                 const btn = form.querySelector('button[type=submit]');
                 const label = btn ? btn.textContent : '';
                 if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+                const controller = new AbortController();
+                if (formModalController) formModalController.abort();
+                formModalController = controller;
+                const stopLoading = window.AppLoading.start();
 
                 fetch(form.action, {
                     method: (form.method || 'POST').toUpperCase(),
                     body: new FormData(form),
                     headers: { 'X-Requested-With': 'XMLHttpRequest' },
                     credentials: 'same-origin',
-                    redirect: 'follow'
+                    redirect: 'follow',
+                    signal: controller.signal
                 })
                     .then(r => {
+                        if (controller.signal.aborted) return null;
                         // Le serveur renvoie 204 + X-Redirect-To quand
                         // l'enregistrement a réussi : on navigue nous-mêmes
                         // pour que le message flash reste disponible.
                         const target = r.headers.get('X-Redirect-To');
                         if (target) {
-                            window.location.href = target;
+                            window.AppLoading.navigate(target);
                             return null;
                         }
                         // Filet de sécurité : redirection suivie malgré tout.
                         if (r.redirected || r.url.split('?')[0] !== form.action.split('?')[0]) {
-                            window.location.href = r.url;
+                            window.AppLoading.navigate(r.url);
                             return null;
                         }
                         return r.text();
                     })
                     .then(html => {
-                        if (html === null) return;
+                        if (html === null || controller.signal.aborted) return;
                         // Le serveur a renvoyé le formulaire : erreur de validation.
                         injectFormModal(html, url);
                     })
-                    .catch(() => {
+                    .catch(error => {
+                        if (error.name === 'AbortError') return;
                         if (btn) { btn.disabled = false; btn.textContent = label; }
                         alert("L'enregistrement a échoué. Vérifiez votre connexion.");
+                    })
+                    .finally(() => {
+                        stopLoading();
+                        if (formModalController === controller) formModalController = null;
                     });
             });
         }
@@ -1179,6 +1211,8 @@
         function closeFormModal() {
             const modal = document.getElementById('formModal');
             if (!modal) return;
+            if (formModalController) formModalController.abort();
+            formModalController = null;
             modal.classList.remove('show');
             modal.setAttribute('aria-hidden', 'true');
             document.body.style.overflow = '';
@@ -1264,7 +1298,7 @@
                     if (currentGenericForm) {
                         genericBtn.disabled = true;
                         genericBtn.textContent = 'Traitement...';
-                        currentGenericForm.submit();
+                        currentGenericForm.requestSubmit();
                     }
                 });
             }
@@ -1330,6 +1364,9 @@
             c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
         function fermer() {
+            clearTimeout(debounce);
+            if (requeteEnCours) requeteEnCours.abort();
+            requeteEnCours = null;
             panel.hidden = true; panel.innerHTML = '';
             input.setAttribute('aria-expanded', 'false');
             items = []; actif = -1;
@@ -1389,13 +1426,21 @@
 
         function chercher(terme) {
             if (requeteEnCours) requeteEnCours.abort();
-            requeteEnCours = new AbortController();
+            const controller = new AbortController();
+            requeteEnCours = controller;
+            const stopLoading = window.AppLoading.start();
             fetch(urlApi + '?q=' + encodeURIComponent(terme), {
-                signal: requeteEnCours.signal, headers: {'X-Requested-With': 'XMLHttpRequest'}
+                signal: controller.signal, headers: {'X-Requested-With': 'XMLHttpRequest'}
             })
             .then(r => r.ok ? r.json() : Promise.reject(r.status))
-            .then(afficher)
-            .catch(err => { if (err && err.name !== 'AbortError') fermer(); });
+            .then(data => { if (!controller.signal.aborted) afficher(data); })
+            .catch(err => {
+                if (requeteEnCours === controller && (!err || err.name !== 'AbortError')) fermer();
+            })
+            .finally(() => {
+                stopLoading();
+                if (requeteEnCours === controller) requeteEnCours = null;
+            });
         }
 
         input.addEventListener('input', () => {

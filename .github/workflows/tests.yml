@@ -75,6 +75,17 @@ jobs:
             requirements-production.txt
             requirements-dev.txt
 
+      - name: Installer Node pour les tests du chargement
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Tester le contrôleur de chargement (sans npm)
+        run: |
+          node --check static/loading.js
+          node --check static/activity-panel.js
+          node --test tests/js/loading.test.cjs
+
       - name: Installer les dépendances
         run: |
           python -m pip install --upgrade pip

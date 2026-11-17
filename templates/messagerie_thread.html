@@ -72,7 +72,7 @@
           <div class="msg-bubble">
             {% if m.contenu %}<div class="msg-text">{{ m.contenu }}</div>{% endif %}
             {% if m.piece_jointe_nom %}
-            <a href="{{ url_for('messagerie.messagerie_piece_jointe', message_id=m.id) }}"
+            <a data-no-loading href="{{ url_for('messagerie.messagerie_piece_jointe', message_id=m.id) }}"
                class="msg-attachment">
               <span class="msg-attachment-icon">📄</span>
               <span><strong>{{ m.piece_jointe_nom }}</strong><small>{{ ((m.piece_jointe_taille or 0) / 1024)|round(1) }} Ko</small></span>

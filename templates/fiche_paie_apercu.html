@@ -10,7 +10,7 @@
         <button type="button" class="btn btn-primary" onclick="window.print()">
             {{ icon('printer') }} Imprimer
         </button>
-        <a class="btn" href="?{{ request.query_string.decode() }}&format=pdf"
+        <a data-no-loading class="btn" href="?{{ request.query_string.decode() }}&format=pdf"
            onclick="this.href='{{ url_for('fiches_paie.pdf', employe_id=employe.id) }}?{{ request.query_string.decode() }}'">
             {{ icon('download') }} Télécharger en PDF
         </a>

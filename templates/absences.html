@@ -53,7 +53,7 @@
                     </td>
                     <td data-label="Justificatif">
                       {% if a.justificatif_nom %}
-                        {% if session.get('role') in ['admin','rh'] or a.employe_id == mon_employe_id %}<a class="btn btn-sm btn-secondary" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">{{ icon('paperclip', 13) }} Télécharger</a>{% else %}<span class="rc-muted">Déposé 🔒</span>{% endif %}
+                        {% if session.get('role') in ['admin','rh'] or a.employe_id == mon_employe_id %}<a data-no-loading class="btn btn-sm btn-secondary" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">{{ icon('paperclip', 13) }} Télécharger</a>{% else %}<span class="rc-muted">Déposé 🔒</span>{% endif %}
                         {% if a.date_depot_justificatif %}<br><small class="rc-muted">{{ a.date_depot_justificatif.strftime('%d/%m/%Y %H:%M') }}</small>{% endif %}
                       {% else %}<span class="rc-muted">—</span>{% endif %}
                     </td>

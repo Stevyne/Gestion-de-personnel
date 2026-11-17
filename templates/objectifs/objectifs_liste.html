@@ -55,14 +55,14 @@
         <button type="button" class="obj-search-clear" id="objSearchClear" hidden aria-label="Effacer">✕</button>
       </div>
       <form method="get" class="obj-filters">
-        <select name="statut" onchange="this.form.submit()">
+        <select name="statut" onchange="this.form.requestSubmit()">
           <option value="">Tous les statuts</option>
           {% for key, lbl in labels.items() %}
             <option value="{{ key }}" {% if filtres.statut==key %}selected{% endif %}>{{ lbl }}</option>
           {% endfor %}
         </select>
         {% if employes|length > 1 %}
-        <select name="employe_id" onchange="this.form.submit()">
+        <select name="employe_id" onchange="this.form.requestSubmit()">
           <option value="">Tous les collaborateurs</option>
           {% for emp in employes %}
             <option value="{{ emp.id }}" {% if filtres.employe_id==emp.id %}selected{% endif %}>{{ emp.prenom }} {{ emp.nom }}</option>
@@ -70,7 +70,7 @@
         </select>
         {% endif %}
         <label class="obj-check">
-          <input type="checkbox" name="miens" value="1" {% if filtres.miens %}checked{% endif %} onchange="this.form.submit()">
+          <input type="checkbox" name="miens" value="1" {% if filtres.miens %}checked{% endif %} onchange="this.form.requestSubmit()">
           Mes objectifs uniquement
         </label>
         <a class="rc-btn rc-btn-light rc-btn-sm" href="{{ url_for('objectifs.objectifs_liste') }}" title="Réinitialiser les filtres">↺ Réinitialiser</a>

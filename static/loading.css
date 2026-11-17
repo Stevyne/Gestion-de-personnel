@@ -1,0 +1,85 @@
+/* Barre indéterminée inspirée de Material : aucun pourcentage fictif. */
+.app-loading {
+    --loading-color: #1a73e8;
+    --loading-track: #d2e3fc;
+    position: fixed;
+    z-index: 100010; /* Au-dessus de la navigation et des popups. */
+    inset: 0 0 auto;
+    height: 4px;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--loading-track);
+}
+
+.app-loading[hidden] {
+    display: none;
+}
+
+.app-loading-segment {
+    position: absolute;
+    inset: 0;
+    background: var(--loading-color);
+    transform-origin: left center;
+}
+
+.app-loading:not([hidden]) .app-loading-segment {
+    will-change: transform;
+    animation: app-loading-primary 1.8s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+
+.app-loading:not([hidden]) .app-loading-segment--secondary {
+    animation-name: app-loading-secondary;
+}
+
+@keyframes app-loading-primary {
+    0% { transform: translateX(-60%) scaleX(.3); }
+    50% { transform: translateX(15%) scaleX(.65); }
+    100% { transform: translateX(110%) scaleX(.2); }
+}
+
+@keyframes app-loading-secondary {
+    0%, 35% { transform: translateX(-100%) scaleX(.4); }
+    85% { transform: translateX(25%) scaleX(.5); }
+    100% { transform: translateX(110%) scaleX(.35); }
+}
+
+/* Sur la connexion, la barre épouse le haut de la carte, comme chez Google. */
+.login-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.login-card > .app-loading {
+    position: absolute;
+}
+
+.app-loading-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-loading:not([hidden]) .app-loading-segment {
+        animation: none;
+        transform: none;
+        will-change: auto;
+    }
+
+    .app-loading-segment--secondary {
+        display: none;
+    }
+}
+
+@media print {
+    .app-loading,
+    .app-loading-status {
+        display: none !important;
+    }
+}

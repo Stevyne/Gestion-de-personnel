@@ -36,8 +36,8 @@
             <h3 style="margin:0; display:flex; align-items:center; gap:8px;">{{ icon('clock', 18) }} Mes Présences</h3>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <a href="{{ url_for('self_service_presences') }}" class="btn btn-secondary btn-sm">{{ icon('eye', 13) }} Tout voir</a>
-                <a href="{{ url_for('export_presences_pdf', my=1) }}" class="btn btn-sm" style="background:#1e40af;color:white;">{{ icon('file', 13) }} PDF</a>
-                <a href="{{ url_for('export_presences_excel', my=1) }}" class="btn btn-sm" style="background:#15803d;color:white;">{{ icon('chart', 13) }} Excel</a>
+                <a data-no-loading href="{{ url_for('export_presences_pdf', my=1) }}" class="btn btn-sm" style="background:#1e40af;color:white;">{{ icon('file', 13) }} PDF</a>
+                <a data-no-loading href="{{ url_for('export_presences_excel', my=1) }}" class="btn btn-sm" style="background:#15803d;color:white;">{{ icon('chart', 13) }} Excel</a>
             </div>
         </div>
         <div class="rc-table-wrap">
@@ -91,8 +91,8 @@
             <h3 style="margin:0; display:flex; align-items:center; gap:8px;">{{ icon('palm', 18) }} Mes Congés</h3>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <a href="{{ url_for('self_service_conges') }}" class="btn btn-secondary btn-sm">{{ icon('eye', 13) }} Gérer</a>
-                <a href="{{ url_for('export_conges_pdf', my=1) }}" class="btn btn-sm" style="background:#1e40af;color:white;">{{ icon('file', 13) }} PDF</a>
-                <a href="{{ url_for('export_conges_excel', my=1) }}" class="btn btn-sm" style="background:#15803d;color:white;">{{ icon('chart', 13) }} Excel</a>
+                <a data-no-loading href="{{ url_for('export_conges_pdf', my=1) }}" class="btn btn-sm" style="background:#1e40af;color:white;">{{ icon('file', 13) }} PDF</a>
+                <a data-no-loading href="{{ url_for('export_conges_excel', my=1) }}" class="btn btn-sm" style="background:#15803d;color:white;">{{ icon('chart', 13) }} Excel</a>
             </div>
         </div>
         <div class="rc-table-wrap">

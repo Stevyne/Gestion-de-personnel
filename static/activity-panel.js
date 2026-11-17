@@ -67,6 +67,7 @@
 
     function closeLayer() {
         if (controller) controller.abort();
+        controller = null;
         layer.classList.remove('is-open');
         panel.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('activity-panel-open');
@@ -222,21 +223,24 @@
         fullLink.href = fullUrl(url);
         showLoader();
         if (controller) controller.abort();
-        controller = new AbortController();
+        const requestController = new AbortController();
+        controller = requestController;
+        const stopLoading = window.AppLoading.start();
         try {
             const response = await fetch(currentUrl, {
                 credentials: 'same-origin',
                 headers: {'X-Activity-Panel': '1', 'X-Requested-With': 'XMLHttpRequest'},
-                signal: controller.signal,
+                signal: requestController.signal,
             });
             if (response.redirected && new URL(response.url).pathname === '/login') {
-                window.location.assign(response.url);
+                window.AppLoading.navigate(response.url);
                 return;
             }
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const html = await response.text();
+            if (requestController.signal.aborted) return;
             if (/<!doctype html/i.test(html)) {
-                window.location.assign(response.url);
+                window.AppLoading.navigate(response.url);
                 return;
             }
             body.innerHTML = html;
@@ -248,6 +252,9 @@
             if (error.name === 'AbortError') return;
             body.innerHTML = '<div class="activity-panel-error"><span>⚠️</span><p>Impossible de charger ce panneau.</p><button type="button">Réessayer</button></div>';
             body.querySelector('button')?.addEventListener('click', () => load(currentUrl, currentKind));
+        } finally {
+            stopLoading();
+            if (controller === requestController) controller = null;
         }
     }
 
@@ -275,14 +282,19 @@
         event.preventDefault();
         const button = form.querySelector('button[type="submit"], .msg-send-btn');
         if (button) button.disabled = true;
+        if (controller) controller.abort();
+        const requestController = new AbortController();
+        controller = requestController;
+        const stopLoading = window.AppLoading.start();
         try {
             const response = await fetch(form.action || currentUrl, {
                 method: (form.method || 'POST').toUpperCase(),
                 body: new FormData(form), credentials: 'same-origin',
                 headers: {'X-Activity-Panel': '1', 'X-Requested-With': 'XMLHttpRequest'},
+                signal: requestController.signal,
             });
             if (response.redirected && new URL(response.url).pathname === '/login') {
-                window.location.assign(response.url);
+                window.AppLoading.navigate(response.url);
                 return;
             }
             // Compatibilité défensive avec le gestionnaire AJAX des popups :
@@ -295,8 +307,9 @@
             }
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const html = await response.text();
+            if (requestController.signal.aborted) return;
             if (/<!doctype html/i.test(html)) {
-                window.location.assign(response.url);
+                window.AppLoading.navigate(response.url);
                 return;
             }
             currentUrl = response.url;
@@ -306,11 +319,15 @@
             updateBadges(root);
             if (currentKind === 'messages' && root) initMessagePanel(root);
         } catch (error) {
+            if (error.name === 'AbortError') return;
             if (button) button.disabled = false;
             const notice = document.createElement('div');
             notice.className = 'activity-panel-flash activity-panel-flash--danger';
             notice.textContent = "L'action n'a pas pu être effectuée. Réessayez.";
             form.prepend(notice);
+        } finally {
+            stopLoading();
+            if (controller === requestController) controller = null;
         }
     });
 
