@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends "base.html" %}
 {% from "base.html" import pagination, icon %}
 {% block title %}Historique · TeamSphere{% endblock %}
@@ -10,7 +11,7 @@
           <p>Consultez, filtrez et corrigez les pointages sur la période de votre choix.</p>
         </div>
         <div>
-            <a href="{{ url_for('presences.presences') }}" class="btn btn-secondary">← Retour aux présences</a>
+            <a href="{{ url_for('presences.presences') }}" class="btn btn-secondary">{{ icon('arrow-left', '1em') }} Retour aux présences</a>
         </div>
     </div>
 
@@ -137,16 +138,16 @@
                     <td data-label="Actions">
                         <div class="actions" style="gap:4px;">
                             <a data-modal-title="Enregistrer / modifier une présence" href="{{ url_for('presences.add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}"
-                               class="js-modal-form btn btn-secondary" style="padding:3px 9px; font-size:0.7rem;">✏️ Modifier</a>
+                               class="js-modal-form btn btn-secondary" style="padding:3px 9px; font-size:0.7rem;">{{ icon('edit', '1em') }} Modifier</a>
                             <form action="{{ url_for('presences.delete_presence', id=p.id) }}" method="post" style="display:inline;"
                                   class="confirm-form"
                                   data-confirm-title="Supprimer ce pointage ?"
                                   data-confirm-subtitle="Action irréversible"
-                                  data-confirm-icon="🕒"
+                                  data-confirm-icon="clock"
                                   data-confirm-warning="Cette présence sera définitivement supprimée.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                                    <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;">🗑️</button>
+                                    <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;" aria-label="Supprimer">{{ icon('trash', '1em') }}</button>
                                 {% endif %}
                             </form>
                         </div>

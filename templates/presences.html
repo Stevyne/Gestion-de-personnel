@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends "base.html" %}
 {% from "base.html" import pagination, icon %}
 {% block title %}Gestion des Présences · TeamSphere{% endblock %}
@@ -12,7 +13,7 @@
         <div style="display: flex; gap: 10px;">
             <a data-modal-title="Enregistrer / modifier une présence" href="{{ url_for('presences.add_presence') }}" class="js-modal-form btn btn-primary">{{ icon('clock', 15) }}<span>Enregistrer / Modifier</span></a>
             <a href="{{ url_for('presences.historique') }}" class="btn btn-secondary">{{ icon('history', 15) }}<span>Historique complet</span></a>
-            <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Tableau de bord</a>
+            <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">{{ icon('arrow-left', '1em') }} Tableau de bord</a>
         </div>
     </div>
 
@@ -49,7 +50,7 @@
     {% if nb_retards > 0 %}
     <div class="alert alert-danger" style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:16px 18px; margin-bottom:20px;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
-            <span class="badge" style="background:#dc2626; color:#fff; padding:5px 11px; font-size:.82rem;">⚠ {{ nb_retards }} retard(s)</span>
+            <span class="badge" style="background:#dc2626; color:#fff; padding:5px 11px; font-size:.82rem;">{{ icon('alert', '1em') }} {{ nb_retards }} retard(s)</span>
             <strong style="color:#991b1b; font-size:1.02rem;">Alertes Retards — Aujourd'hui ({{ today }})</strong>
         </div>
 
@@ -72,7 +73,7 @@
     </div>
     {% else %}
     <div class="alert alert-success" style="background:#effaf3; border:1px solid #bbf7d0; border-radius:12px; padding:12px 16px; margin-bottom:20px; color:#166534; font-weight:500;">
-        ✓ Aucun retard enregistré aujourd'hui (arrivée standard à 09:00)
+        {{ icon('check', '1em') }} Aucun retard enregistré aujourd'hui (arrivée standard à 09:00)
     </div>
     {% endif %}
 
@@ -175,26 +176,26 @@
                             <form action="{{ url_for('presences.clock_in', employe_id=p.employe_id) }}" method="post" style="display:inline;">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="date" value="{{ p.date }}">
-                                <button type="submit" class="btn" style="padding:3px 8px; font-size:0.65rem; background:#16a34a; color:white;">⏰ Entrée</button>
+                                <button type="submit" class="btn" style="padding:3px 8px; font-size:0.65rem; background:#16a34a; color:white;">{{ icon('clock', '1em') }} Entrée</button>
                             </form>
                             <form action="{{ url_for('presences.clock_out', employe_id=p.employe_id) }}" method="post" style="display:inline;">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="date" value="{{ p.date }}">
-                                <button type="submit" class="btn" style="padding:3px 8px; font-size:0.65rem; background:#ca8a04; color:white;">⏱️ Sortie</button>
+                                <button type="submit" class="btn" style="padding:3px 8px; font-size:0.65rem; background:#ca8a04; color:white;">{{ icon('clock', '1em') }} Sortie</button>
                             </form>
                             <a data-modal-title="Enregistrer / modifier une présence" href="{{ url_for('presences.add_presence') }}?date={{ p.date }}&amp;employe_id={{ p.employe_id }}"
-                               class="js-modal-form btn btn-secondary" style="padding:3px 8px;font-size:0.7rem;">✏️</a>
+                               class="js-modal-form btn btn-secondary" style="padding:3px 8px;font-size:0.7rem;" aria-label="Enregistrer / modifier une présence">{{ icon('edit', '1em') }}</a>
                             
                             <form action="{{ url_for('presences.delete_presence', id=p.id) }}" method="post" style="display:inline;"
                                   class="confirm-form"
                                   data-confirm-title="Supprimer ce pointage ?"
                                   data-confirm-subtitle="Action irréversible"
-                                  data-confirm-icon="🕒"
+                                  data-confirm-icon="clock"
                                   data-confirm-warning="Cette présence sera définitivement supprimée.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 
                                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
-                                    <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;">🗑️</button>
+                                    <button type="submit" class="btn btn-danger" style="padding:3px 7px;font-size:0.65rem;" aria-label="Supprimer">{{ icon('trash', '1em') }}</button>
                                 {% endif %}
                             </form>
                         </div>

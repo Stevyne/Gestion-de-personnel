@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Départements · TeamSphere{% endblock %}
 
 {% block content %}
@@ -36,15 +36,15 @@
                     </td>
                     <td data-label="Actions">
                         <div class="actions" style="gap:4px;">
-                            <a data-modal-title="Modifier le département" href="{{ url_for('departements.edit_departement', id=dept.id) }}" class="js-modal-form btn btn-secondary btn-sm" title="Modifier">{{ icon('wrench', 14) }}</a>
+                            <a data-modal-title="Modifier le département" href="{{ url_for('departements.edit_departement', id=dept.id) }}" class="js-modal-form btn btn-secondary btn-sm" title="Modifier" aria-label="Modifier le département">{{ icon('wrench', 14) }}</a>
                             <form action="{{ url_for('departements.delete_departement', id=dept.id) }}" method="post" style="display:inline;"
                                   class="confirm-form"
                                   data-confirm-title="Supprimer le département ?"
                                   data-confirm-subtitle="Action irréversible"
-                                  data-confirm-icon="🏢"
+                                  data-confirm-icon="building"
                                   data-confirm-warning="Les employés associés ne seront pas supprimés.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-danger btn-sm" title="Supprimer">{{ icon('ban', 14) }}</button>
+                                <button type="submit" class="btn btn-danger btn-sm" title="Supprimer" aria-label="Supprimer">{{ icon('ban', 14) }}</button>
                             </form>
                         </div>
                     </td>
@@ -52,7 +52,7 @@
                 {% else %}
                 <tr>
                     <td colspan="5" class="empty-state">
-                        <div class="empty-icon">🏢</div>
+                        <div class="empty-icon">{{ icon('building', '1em') }}</div>
                         <strong>Aucun département.</strong>
                         <div style="margin-top:8px;">
                             <a data-modal-title="Nouveau département" href="{{ url_for('departements.add_departement') }}" class="js-modal-form btn btn-primary btn-sm">+ Créer le premier département</a>

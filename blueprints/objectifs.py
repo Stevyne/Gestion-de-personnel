@@ -430,7 +430,7 @@ def creer_blueprint_objectifs(deps):
                     if start_status == STATUT_EN_COURS:
                         uid_emp = _user_id_employe(cur, employe_id)
                         if uid_emp and uid_emp != session.get('user_id'):
-                            _notifier(cur, uid_emp, "🎯 Nouvel objectif assigné",
+                            _notifier(cur, uid_emp, "Nouvel objectif assigné",
                                       f"Un nouvel objectif « {titre} » vous a été assigné.",
                                       'info')
                     else:
@@ -440,7 +440,7 @@ def creer_blueprint_objectifs(deps):
                         if dept_row and dept_row['departement']:
                             _notifier_manager_departement(
                                 cur, dept_row['departement'],
-                                "📝 Nouveau brouillon d'objectif",
+                                "Nouveau brouillon d'objectif",
                                 f"Un objectif « {titre} » a été créé comme brouillon "
                                 f"et attend votre validation.",
                                 sauf=session.get('user_id'),
@@ -613,7 +613,7 @@ def creer_blueprint_objectifs(deps):
                 me = session.get('user_id')
                 if new_status != obj['statut'] and new_status == STATUT_EN_COURS:
                     if uid_emp and uid_emp != me:
-                        _notifier(cur, uid_emp, "🎯 Objectif démarré",
+                        _notifier(cur, uid_emp, "Objectif démarré",
                                   f"Votre objectif « {obj['titre']} » est maintenant en cours.",
                                   'success')
                 flash("Progression mise à jour.", "success")
@@ -647,12 +647,12 @@ def creer_blueprint_objectifs(deps):
             if est_proprio:
                 _notifier_manager_departement(
                     cur, obj['emp_dept'],
-                    "🎯 Objectif démarré par l'employé",
+                    "Objectif démarré par l'employé",
                     f"« {obj['titre']} » est passé en cours.",
                     sauf=uid)
             else:
                 uid_emp = _user_id_employe(cur, obj['employe_id'])
-                _notifier(cur, uid_emp, "🎯 Objectif validé",
+                _notifier(cur, uid_emp, "Objectif validé",
                           f"Votre objectif « {obj['titre']} » est maintenant en cours.",
                           'success')
             flash("Objectif démarré.", "success")
@@ -678,7 +678,7 @@ def creer_blueprint_objectifs(deps):
                        'OBJECTIF_SOUMETTRE', 'objectif', oid, '')
             _notifier_manager_departement(
                 cur, obj['emp_dept'],
-                "✅ Objectif à valider",
+                "Objectif à valider",
                 f"« {obj['titre']} » a été marqué comme atteint — à valider.",
                 sauf=session.get('user_id'),
                 type_='success')
@@ -709,7 +709,7 @@ def creer_blueprint_objectifs(deps):
             log_action(session.get('user_id'), session.get('username'),
                        'OBJECTIF_VALIDER', 'objectif', oid, '')
             uid_emp = _user_id_employe(cur, obj['employe_id'])
-            _notifier(cur, uid_emp, "🎉 Objectif validé",
+            _notifier(cur, uid_emp, "Objectif validé",
                       f"Votre objectif « {obj['titre']} » a été validé comme atteint !",
                       'success')
             flash("Objectif validé comme atteint.", "success")
@@ -739,7 +739,7 @@ def creer_blueprint_objectifs(deps):
             log_action(session.get('user_id'), session.get('username'),
                        'OBJECTIF_NON_ATTEINT', 'objectif', oid, commentaire)
             uid_emp = _user_id_employe(cur, obj['employe_id'])
-            _notifier(cur, uid_emp, "⚠️ Objectif clos comme non atteint",
+            _notifier(cur, uid_emp, "Objectif clos comme non atteint",
                       f"Votre objectif « {obj['titre']} » a été clos comme non atteint : {commentaire}",
                       'warning')
             flash("Objectif clos comme non atteint.", "info")

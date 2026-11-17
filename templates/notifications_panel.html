@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 <section class="activity-panel-view activity-notifications" data-panel-kind="notifications" data-unread-count="{{ unread_count }}">
   {% include '_activity_panel_flashes.html' %}
   <div class="activity-panel-toolbar">
@@ -15,7 +16,7 @@
     {% for n in notifications %}
     <article class="activity-notification {% if not n.is_read %}is-unread{% endif %}">
       <span class="activity-notification-icon activity-notification-icon--{{ n.type or 'info' }}" aria-hidden="true">
-        {% if n.type == 'warning' %}⚠{% elif n.type == 'danger' or n.type == 'retard' %}!{% elif n.type == 'success' %}✓{% else %}i{% endif %}
+        {{ icon('alert' if n.type in ['warning', 'danger', 'retard'] else 'check-circle' if n.type == 'success' else 'info', '1em') }}
       </span>
       <div class="activity-notification-body">
         <div class="activity-notification-topline">
@@ -27,7 +28,7 @@
       </div>
     </article>
     {% else %}
-    <div class="activity-empty"><span>🔔</span><h3>Tout est à jour</h3><p>Aucune notification pour le moment.</p></div>
+    <div class="activity-empty"><span>{{ icon('bell', '1em') }}</span><h3>Tout est à jour</h3><p>Aucune notification pour le moment.</p></div>
     {% endfor %}
   </div>
 </section>

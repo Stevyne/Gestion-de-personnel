@@ -44,8 +44,9 @@
 .skill-row-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
 .skill-row details { margin-top:10px; }
 .skill-row details summary { cursor:pointer; color:#12669d; font-weight:700; font-size:.85rem; list-style:none; }
-.skill-row details summary::before { content:"▸ "; transition:transform .2s; display:inline-block; }
-.skill-row details[open] summary::before { transform:rotate(90deg); }
+.skill-row details summary > .ico { transform:rotate(-90deg); transition:transform .2s; }
+.skill-row details[open] summary > .ico { transform:rotate(0deg); }
+@media (prefers-reduced-motion: reduce) { .skill-row details summary > .ico { transition:none; } }
 .skill-inline-form { display:grid; gap:10px; margin-top:12px; padding:14px; border-radius:12px; background:#f7fafc; border:1px solid #e1e9f0; }
 .skill-inline-form .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 .skill-inline-form input[type=range] { flex:1; min-width:160px; accent-color:#6d28d9; }
@@ -94,7 +95,7 @@
 .skill-card p.desc { margin:0; color:#62768b; font-size:.88rem; line-height:1.55; }
 .skill-meta { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:auto; padding-top:12px; border-top:1px dashed #e1e9f0; font-size:.82rem; color:#71879b; }
 .skill-meta .count { display:inline-flex; align-items:center; gap:6px; color:#4f46e5; font-weight:800; font-size:.95rem; }
-.skill-meta .count::before { content:"👥"; font-size:.85rem; }
+.skill-meta .count { display:inline-flex; align-items:center; gap:4px; }
 .skill-card .rc-link { font-size:.8rem; }
 .skill-card .skill-cat { align-self:flex-start; }
 

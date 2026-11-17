@@ -82,6 +82,9 @@ jobs:
 
       - name: Tester les contrôleurs de l’interface (sans npm)
         run: |
+          node --check static/icons.js
+          node --check static/register.js
+          node --check static/messagerie.js
           node --check static/loading.js
           node --check static/activity-panel.js
           node --check static/flash-messages.js

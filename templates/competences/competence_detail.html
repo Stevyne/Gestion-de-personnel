@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends 'base.html' %}
 {% block title %}{{ comp.nom }} · Compétences{% endblock %}
 {% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
@@ -10,9 +11,9 @@
       {% if comp.description %}<p>{{ comp.description }}</p>{% endif %}
     </div>
     <div class="rc-hero-actions">
-      <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste') }}">← Toutes les compétences</a>
+      <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste') }}">{{ icon('arrow-left', '1em') }} Toutes les compétences</a>
       {% if peut_gerer and comp.active %}
-        <a class="rc-btn rc-btn-light js-modal-form" data-modal-title="Modifier la compétence" href="{{ url_for('competences.competence_modifier', cid=comp.id) }}">✏️ Modifier</a>
+        <a class="rc-btn rc-btn-light js-modal-form" data-modal-title="Modifier la compétence" href="{{ url_for('competences.competence_modifier', cid=comp.id) }}">{{ icon('edit', '1em') }} Modifier</a>
         <form method="POST" action="{{ url_for('competences.competence_archiver', cid=comp.id) }}" onsubmit="return confirm('Archiver cette compétence ?');" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="rc-btn rc-btn-danger">Archiver</button>
         </form>
@@ -109,7 +110,7 @@
       </div>
     {% else %}
       <div class="rc-empty">
-        <div style="font-size:2rem;margin-bottom:6px;">📭</div>
+        <div style="font-size:2rem;margin-bottom:6px;">{{ icon('inbox', '1em') }}</div>
         Aucun collaborateur n'a encore cette compétence dans votre périmètre.
       </div>
     {% endif %}

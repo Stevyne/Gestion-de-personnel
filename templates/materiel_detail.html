@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Détail matériel · TeamSphere{% endblock %}
 
 {% block content %}
@@ -36,10 +36,10 @@
     </div>
 
     {% if materiel.quantite == 0 %}
-        <div class="alerte-stock alerte-rupture">⛔ Ce matériel est en rupture de stock.</div>
+        <div class="alerte-stock alerte-rupture">{{ icon('ban', '1em') }} Ce matériel est en rupture de stock.</div>
     {% elif materiel.seuil_alerte and materiel.quantite <= materiel.seuil_alerte %}
         <div class="alerte-stock alerte-basse">
-            ⚠️ Stock bas : il reste {{ materiel.quantite }} {{ materiel.unite }}
+            {{ icon('alert', '1em') }} Stock bas : il reste {{ materiel.quantite }} {{ materiel.unite }}
             (seuil : {{ materiel.seuil_alerte }}). Pensez à réapprovisionner.
         </div>
     {% endif %}
@@ -55,7 +55,7 @@
 <div class="charts-grid">
     <!-- Entrée de stock -->
     <div class="card">
-        <h3 style="margin-bottom:12px;">➕ Entrée de stock</h3>
+        <h3 style="margin-bottom:12px;">{{ icon('plus', '1em') }} Entrée de stock</h3>
         {# enctype obligatoire : le formulaire peut transporter un fichier #}
         <form action="{{ url_for('parc.add_mouvement_materiel', id=materiel.id) }}" method="post"
               enctype="multipart/form-data">
@@ -86,7 +86,7 @@
 
     <!-- Sortie de stock -->
     <div class="card">
-        <h3 style="margin-bottom:12px;">➖ Sortie de stock</h3>
+        <h3 style="margin-bottom:12px;">{{ icon('minus', '1em') }} Sortie de stock</h3>
         <form action="{{ url_for('parc.add_mouvement_materiel', id=materiel.id) }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="type_mouvement" value="sortie">
@@ -133,10 +133,10 @@
 <!-- ===== Exemplaires numérotés (gestion de parc) ===== -->
 <div class="card">
     <div class="card-header">
-        <h3 style="margin:0;">🏷️ Exemplaires &amp; numéros d'inventaire</h3>
+        <h3 style="margin:0;">{{ icon('tag', '1em') }} Exemplaires &amp; numéros d'inventaire</h3>
         {% if exemplaires %}
         <a href="{{ url_for('parc.etiquettes_materiel', id=materiel.id) }}" class="btn btn-secondary" target="_blank">
-            🖨️ Étiquettes QR
+            {{ icon('printer', '1em') }} Étiquettes QR
         </a>
         {% endif %}
     </div>
@@ -239,7 +239,7 @@
 
 {% if attribuable %}
 <div class="card">
-    <h3 style="margin-bottom:12px;">🤝 Attribuer à un employé</h3>
+    <h3 style="margin-bottom:12px;">{{ icon('user-check', '1em') }} Attribuer à un employé</h3>
     <p style="color:#64748b; font-size:0.88rem; margin-top:0;">
         Pour le matériel remis durablement (PC, téléphone, clés...). L'article sort
         du stock et y revient lors du retour.
@@ -295,7 +295,7 @@
 
 {% if attributions %}
 <div class="card">
-    <h3 style="margin-bottom:12px;">🤝 Attributions</h3>
+    <h3 style="margin-bottom:12px;">{{ icon('user-check', '1em') }} Attributions</h3>
     <div class="table-container">
         <table>
             <thead>
@@ -308,7 +308,7 @@
                 {% for a in attributions %}
                 <tr>
                     <td data-label="Employé"><strong>{{ a.emp_prenom }} {{ a.emp_nom }}</strong>
-                        {% if a.exemplaire_numero %}<div class="wf-meta">🏷 {{ a.exemplaire_numero }}</div>{% endif %}
+                        {% if a.exemplaire_numero %}<div class="wf-meta">{{ icon('tag', '1em') }} {{ a.exemplaire_numero }}</div>{% endif %}
                         {% if a.commentaire %}<br><small style="color:#64748b;">{{ a.commentaire }}</small>{% endif %}
                     </td>
                     <td data-label="Quantité">{{ a.quantite }}</td>
@@ -322,11 +322,11 @@
                             <span class="badge" style="background:#dbeafe;color:#1e40af;">En cours</span>
                         {% endif %}
                         {% if a.accuse_reception %}
-                            <div class="wf-meta">✔ Confirmé par {{ a.accuse_par }} le {{ a.accuse_le }}</div>
+                            <div class="wf-meta">{{ icon('check', '1em') }} Confirmé par {{ a.accuse_par }} le {{ a.accuse_le }}</div>
                         {% elif a.conteste_motif %}
-                            <div class="wf-meta wf-meta-danger">⚠ Contesté : {{ a.conteste_motif }}</div>
+                            <div class="wf-meta wf-meta-danger">{{ icon('alert', '1em') }} Contesté : {{ a.conteste_motif }}</div>
                         {% else %}
-                            <div class="wf-meta">⏳ En attente d'accusé de réception</div>
+                            <div class="wf-meta">{{ icon('hourglass', '1em') }} En attente d'accusé de réception</div>
                         {% endif %}
                         {% if a.attribue_par %}<div class="wf-meta">Attribué par {{ a.attribue_par }}</div>{% endif %}
                     </td>
@@ -337,14 +337,14 @@
                               style="display:inline;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="materiel_id" value="{{ materiel.id }}">
-                            <button type="submit" class="btn btn-secondary btn-xs">↩️ Marquer rendu</button>
+                            <button type="submit" class="btn btn-secondary btn-xs">{{ icon('arrow-return', '1em') }} Marquer rendu</button>
                         </form>
                         {% endif %}
                         {% if not a.accuse_reception and peut_gerer_materiels %}
                         <form action="{{ url_for('parc.relancer_accuse', attribution_id=a.id) }}" method="post"
                               style="display:inline;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-secondary btn-xs">🔔 Relancer</button>
+                            <button type="submit" class="btn btn-secondary btn-xs">{{ icon('bell', '1em') }} Relancer</button>
                         </form>
                         {% endif %}
                         </div>
@@ -358,7 +358,7 @@
 {% endif %}
 
 <div class="card">
-    <h3 style="margin-bottom:12px;">📜 Historique des mouvements</h3>
+    <h3 style="margin-bottom:12px;">{{ icon('history', '1em') }} Historique des mouvements</h3>
     <div class="table-container">
         <table>
             <thead>
@@ -375,9 +375,9 @@
                     </td>
                     <td data-label="Type">
                         {% if mv.type_mouvement == 'entree' %}
-                            <span class="badge" style="background:#dcfce7;color:#166534;">↑ Entrée</span>
+                            <span class="badge" style="background:#dcfce7;color:#166534;">{{ icon('arrow-up', '1em') }} Entrée</span>
                         {% else %}
-                            <span class="badge" style="background:#fee2e2;color:#991b1b;">↓ Sortie</span>
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">{{ icon('arrow-down', '1em') }} Sortie</span>
                         {% endif %}
                     </td>
                     <td data-label="Quantité"><strong>{{ mv.quantite }}</strong></td>
@@ -389,7 +389,7 @@
                         {% if mv.facture_nom %}
                             <a data-no-loading class="btn btn-secondary btn-sm"
                                href="{{ url_for('parc.telecharger_facture', mvt_id=mv.id) }}"
-                               title="Facture de cette entrée">📎 {{ mv.facture_nom }}</a>
+                               title="Facture de cette entrée">{{ icon('paperclip', '1em') }} {{ mv.facture_nom }}</a>
                             {% if current_role in ['admin', 'rh'] %}
                             <form method="post" style="display:inline;"
                                   action="{{ url_for('parc.supprimer_facture', mvt_id=mv.id) }}"
@@ -397,7 +397,7 @@
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-sm"
                                         style="background:#dc2626;color:#fff;padding:2px 6px;"
-                                        title="Retirer la facture">✕</button>
+                                        title="Retirer la facture" aria-label="Retirer la facture">{{ icon('x', '1em') }}</button>
                             </form>
                             {% endif %}
                         {% elif mv.type_mouvement == 'entree' %}

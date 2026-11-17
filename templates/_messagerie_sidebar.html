@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 <aside class="msg-sidebar" aria-label="Conversations">
   <div class="msg-sidebar-head">
     <div>
@@ -6,11 +7,11 @@
     </div>
     <a href="{{ url_for('messagerie.messagerie_nouveau', panel=1) if panel_mode else url_for('messagerie.messagerie_nouveau') }}" class="msg-compose-btn"
        {% if panel_mode %}data-panel-link{% endif %}
-       aria-label="Nouveau message" title="Nouveau message">✎</a>
+       aria-label="Nouveau message" title="Nouveau message">{{ icon('edit', '1em') }}</a>
   </div>
 
   <label class="msg-search">
-    <span aria-hidden="true">⌕</span>
+    <span aria-hidden="true">{{ icon('search', '1em') }}</span>
     <input type="search" id="conversationSearch" placeholder="Rechercher dans Messenger"
            autocomplete="off" aria-label="Rechercher une conversation">
   </label>
@@ -25,7 +26,7 @@
         {% if c.type == 'prive' and c.avatar_photo %}
         <img src="{{ url_for('auth.avatar_image', filename=c.avatar_photo) }}" alt="">
         {% else %}
-        <span>{{ c.avatar_initiale }}</span>
+        <span>{% if c.avatar_icon %}{{ icon(c.avatar_icon, '1em') }}{% else %}{{ c.avatar_initiale }}{% endif %}</span>
         {% endif %}
       </span>
       <span class="msg-conversation-body">
@@ -42,7 +43,7 @@
     </a>
     {% else %}
     <div class="msg-sidebar-empty">
-      <span>💬</span>
+      <span>{{ icon('message', '1em') }}</span>
       <p>Aucune discussion</p>
       <a href="{{ url_for('messagerie.messagerie_nouveau', panel=1) if panel_mode else url_for('messagerie.messagerie_nouveau') }}" {% if panel_mode %}data-panel-link{% endif %}>Écrire un message</a>
     </div>

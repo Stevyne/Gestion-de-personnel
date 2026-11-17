@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Détails de l'exemplaire · TeamSphere{% endblock %}
 
 {% block content %}
@@ -78,7 +78,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h3 style="margin:0;">🔧 Maintenance</h3>
+        <h3 style="margin:0;">{{ icon('wrench', '1em') }} Maintenance</h3>
         {% if stats.nb_closes %}
         <span style="color:#64748b; font-size:0.9rem;">
             {{ stats.nb_closes }} intervention(s) close(s) · coût cumulé
@@ -106,7 +106,7 @@
         </div>
         <form method="post" action="{{ url_for('parc.discussion_maintenance', id=intervention.id) }}" style="margin-top:10px;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="maintenance-chat-link" type="submit">💬 Discussion du ticket</button>
+            <button class="maintenance-chat-link" type="submit">{{ icon('message', '1em') }} Discussion du ticket</button>
         </form>
         <p style="margin:12px 0 4px;"><strong>Panne :</strong> {{ intervention.panne }}</p>
         <p style="margin:0; color:#64748b; font-size:0.88rem;">
@@ -158,7 +158,7 @@
             </div>
             {% endif %}
             <button type="submit" class="btn btn-primary">
-                {{ '↻ Réassigner' if intervention.statut == 'assigne' else '👤 Assigner' }}
+                {{ icon('refresh' if intervention.statut == 'assigne' else 'user', '1em') }} {{ 'Réassigner' if intervention.statut == 'assigne' else 'Assigner' }}
             </button>
         </form>
         {% endif %}
@@ -172,7 +172,7 @@
                 <label>Date de départ en réparation</label>
                 <input type="date" name="date_envoi" class="form-control" value="{{ aujourdhui.strftime('%Y-%m-%d') }}">
             </div>
-            <button type="submit" class="btn btn-primary">🔧 Démarrer la réparation</button>
+            <button type="submit" class="btn btn-primary">{{ icon('wrench', '1em') }} Démarrer la réparation</button>
         </form>
         {% endif %}
 
@@ -207,7 +207,7 @@
                 <label>Diagnostic</label>
                 <input type="text" name="diagnostic" class="form-control" placeholder="Disque remplacé">
             </div>
-            <button type="submit" class="btn btn-primary">✓ Rendre le matériel</button>
+            <button type="submit" class="btn btn-primary">{{ icon('check', '1em') }} Rendre le matériel</button>
         </form>
         <p style="margin:8px 0 0; color:#64748b; font-size:0.82rem;">
             Le demandeur devra confirmer que la panne est bien résolue.
@@ -232,7 +232,7 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="decision" value="valider">
                 <button type="submit" class="btn btn-primary">
-                    {{ '✓ Oui, c\'est réparé' if droits.peut_valider else '✓ Clôturer sans réponse du demandeur' }}
+                    {{ icon('check', '1em') }} {{ 'Oui, c\'est réparé' if droits.peut_valider else 'Clôturer sans réponse du demandeur' }}
                 </button>
             </form>
             {% if droits.peut_valider %}
@@ -245,7 +245,7 @@
                     <input type="text" name="motif_refus" class="form-control"
                            placeholder="L'écran s'éteint toujours au bout de 5 minutes" required>
                 </div>
-                <button type="submit" class="btn btn-secondary">✗ Non, le problème persiste</button>
+                <button type="submit" class="btn btn-secondary">{{ icon('x', '1em') }} Non, le problème persiste</button>
             </form>
             {% endif %}
         </div>
@@ -268,7 +268,7 @@
         {% if droits.peut_annuler %}
         <form method="POST" action="{{ url_for('parc.annuler_maintenance', id=intervention.id) }}"
               class="confirm-form" style="margin-top:10px;"
-              data-confirm-icon="🚫"
+              data-confirm-icon="ban"
               data-confirm-title="Annuler cette intervention ?"
               data-confirm-subtitle="Fausse alerte : aucune réparation n'a eu lieu."
               data-confirm-warning="L'exemplaire redeviendra disponible et l'intervention sera close sans coût."
@@ -303,7 +303,7 @@
                 {% for code,label in priorites %}<option value="{{ code }}" {{ 'selected' if code=='normale' }}>{{ label }}</option>{% endfor %}
             </select>
         </div>
-        <button type="submit" class="btn btn-primary" style="background:#dc2626;">⚠ Signaler une panne</button>
+        <button type="submit" class="btn btn-primary" style="background:#dc2626;">{{ icon('alert', '1em') }} Signaler une panne</button>
     </form>
     {% endif %}
 </div>
@@ -312,7 +312,7 @@
 {% set closes = maintenances | rejectattr('statut', 'in', maintenance_ouverts) | list %}
 {% if closes %}
 <div class="card">
-    <h3 style="margin-bottom:12px;">📜 Historique des réparations</h3>
+    <h3 style="margin-bottom:12px;">{{ icon('history', '1em') }} Historique des réparations</h3>
     <div class="table-container">
         <table>
             <thead>
@@ -358,7 +358,7 @@
 <!-- ===== Modification ===== -->
 {% if peut_gerer_materiels %}
 <div class="card">
-    <h3 style="margin-bottom:12px;">✏️ Modifier cet exemplaire</h3>
+    <h3 style="margin-bottom:12px;">{{ icon('edit', '1em') }} Modifier cet exemplaire</h3>
     <form method="POST" action="{{ url_for('parc.edit_exemplaire', id=ex.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-row">
@@ -423,7 +423,7 @@
     {% if session.get('role') in ['admin', 'rh'] %}
     <form id="formSuppression" method="POST" action="{{ url_for('parc.delete_exemplaire', id=ex.id) }}"
           class="confirm-form" style="display:none;"
-          data-confirm-icon="🗑️"
+          data-confirm-icon="trash"
           data-confirm-title="Supprimer {{ ex.numero_inventaire }} ?"
           data-confirm-subtitle="L'exemplaire et son historique de réparations seront effacés."
           data-confirm-warning="Cette action est irréversible. Pour un matériel hors service, préférez l'état « Mis au rebut », qui conserve la traçabilité."

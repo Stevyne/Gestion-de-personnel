@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends "base.html" %}
 {% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='messagerie.css') }}">{% endblock %}
 
@@ -7,7 +8,7 @@
 
   <main class="msg-main msg-compose">
     <header class="msg-thread-head msg-compose-head">
-      <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="msg-mobile-back" aria-label="Retour aux discussions">‹</a>
+      <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="msg-mobile-back" aria-label="Retour aux discussions">{{ icon('arrow-left', '1em') }}</a>
       <div class="msg-thread-identity">
         <h1>Nouveau message</h1>
         <p>Commencez une conversation</p>
@@ -19,10 +20,10 @@
 
       <fieldset class="msg-type-switcher">
         <legend class="sr-only">Type de message</legend>
-        <label><input type="radio" name="type" value="prive" checked><span>💬 Privé</span></label>
-        <label><input type="radio" name="type" value="groupe"><span>👥 Groupe</span></label>
+        <label><input type="radio" name="type" value="prive" checked><span>{{ icon('message', '1em') }} Privé</span></label>
+        <label><input type="radio" name="type" value="groupe"><span>{{ icon('users', '1em') }} Groupe</span></label>
         {% if peut_annoncer %}
-        <label><input type="radio" name="type" value="annonce"><span>📢 Annonce</span></label>
+        <label><input type="radio" name="type" value="annonce"><span>{{ icon('megaphone', '1em') }} Annonce</span></label>
         {% endif %}
       </fieldset>
 
@@ -32,7 +33,7 @@
           <span id="recipientCount">0 sélectionné</span>
         </div>
         <label class="msg-search msg-recipient-search">
-          <span aria-hidden="true">⌕</span>
+          <span aria-hidden="true">{{ icon('search', '1em') }}</span>
           <input type="search" id="recipientSearch" placeholder="Rechercher un collègue" autocomplete="off">
         </label>
         <div class="msg-recipient-list" id="recipientList">
@@ -44,7 +45,7 @@
               <strong>{{ ((u.prenom or '') ~ ' ' ~ (u.nom or ''))|trim or u.username }}</strong>
               <small>@{{ u.username }}{% if u.departement %} · {{ u.departement }}{% endif %}</small>
             </span>
-            <span class="msg-recipient-check">✓</span>
+            <span class="msg-recipient-check">{{ icon('check', '1em') }}</span>
           </label>
           {% else %}
           <div class="msg-sidebar-empty"><p>Aucun destinataire disponible dans votre périmètre.</p></div>
@@ -75,7 +76,7 @@
       <section class="msg-compose-section">
         <label class="msg-upload-zone" id="newMessageUpload">
           <input type="file" name="piece_jointe" id="newMessageFile" hidden>
-          <span class="msg-upload-icon">＋</span>
+          <span class="msg-upload-icon">{{ icon('plus', '1em') }}</span>
           <span><strong>Ajouter une pièce jointe</strong><small>PDF, Office, image ou texte · 8 Mo maximum</small></span>
           <span class="msg-upload-name" id="newMessageFileName"></span>
         </label>
@@ -83,7 +84,7 @@
 
       <div class="msg-compose-actions">
         <a href="{{ url_for('messagerie.messagerie_inbox') }}" class="msg-secondary-action">Annuler</a>
-        <button type="submit" class="msg-primary-action">Envoyer le message <span>➤</span></button>
+        <button type="submit" class="msg-primary-action">Envoyer le message <span>{{ icon('send', '1em') }}</span></button>
       </div>
     </form>
   </main>

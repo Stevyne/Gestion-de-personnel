@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends "base.html" %}
 {% from "base.html" import pagination, icon %}
 {% block title %}Absences et justificatifs · TeamSphere{% endblock %}
@@ -17,7 +18,7 @@
             </form>
             <a data-modal-title="Enregistrer une absence" href="{{ url_for('absences.add_absence') }}" class="js-modal-form btn btn-primary">{{ icon('plus', 15) }}<span>Enregistrer une absence</span></a>
             {% endif %}
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">{{ icon('arrow-left', '1em') }} Retour</a>
         </div>
     </div>
 
@@ -46,14 +47,14 @@
                     <td data-label="Date">{{ a.date.strftime('%d/%m/%Y') if a.date else '—' }}</td>
                     <td data-label="Motif"><small>{{ a.motif or '—' }}</small></td>
                     <td data-label="Statut">
-                      {% if a.statut == 'acceptee' %}<span class="badge badge-success">✓ {{ statut_labels[a.statut] }}</span>
-                      {% elif a.statut == 'refusee' %}<span class="badge badge-danger">✕ {{ statut_labels[a.statut] }}</span>{% if a.motif_refus %}<br><small style="color:#991b1b;">{{ a.motif_refus }}</small>{% endif %}
-                      {% elif a.statut == 'justificatif_depose' %}<span class="badge badge-warning">⏳ {{ statut_labels[a.statut] }}</span>
+                      {% if a.statut == 'acceptee' %}<span class="badge badge-success">{{ icon('check', '1em') }} {{ statut_labels[a.statut] }}</span>
+                      {% elif a.statut == 'refusee' %}<span class="badge badge-danger">{{ icon('x', '1em') }} {{ statut_labels[a.statut] }}</span>{% if a.motif_refus %}<br><small style="color:#991b1b;">{{ a.motif_refus }}</small>{% endif %}
+                      {% elif a.statut == 'justificatif_depose' %}<span class="badge badge-warning">{{ icon('hourglass', '1em') }} {{ statut_labels[a.statut] }}</span>
                       {% else %}<span class="badge">{{ statut_labels.get(a.statut, a.statut) }}</span>{% endif %}
                     </td>
                     <td data-label="Justificatif">
                       {% if a.justificatif_nom %}
-                        {% if session.get('role') in ['admin','rh'] or a.employe_id == mon_employe_id %}<a data-no-loading class="btn btn-sm btn-secondary" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">{{ icon('paperclip', 13) }} Télécharger</a>{% else %}<span class="rc-muted">Déposé 🔒</span>{% endif %}
+                        {% if session.get('role') in ['admin','rh'] or a.employe_id == mon_employe_id %}<a data-no-loading class="btn btn-sm btn-secondary" href="{{ url_for('absence_justifications.telecharger_justificatif', absence_id=a.id) }}">{{ icon('paperclip', 13) }} Télécharger</a>{% else %}<span class="rc-muted">Déposé {{ icon('lock', '1em') }}</span>{% endif %}
                         {% if a.date_depot_justificatif %}<br><small class="rc-muted">{{ a.date_depot_justificatif.strftime('%d/%m/%Y %H:%M') }}</small>{% endif %}
                       {% else %}<span class="rc-muted">—</span>{% endif %}
                     </td>
@@ -79,14 +80,14 @@
                           <button name="decision" value="refuser" class="btn btn-danger btn-sm" type="submit">{{ icon('x', 13) }} Refuser</button>
                         </form>
                       {% elif session.get('role') in ['admin','rh'] and a.statut != 'acceptee' %}
-                        <form action="{{ url_for('absences.delete_absence', id=a.id) }}" method="post" style="display:inline;" class="confirm-form" data-confirm-title="Supprimer cette absence ?" data-confirm-subtitle="Action irréversible" data-confirm-icon="🚫">
-                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-danger btn-sm">{{ icon('trash', 13) }}</button>
+                        <form action="{{ url_for('absences.delete_absence', id=a.id) }}" method="post" style="display:inline;" class="confirm-form" data-confirm-title="Supprimer cette absence ?" data-confirm-subtitle="Action irréversible" data-confirm-icon="ban">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-danger btn-sm" aria-label="Supprimer">{{ icon('trash', 13) }}</button>
                         </form>
                       {% elif not (a.employe_id == mon_employe_id and a.statut in peut_deposer) %}<span class="rc-muted">—</span>{% endif %}
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="empty-state"><div class="empty-icon">🚫</div><strong>Aucune absence correspondant aux filtres.</strong></td></tr>
+                <tr><td colspan="6" class="empty-state"><div class="empty-icon">{{ icon('ban', '1em') }}</div><strong>Aucune absence correspondant aux filtres.</strong></td></tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "base.html" import icon, pagination %}
+{% from "_icons.html" import icon %}
+{% from "base.html" import pagination %}
 {% block title %}Matériels · TeamSphere{% endblock %}
 
 {% block content %}
@@ -136,11 +137,11 @@
                                   class="confirm-form" style="display:inline;"
                                   data-confirm-title="Supprimer ce matériel ?"
                                   data-confirm-subtitle="{{ m.nom }}"
-                                  data-confirm-icon="🗑️"
+                                  data-confirm-icon="trash"
                                   data-confirm-confirm="Supprimer"
                                   data-confirm-warning="Le matériel et tout son historique seront définitivement supprimés.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-xs btn-danger" title="Supprimer">{{ icon('trash', 13) }}</button>
+                                <button type="submit" class="btn btn-xs btn-danger" title="Supprimer" aria-label="Supprimer">{{ icon('trash', 13) }}</button>
                             </form>
                             {% endif %}
                         </div>

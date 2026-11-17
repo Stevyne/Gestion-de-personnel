@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Contrats · TeamSphere{% endblock %}
 {% block content %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 <div class="card">
   <div class="card-header"><div><h1>{{ icon('file') }}<span>Contrats</span></h1><p>Versions, renouvellements et échéances.</p></div></div>
   {% if current_role in ['admin','rh'] %}

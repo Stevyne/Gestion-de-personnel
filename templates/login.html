@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends "base.html" %}
 
 {% block title %}Connexion · TeamSphere{% endblock %}
@@ -23,15 +24,15 @@
 
             <ul class="login-feature-list" aria-label="Fonctionnalités clés">
                 <li>
-                    <span class="login-feature-icon" aria-hidden="true">✓</span>
+                    <span class="login-feature-icon" aria-hidden="true">{{ icon('check', '1em') }}</span>
                     <span><strong>Données cloisonnées</strong> selon le rôle et le département</span>
                 </li>
                 <li>
-                    <span class="login-feature-icon" aria-hidden="true">✓</span>
+                    <span class="login-feature-icon" aria-hidden="true">{{ icon('check', '1em') }}</span>
                     <span><strong>Suivi en temps réel</strong> des équipes et des demandes</span>
                 </li>
                 <li>
-                    <span class="login-feature-icon" aria-hidden="true">✓</span>
+                    <span class="login-feature-icon" aria-hidden="true">{{ icon('check', '1em') }}</span>
                     <span><strong>Accès protégé</strong> par sessions révocables et quotas Redis</span>
                 </li>
             </ul>

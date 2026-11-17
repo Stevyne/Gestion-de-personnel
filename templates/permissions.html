@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends "base.html" %}
 {% block title %}Permissions · TeamSphere{% endblock %}
 {% from "base.html" import pagination, icon %}
@@ -11,7 +12,7 @@
         </div>
         <div>
             <a data-modal-title="Nouvelle demande de permission" href="{{ url_for('add_permission') }}" class="js-modal-form btn btn-primary">{{ icon('plus', 15) }}<span>Nouvelle demande</span></a>
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour</a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">{{ icon('arrow-left', '1em') }} Retour</a>
         </div>
     </div>
 
@@ -23,7 +24,7 @@
 
     <p class="wf-circuit">Circuit de validation : <strong>dépôt par l'employé</strong> → <strong>avis du manager du département</strong> → <strong>décision RH</strong>. Un refus exige un motif, transmis à l'employé par notification.</p>
 
-<form method="get" action="{{ url_for('permissions') }}" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:#f8fafc; padding:14px 16px; border-radius:12px; margin-bottom:18px; border:1px solid #e2e8f0;"><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">🔎 Rechercher un employé</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Nom ou prénom..." class="form-control" style="min-width:200px;"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Statut</label><select name="statut" class="form-control">
+<form method="get" action="{{ url_for('permissions') }}" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:#f8fafc; padding:14px 16px; border-radius:12px; margin-bottom:18px; border:1px solid #e2e8f0;"><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">{{ icon('search', '1em') }} Rechercher un employé</label><input type="text" name="search" value="{{ filters.search }}" placeholder="Nom ou prénom..." class="form-control" style="min-width:200px;"></div><div style="display:flex; flex-direction:column; gap:3px;"><label style="font-size:0.72rem; color:#475569;">Statut</label><select name="statut" class="form-control">
                 <option value="">Tous</option>
                 <option value="en attente" {{ 'selected' if filters.statut == 'en attente' }}>En attente</option>
                 <option value="approuvé" {{ 'selected' if filters.statut == 'approuvé' }}>Approuvé</option>
@@ -71,13 +72,13 @@
                             <form action="{{ url_for('avis_permission', id=p.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="avis" value="favorable">
-                                <button type="submit" class="btn btn-sm btn-success">👍 Avis favorable</button>
+                                <button type="submit" class="btn btn-sm btn-success">{{ icon('thumbs-up', '1em') }} Avis favorable</button>
                             </form>
                             <form action="{{ url_for('avis_permission', id=p.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="avis" value="defavorable">
                                 <input type="text" name="commentaire" placeholder="Motif de l'avis défavorable" required>
-                                <button type="submit" class="btn btn-sm btn-danger">👎 Défavorable</button>
+                                <button type="submit" class="btn btn-sm btn-danger">{{ icon('thumbs-down', '1em') }} Défavorable</button>
                             </form>
                           {% endif %}
                           {% if peut_decider %}
@@ -87,13 +88,13 @@
                             <form action="{{ url_for('update_permission', id=p.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="action" value="approuver">
-                                <button type="submit" class="btn btn-sm btn-success">✓ Approuver</button>
+                                <button type="submit" class="btn btn-sm btn-success">{{ icon('check', '1em') }} Approuver</button>
                             </form>
                             <form action="{{ url_for('update_permission', id=p.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="action" value="refuser">
                                 <input type="text" name="motif_refus" placeholder="Motif du refus (obligatoire)" required>
-                                <button type="submit" class="btn btn-sm btn-danger">✗ Refuser</button>
+                                <button type="submit" class="btn btn-sm btn-danger">{{ icon('x', '1em') }} Refuser</button>
                             </form>
                           {% endif %}
                         </div>
@@ -103,9 +104,9 @@
                               class="confirm-form"
                               data-confirm-title="Supprimer cette demande de permission ?"
                               data-confirm-subtitle="Action irréversible"
-                              data-confirm-icon="🧾">
+                              data-confirm-icon="receipt">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-danger" style="padding:4px 7px;font-size:0.7rem;">🗑️</button>
+                            <button type="submit" class="btn btn-danger" style="padding:4px 7px;font-size:0.7rem;" aria-label="Supprimer">{{ icon('trash', '1em') }}</button>
                         </form>
                     </td>
                 </tr>

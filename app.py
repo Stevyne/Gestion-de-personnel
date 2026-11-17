@@ -755,7 +755,7 @@ def send_retard_email(employee_name, employee_email, retard_minutes, date_str, h
         logger.info(f"[EMAIL DÉSACTIVÉ] → {employee_name} +{retard_minutes} min")
         return True
     try:
-        subject = f"⚠️ Retard détecté - {employee_name}"
+        subject = f"Retard détecté - {employee_name}"
         return send_html_email(
             recipients=[employee_email] if employee_email else [admin_email],
             subject=subject,
@@ -1692,7 +1692,7 @@ def job_alertes_expiration_documents():
                 )
                 _envoyer_email_texte(
                     [get_admin_email()],
-                    f"📄 {len(a_notifier)} document(s) à vérifier (expiration)",
+                    f"{len(a_notifier)} document(s) à vérifier (expiration)",
                     "Bonjour,\n\nLes documents suivants nécessitent votre attention :\n\n"
                     f"{details}\n\nConsultez la page Documents pour les renouveler si besoin.",
                     event_key=f"documents-expiration:{date.today().isoformat()}"
@@ -1784,7 +1784,7 @@ def job_generation_quotidienne_absences():
                 details = "\n".join(f"- {a['prenom']} {a['nom']} : {a['date']}" for a in nouvelles)
                 _envoyer_email_texte(
                     [get_admin_email()],
-                    f"🚫 {nb} absence(s) générée(s) automatiquement",
+                    f"{nb} absence(s) générée(s) automatiquement",
                     "Bonjour,\n\n"
                     f"{nb} absence(s) ont été enregistrée(s) automatiquement cette nuit "
                     "(aucune présence relevée le jour ouvré concerné) :\n\n"

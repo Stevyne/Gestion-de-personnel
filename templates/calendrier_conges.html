@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Calendrier des Congés · TeamSphere{% endblock %}
 
 {% block content %}
@@ -18,7 +18,7 @@
 
     <div style="margin-bottom:16px;">
         <div style="background:#f0f9ff; padding:12px 18px; border-radius:10px; display:inline-flex; align-items:center; gap:10px; border:1px solid #bae6fd;">
-            <span style="font-size:1.4rem;">📊</span>
+            <span style="font-size:1.4rem;">{{ icon('chart', '1em') }}</span>
             <div>
                 <strong>{{ total_approuves }}</strong> jours de congés approuvés en {{ annee }}
             </div>

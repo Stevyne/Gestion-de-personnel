@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Notifications · TeamSphere{% endblock %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 
 {% block content %}
 <div class="card notifications-card">
@@ -32,9 +32,9 @@
                     <td data-label="Date" class="rc-muted" style="white-space:nowrap;font-size:.85rem;">{{ n.timestamp.strftime('%d/%m/%Y %H:%M') if n.timestamp is defined and n.timestamp.strftime else n.timestamp }}</td>
                     <td data-label="Type">
                         {% if n.type == 'retard' %}
-                            <span class="badge badge-danger">Retard</span>
+                            <span class="badge badge-danger">{{ icon('clock', '1em') }} Retard</span>
                         {% else %}
-                            <span class="badge badge-info">{{ n.type }}</span>
+                            <span class="badge badge-info">{{ icon('alert' if n.type in ['danger', 'warning'] else 'check-circle' if n.type == 'success' else 'info', '1em') }} {{ n.type }}</span>
                         {% endif %}
                     </td>
                     <td data-label="Message" class="notification-message-cell">

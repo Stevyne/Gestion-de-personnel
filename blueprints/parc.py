@@ -22,12 +22,12 @@ import psycopg2
 from services.roles import GLOBAL_DATA_ROLES
 
 MATERIEL_CATEGORIES = [
-    ('fourniture', '✏️ Fourniture de bureau'),
-    ('papeterie', '📄 Papeterie'),
-    ('mobilier', '🪑 Mobilier'),
-    ('informatique', '💻 Informatique'),
-    ('entretien', '🧹 Entretien'),
-    ('autre', '📦 Autre'),
+    ('fourniture', 'Fourniture de bureau'),
+    ('papeterie', 'Papeterie'),
+    ('mobilier', 'Mobilier'),
+    ('informatique', 'Informatique'),
+    ('entretien', 'Entretien'),
+    ('autre', 'Autre'),
 ]
 MATERIEL_CATEGORIES_DICT = dict(MATERIEL_CATEGORIES)
 

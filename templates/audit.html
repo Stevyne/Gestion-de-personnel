@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "base.html" import icon, pagination %}
+{% from "_icons.html" import icon %}
+{% from "base.html" import pagination %}
 {% block title %}Journal d'audit · TeamSphere{% endblock %}
 
 {% block content %}
@@ -13,7 +14,7 @@
             <a data-no-loading href="{{ url_for('audit_export_excel') }}{% if base_qs %}?{{ base_qs }}{% endif %}"
                class="btn btn-primary">{{ icon('download', 15) }} Exporter en Excel</a>
             <a href="{{ url_for('utilisateurs.utilisateurs_page') }}" class="btn btn-secondary">{{ icon('shield', 15) }} Utilisateurs</a>
-            <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Retour</a>
+            <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">{{ icon('arrow-left', '1em') }} Retour</a>
         </div>
     </div>
 

@@ -13,8 +13,8 @@ STATUT_ANNULE = 'annule'
 STATUT_LABELS = {
     STATUT_BROUILLON: 'Brouillon',
     STATUT_EN_COURS: 'En cours',
-    STATUT_ATTEINT: '✅ Atteint (à valider)',
-    STATUT_NON_ATTEINT: '❌ Non atteint',
+    STATUT_ATTEINT: 'Atteint (à valider)',
+    STATUT_NON_ATTEINT: 'Non atteint',
     STATUT_ANNULE: 'Annulé',
 }
 STATUT_BADGES = {

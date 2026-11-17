@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Détails de l'employé · TeamSphere{% endblock %}
 
 {% block content %}
@@ -65,7 +65,7 @@
                 </form>
 
                 <a href="{{ url_for('index') }}" class="btn btn-secondary">
-                    ← Retour
+                    {{ icon('arrow-left', '1em') }} Retour
                 </a>
             </div>
         </div>
@@ -76,7 +76,7 @@
         <div class="detail-main">
             <div class="card">
                 <div class="card-header" style="margin-bottom: 12px;">
-                    <h3 style="margin:0; font-size:1.1rem;">📋 Informations personnelles</h3>
+                    <h3 style="margin:0; font-size:1.1rem;">{{ icon('clipboard', '1em') }} Informations personnelles</h3>
                 </div>
                 
                 <div class="info-grid">
@@ -117,7 +117,7 @@
             <!-- Employment details -->
             <div class="card">
                 <div class="card-header" style="margin-bottom: 12px;">
-                    <h3 style="margin:0; font-size:1.1rem;">💼 Détails professionnels</h3>
+                    <h3 style="margin:0; font-size:1.1rem;">{{ icon('briefcase', '1em') }} Détails professionnels</h3>
                 </div>
                 
                 <div class="info-grid">
@@ -143,7 +143,7 @@
                             <a class="btn btn-primary"
                                style="padding:6px 12px;font-size:.82rem;"
                                href="{{ url_for('fiches_paie.fiche_de_paie', employe_id=employee.id) }}">
-                                🧾 Composer et imprimer
+                                {{ icon('receipt', '1em') }} Composer et imprimer
                             </a>
                             <br>
                             <small class="text-muted">Reçu imprimable : montant en lettres, blocs à cocher avant impression.</small>
@@ -175,7 +175,7 @@
             <!-- Latest presence -->
             <div class="card">
                 <div class="card-header" style="margin-bottom:10px;">
-                    <h3 style="margin:0; font-size:1.05rem;">📍 Dernière présence</h3>
+                    <h3 style="margin:0; font-size:1.05rem;">{{ icon('pin', '1em') }} Dernière présence</h3>
                 </div>
                 
                 {% if last_presence %}
@@ -188,14 +188,14 @@
                             {% if last_presence.heure_arrivee %}
                             <div class="presence-time">
                                 <span class="time-label">Arrivée</span>
-                                <span class="time-value">⏰ {{ last_presence.heure_arrivee }}</span>
+                                <span class="time-value">{{ icon('clock', '1em') }} {{ last_presence.heure_arrivee }}</span>
                             </div>
                             {% endif %}
                             
                             {% if last_presence.heure_depart %}
                             <div class="presence-time">
                                 <span class="time-label">Départ</span>
-                                <span class="time-value">🏁 {{ last_presence.heure_depart }}</span>
+                                <span class="time-value">{{ icon('flag', '1em') }} {{ last_presence.heure_depart }}</span>
                             </div>
                             {% endif %}
                             
@@ -220,7 +220,7 @@
             {% if current_role in ['admin', 'rh', 'manager'] %}
             <div class="card">
                 <div class="card-header" style="margin-bottom:10px;">
-                    <h3 style="margin:0; font-size:1.05rem;">📊 Statistiques {{ stats_presence.annee }}</h3>
+                    <h3 style="margin:0; font-size:1.05rem;">{{ icon('chart', '1em') }} Statistiques {{ stats_presence.annee }}</h3>
                 </div>
                 <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); gap:10px;">
                     <div class="stat-card">
@@ -247,7 +247,7 @@
             {% if current_role in ['admin', 'rh', 'manager'] %}
             <div class="card">
                 <div class="card-header" style="margin-bottom:12px;">
-                    <h3 style="margin:0; font-size:1.05rem;">📁 Documents</h3>
+                    <h3 style="margin:0; font-size:1.05rem;">{{ icon('folder', '1em') }} Documents</h3>
                 </div>
 
                 {% if current_role in ['admin', 'rh'] %}
@@ -268,7 +268,7 @@
                         <label>Fichier</label>
                         <input type="file" name="fichier" class="form-control" required style="padding:8px;">
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm">📤 Importer le document</button>
+                    <button type="submit" class="btn btn-primary btn-sm">{{ icon('upload', '1em') }} Importer le document</button>
                 </form>
                 {% endif %}
 
@@ -282,16 +282,16 @@
                                 {{ d.date_upload.strftime('%d/%m/%Y') if d.date_upload else '—' }}
                                 {% if d.date_expiration %}
                                     {% if d.date_expiration < today %}
-                                        · <span style="color:#991b1b;">⛔ Expiré le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                                        · <span style="color:#991b1b;">{{ icon('ban', '1em') }} Expiré le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
                                     {% elif d.date_expiration <= bientot %}
-                                        · <span style="color:#854d0e;">⚠️ Expire le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
+                                        · <span style="color:#854d0e;">{{ icon('alert', '1em') }} Expire le {{ d.date_expiration.strftime('%d/%m/%Y') }}</span>
                                     {% else %}
                                         · Valable jusqu'au {{ d.date_expiration.strftime('%d/%m/%Y') }}
                                     {% endif %}
                                 {% endif %}
                             </div>
                         </div>
-                        <a data-no-loading href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;">📄</a>
+                        <a data-no-loading href="{{ url_for('documents.download_document', doc_id=d.id) }}" class="btn btn-sm" style="background:#1e40af;color:white;" aria-label="Télécharger le document">{{ icon('file', '1em') }}</a>
                     </div>
                     {% endfor %}
                 </div>
@@ -304,19 +304,19 @@
             <!-- Quick actions -->
             <div class="card">
                 <div class="card-header" style="margin-bottom:8px;">
-                    <h3 style="margin:0; font-size:1.05rem;">⚡ Actions rapides</h3>
+                    <h3 style="margin:0; font-size:1.05rem;">{{ icon('lightning', '1em') }} Actions rapides</h3>
                 </div>
                 
                 <div class="quick-actions-list">
                     <a href="{{ url_for('presences.presences') }}?employe_id={{ employee.id }}" class="quick-link">
-                        🕒 Voir toutes les présences
+                        {{ icon('clock', '1em') }} Voir toutes les présences
                     </a>
                     <a data-modal-title="Enregistrer une présence" href="{{ url_for('presences.add_presence') }}" class="js-modal-form quick-link">
-                        📝 Ajouter une présence manuelle
+                        {{ icon('edit', '1em') }} Ajouter une présence manuelle
                     </a>
                     
                     <a href="{{ url_for('conges.conges') }}" class="quick-link">
-                        🏖️ Gérer les congés
+                        {{ icon('palm', '1em') }} Gérer les congés
                     </a>
                     
                     <hr style="margin:12px 0; border-color:#f1f5f9;">
@@ -328,7 +328,7 @@
                           data-employee-name="{{ employee.prenom }} {{ employee.nom }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                           <button type="submit" class="btn btn-danger btn-sm" style="width:100%;">
-                            🗑️ Supprimer l'employé
+                            {{ icon('trash', '1em') }} Supprimer l'employé
                         </button>
                     </form>
                 </div>

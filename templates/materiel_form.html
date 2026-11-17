@@ -1,5 +1,5 @@
 {% extends layout|default("base.html") %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ 'Modifier le matériel' if materiel else 'Nouveau matériel' }} · TeamSphere{% endblock %}
 
 {% block content %}
@@ -69,7 +69,7 @@
 
         <!-- ===== Patrimoine : identité et acquisition ===== -->
         <fieldset class="fieldset-patrimoine">
-            <legend>💰 Acquisition &amp; patrimoine <small>(facultatif)</small></legend>
+            <legend>{{ icon('wallet', '1em') }} Acquisition &amp; patrimoine <small>(facultatif)</small></legend>
             <p class="form-hint" style="margin:0 0 12px;">
                 Renseignez ces informations pour un vrai suivi de parc (matériel durable :
                 ordinateurs, mobilier…). Elles servent de valeurs par défaut aux exemplaires créés.
@@ -148,7 +148,7 @@
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">
-                {{ '💾 Enregistrer' if materiel else '+ Créer le matériel' }}
+                {{ icon('save' if materiel else 'plus', '1em') }} {{ 'Enregistrer' if materiel else 'Créer le matériel' }}
             </button>
             <a href="{{ url_for('parc.materiels') }}" class="btn btn-secondary">Annuler</a>
         </div>

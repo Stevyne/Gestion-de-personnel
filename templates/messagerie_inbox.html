@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "base.html" import icon, pagination %}
+{% from "_icons.html" import icon %}
+{% from "base.html" import pagination %}
 {% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='messagerie.css') }}">{% endblock %}
 
 {% block content %}
@@ -10,7 +11,7 @@
     <div class="msg-welcome-art" aria-hidden="true">
       <span class="msg-welcome-bubble one"></span>
       <span class="msg-welcome-bubble two"></span>
-      <span class="msg-welcome-icon">⚡</span>
+      <span class="msg-welcome-icon">{{ icon('lightning', '1em') }}</span>
     </div>
     <h2>Vos messages</h2>
     <p>Sélectionnez une discussion ou démarrez une nouvelle conversation avec un collègue.</p>

@@ -35,17 +35,17 @@ def creer_blueprint_dashboards_roles(deps):
               (SELECT COUNT(*) FROM recrutement_candidatures WHERE statut='acceptee') AS candidats_acceptes""")
             recrutement = cur.fetchone()
         cards = [
-            ('Employés actifs', personnel['actifs'], '👥'),
-            ('Départs en préparation', personnel['departs'], '🚪'),
-            ('Congés à traiter', alertes['conges'], '🏖️'),
-            ('Permissions à traiter', alertes['permissions'], '🧾'),
-            ('Absences à régulariser', alertes['absences'], '🚫'),
-            ('Contrats à échéance ≤ 30 j', alertes['contrats_echeance'], '📑'),
-            ('Documents expirés', alertes['documents_expires'], '📁'),
-            ('Demandes de recrutement', recrutement['demandes_recrutement'], '🧑‍💼'),
-            ('Offres publiées', recrutement['offres_ouvertes'], '📣'),
-            ('Candidats acceptés', recrutement['candidats_acceptes'], '⭐'),
-            ('Masse salariale annuelle', f"{float(personnel['masse_salariale']):,.0f} Ar", '💰'),
+            ('Employés actifs', personnel['actifs'], 'users'),
+            ('Départs en préparation', personnel['departs'], 'logout'),
+            ('Congés à traiter', alertes['conges'], 'palm'),
+            ('Permissions à traiter', alertes['permissions'], 'receipt'),
+            ('Absences à régulariser', alertes['absences'], 'ban'),
+            ('Contrats à échéance ≤ 30 j', alertes['contrats_echeance'], 'file'),
+            ('Documents expirés', alertes['documents_expires'], 'folder'),
+            ('Demandes de recrutement', recrutement['demandes_recrutement'], 'briefcase'),
+            ('Offres publiées', recrutement['offres_ouvertes'], 'megaphone'),
+            ('Candidats acceptés', recrutement['candidats_acceptes'], 'star'),
+            ('Masse salariale annuelle', f"{float(personnel['masse_salariale']):,.0f} Ar", 'wallet'),
         ]
         return render_template('dashboard_role.html', titre='Tableau de bord RH',
                                sous_titre='Effectifs, workflows et échéances', cards=cards,
@@ -83,11 +83,11 @@ def creer_blueprint_dashboards_roles(deps):
             inventaires = cur.fetchone()['n']
             scope = get_department_scope(cur)
         cards = [
-            ('Articles', stock['articles'], '📦'), ('Stock disponible', stock['stock'], '📊'),
-            ('Alertes stock', stock['alertes'], '⚠️'), ('Valeur du stock', f"{float(stock['valeur']):,.0f} Ar", '💰'),
-            ('Exemplaires', exemplaires['total'], '🏷️'), ('Exemplaires indisponibles', exemplaires['indisponibles'], '🔴'),
-            ('Maintenances ouvertes', maintenance['ouvertes'], '🔧'), ('SLA dépassés', maintenance['sla'], '⏱️'),
-            ('Tickets critiques', maintenance['critiques'], '🚨'), ('Inventaires ouverts', inventaires, '📋'),
+            ('Articles', stock['articles'], 'box'), ('Stock disponible', stock['stock'], 'chart'),
+            ('Alertes stock', stock['alertes'], 'alert'), ('Valeur du stock', f"{float(stock['valeur']):,.0f} Ar", 'wallet'),
+            ('Exemplaires', exemplaires['total'], 'tag'), ('Exemplaires indisponibles', exemplaires['indisponibles'], 'ban'),
+            ('Maintenances ouvertes', maintenance['ouvertes'], 'wrench'), ('SLA dépassés', maintenance['sla'], 'clock'),
+            ('Tickets critiques', maintenance['critiques'], 'alert'), ('Inventaires ouverts', inventaires, 'clipboard'),
         ]
         portee = 'Tous les départements' if scope['is_global'] else (scope.get('department') or 'Aucun département')
         return render_template('dashboard_role.html', titre='Tableau de bord Parc',
@@ -114,11 +114,11 @@ def creer_blueprint_dashboards_roles(deps):
             metier = cur.fetchone()
         taux = round(100 * metier['presents'] / personnel['actifs'], 1) if personnel['actifs'] else 0
         cards = [
-            ('Effectif actif', personnel['actifs'], '👥'), ('Départements', personnel['departements'], '🏢'),
-            ('Présence aujourd’hui', f'{taux} %', '📅'), ('Absences année', metier['absences'], '🚫'),
-            ('Jours de congé approuvés', metier['conges'], '🏖️'), ('Salaire moyen', f"{float(personnel['moyenne']):,.0f} Ar", '💰'),
-            ('Masse salariale', f"{float(personnel['masse']):,.0f} Ar", '📈'), ('Valeur du parc', f"{float(metier['valeur_parc']):,.0f} Ar", '💻'),
-            ('Coût maintenance année', f"{float(metier['cout_maintenance']):,.0f} Ar", '🔧'), ('Contrats à échéance', metier['contrats'], '📑'),
+            ('Effectif actif', personnel['actifs'], 'users'), ('Départements', personnel['departements'], 'building'),
+            ('Présence aujourd’hui', f'{taux} %', 'calendar'), ('Absences année', metier['absences'], 'ban'),
+            ('Jours de congé approuvés', metier['conges'], 'palm'), ('Salaire moyen', f"{float(personnel['moyenne']):,.0f} Ar", 'wallet'),
+            ('Masse salariale', f"{float(personnel['masse']):,.0f} Ar", 'chart'), ('Valeur du parc', f"{float(metier['valeur_parc']):,.0f} Ar", 'monitor'),
+            ('Coût maintenance année', f"{float(metier['cout_maintenance']):,.0f} Ar", 'wrench'), ('Contrats à échéance', metier['contrats'], 'file'),
         ]
         return render_template('dashboard_role.html', titre='Tableau de bord Direction',
                                sous_titre='Vue consolidée de l’entreprise', cards=cards,

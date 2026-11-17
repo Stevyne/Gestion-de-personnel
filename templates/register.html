@@ -1,5 +1,5 @@
 {% extends layout|default("base.html") %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Créer un compte utilisateur · TeamSphere{% endblock %}
 
 {% block content %}
@@ -67,7 +67,7 @@
                            placeholder="8 caractères minimum" required minlength="8"
                            maxlength="128" autocomplete="new-password">
                     <button type="button" class="register-password-toggle" data-target="password"
-                            aria-label="Afficher le mot de passe">👁️</button>
+                            aria-label="Afficher le mot de passe" aria-pressed="false">{{ icon('eye', '1em') }}</button>
                 </div>
                 <div class="strength-container" aria-live="polite">
                     <div class="strength-bar"><div class="strength-fill" id="strengthFill"></div></div>
@@ -82,14 +82,14 @@
                            class="form-control" placeholder="Saisissez-le à nouveau"
                            required minlength="8" maxlength="128" autocomplete="new-password">
                     <button type="button" class="register-password-toggle" data-target="confirm_password"
-                            aria-label="Afficher la confirmation">👁️</button>
+                            aria-label="Afficher la confirmation" aria-pressed="false">{{ icon('eye', '1em') }}</button>
                 </div>
                 <div id="matchMessage" class="match-message" aria-live="polite"></div>
             </div>
         </div>
 
         <div class="register-security-note">
-            🔒 Le mot de passe n'est jamais envoyé par e-mail. Communiquez-le par un canal sûr ; l'utilisateur sera invité à le changer après sa première connexion.
+            {{ icon('lock', '1em') }} Le mot de passe n'est jamais envoyé par e-mail. Communiquez-le par un canal sûr ; l'utilisateur sera invité à le changer après sa première connexion.
         </div>
 
         <div class="form-actions">

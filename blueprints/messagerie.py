@@ -209,15 +209,16 @@ def creer_blueprint_messagerie(deps):
             if conversation['type'] == 'annonce':
                 conversation['non_lu'] = bool(conversation['dernier_message_id']) and conversation['id'] not in annonces_lues
                 conversation['libelle'] = conversation.get('titre') or 'Annonce RH'
-                conversation['avatar_initiale'] = '📢'
+                conversation['avatar_initiale'] = ''
+                conversation['avatar_icon'] = 'megaphone'
             else:
                 conversation['non_lu'] = bool(conversation['dernier_message_id']) and (
                     conversation['dernier_message_lu_id'] is None
                     or conversation['dernier_message_id'] > conversation['dernier_message_lu_id'])
                 conversation['libelle'] = (conversation.get('titre') if conversation['type'] == 'groupe'
                                            else None) or conversation.get('autres_membres') or 'Conversation'
-                conversation['avatar_initiale'] = ('👥' if conversation['type'] == 'groupe'
-                                                    else (conversation.get('avatar_username') or '?')[:1].upper())
+                conversation['avatar_icon'] = 'users' if conversation['type'] == 'groupe' else None
+                conversation['avatar_initiale'] = (conversation.get('avatar_username') or '?')[:1].upper()
         return conversations
 
     # ------------------------------------------------------------- routes
@@ -384,11 +385,11 @@ def creer_blueprint_messagerie(deps):
                         if r['id'] == session['user_id']:
                             continue
                         create_notification(
-                            r['id'], f"📢 Annonce : {titre or 'Nouvelle annonce'}",
+                            r['id'], f"Annonce : {titre or 'Nouvelle annonce'}",
                             contenu[:120], "info", cur=cur
                         )
                         if r.get('email'):
-                            queue_email(r['email'], f"📢 {titre or 'Annonce'}", contenu, cur=cur)
+                            queue_email(r['email'], f"{titre or 'Annonce'}", contenu, cur=cur)
 
                 log_action(session.get('user_id'), session.get('username'),
                           "CREATE_CONVERSATION", "conversation", conv_id,
@@ -486,7 +487,7 @@ def creer_blueprint_messagerie(deps):
             active_conversation = next(
                 (c for c in conversations if c['id'] == id),
                 {'id': id, 'type': conv['type'], 'libelle': conv.get('titre') or 'Conversation',
-                 'avatar_initiale': '💬', 'avatar_photo': None})
+                 'avatar_initiale': '', 'avatar_icon': 'message', 'avatar_photo': None})
 
         template = ('messagerie_panel_thread.html'
                     if _panel_mode() else 'messagerie_thread.html')
@@ -572,7 +573,7 @@ def creer_blueprint_messagerie(deps):
                 """, (id, user_id))
                 for r in cur.fetchall():
                     create_notification(r['id'], f"Nouveau message de {session.get('username')}",
-                                        (contenu or '📎 Pièce jointe')[:120], "info", cur=cur)
+                                        (contenu or 'Pièce jointe')[:120], "info", cur=cur)
                     if r.get('email'):
                         queue_email(r['email'], f"Nouveau message de {session.get('username')}",
                                    contenu or 'Pièce jointe envoyée.', cur=cur)
@@ -593,12 +594,12 @@ def creer_blueprint_messagerie(deps):
                 for destinataire in cur.fetchall():
                     create_notification(
                         destinataire['id'],
-                        f"📢 Annonce mise à jour : {conv.get('titre') or 'Annonce'}",
-                        (contenu or '📎 Nouvelle pièce jointe')[:120], 'info', cur=cur)
+                        f"Annonce mise à jour : {conv.get('titre') or 'Annonce'}",
+                        (contenu or 'Nouvelle pièce jointe')[:120], 'info', cur=cur)
                     if destinataire.get('email'):
                         queue_email(
                             destinataire['email'],
-                            f"📢 {conv.get('titre') or 'Annonce'} — mise à jour",
+                            f"{conv.get('titre') or 'Annonce'} — mise à jour",
                             contenu or 'Une nouvelle pièce jointe est disponible.', cur=cur)
 
 

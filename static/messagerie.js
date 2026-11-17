@@ -70,7 +70,8 @@
     if (!input || !output) return;
     input.addEventListener('change', function () {
       const file = input.files && input.files[0];
-      output.textContent = file ? '📎 ' + file.name : '';
+      if (file) window.AppIcons.withText(output, 'paperclip', file.name);
+      else output.replaceChildren();
       output.hidden = !file;
     });
   }

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Mon matériel · TeamSphere{% endblock %}
 {% block content %}
 <div class="card">
@@ -28,7 +28,7 @@
     {% for a in attributions %}
     <tr>
       <td data-label="Matériel">{{ a.materiel_nom }}
-        <div class="wf-meta">{{ a.categorie or '—' }}{% if a.exemplaire_numero %} · 🏷 {{ a.exemplaire_numero }}{% endif %}</div>
+        <div class="wf-meta">{{ a.categorie or '—' }}{% if a.exemplaire_numero %} · {{ icon('tag', '1em') }} {{ a.exemplaire_numero }}{% endif %}</div>
       </td>
       <td data-label="Qté">{{ a.quantite }} {{ a.unite or '' }}</td>
       <td data-label="Attribué le">{{ a.date_attribution }}
@@ -55,7 +55,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="accuser">
             <input type="hidden" name="retour" value="{{ url_for('self_service_materiels') }}">
-            <button type="submit" class="btn btn-sm btn-success">✔ Je confirme</button>
+            <button type="submit" class="btn btn-sm btn-success">{{ icon('check', '1em') }} Je confirme</button>
           </form>
           <form method="POST" action="{{ url_for('parc.accuser_attribution', attribution_id=a.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

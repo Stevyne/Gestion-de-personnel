@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Détail inventaire · TeamSphere{% endblock %}
 
 {% block content %}
@@ -63,7 +63,7 @@
     {% if inv.statut == 'en_cours' %}
         {% if stats.nb_ecarts %}
         <div class="inv-alerte inv-alerte-warn">
-            <strong>⚠ {{ stats.nb_ecarts }} anomalie(s) détectée(s).</strong>
+            <strong>{{ icon('alert', '1em') }} {{ stats.nb_ecarts }} anomalie(s) détectée(s).</strong>
             Écart net : {{ '%+d' % stats.ecart_net }} unité(s).
             À la clôture, le stock sera aligné sur les quantités comptées.
         </div>
@@ -158,16 +158,16 @@
     {% if inv.statut == 'en_cours' and peut_cloturer %}
     <div class="inv-actions">
         <form method="POST" action="{{ url_for('parc.cloturer_inventaire', id=inv.id) }}" class="confirm-form"
-              data-confirm-icon="📋"
+              data-confirm-icon="clipboard"
               data-confirm-title="Clôturer cette campagne d'inventaire ?"
               data-confirm-subtitle="Le stock théorique sera aligné sur les quantités comptées."
               data-confirm-warning="{{ stats.nb_ecarts }} article(s) en écart seront corrigés par un mouvement d'ajustement tracé. Les lignes non comptées resteront inchangées. Action définitive."
               data-confirm-confirm="Clôturer et ajuster">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-primary">✓ Clôturer et ajuster le stock</button>
+            <button type="submit" class="btn btn-primary">{{ icon('check', '1em') }} Clôturer et ajuster le stock</button>
         </form>
         <form method="POST" action="{{ url_for('parc.annuler_inventaire', id=inv.id) }}" class="confirm-form"
-              data-confirm-icon="🚫"
+              data-confirm-icon="ban"
               data-confirm-title="Annuler cette campagne ?"
               data-confirm-subtitle="Le comptage est conservé pour l'historique."
               data-confirm-warning="Le stock ne sera pas modifié : les écarts constatés resteront non corrigés."

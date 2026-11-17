@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon, icon_bank %}
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -10,6 +11,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='recrutement.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='activity-panel.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='ui-polish.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='icons.css') }}">
+    <script src="{{ url_for('static', filename='icons.js') }}" defer></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='loading.css') }}">
     <script src="{{ url_for('static', filename='loading.js') }}" defer></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='flash-messages.css') }}">
@@ -173,6 +176,7 @@
     {% block extra_styles %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
+    {{ icon_bank() }}
     <dialog id="appLoadingOverlay" class="app-loading-overlay" role="dialog"
             aria-modal="true" aria-labelledby="appLoadingTitle"
             aria-describedby="appLoadingDescription" tabindex="-1">
@@ -183,10 +187,7 @@
                 <span class="app-loading-segment app-loading-segment--secondary" aria-hidden="true"></span>
             </div>
             <span class="app-loading-symbol" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M6 3h12M6 21h12M8 3v4l4 5-4 5v4M16 3v4l-4 5 4 5v4"/>
-                </svg>
+                {{ icon('hourglass', 25) }}
             </span>
             <h2 id="appLoadingTitle" class="app-loading-title">Chargement en cours…</h2>
             <p id="appLoadingDescription" class="app-loading-description">Veuillez patienter, l’action est en cours.</p>
@@ -225,100 +226,7 @@
    Les emojis dépendent de la police du système : rendu incohérent d'un poste à
    l'autre et aspect peu professionnel. Ces icônes héritent de la couleur du
    texte (currentColor) et s'alignent parfaitement. #}
-{% macro icon(name, size=18) -%}
-<svg class="ico" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none"
-     stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"
-     aria-hidden="true" focusable="false">
-{%- if name == 'dashboard' -%}
-<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>
-{%- elif name == 'users' -%}
-<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-{%- elif name == 'user' -%}
-<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-{%- elif name == 'building' -%}
-<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01M12 6h.01M12 10h.01M12 14h.01"/>
-{%- elif name == 'clock' -%}
-<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
-{%- elif name == 'history' -%}
-<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>
-{%- elif name == 'user-x' -%}
-<path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M17 8l5 5M22 8l-5 5"/>
-{%- elif name == 'palm' -%}
-<path d="M8 2h8v2a4 4 0 0 1-4 4 4 4 0 0 1-4-4Z"/><path d="M12 8v13"/><path d="M5 21h14"/><path d="M12 8c-3 0-5 1.5-6 4M12 8c3 0 5 1.5 6 4"/>
-{%- elif name == 'download' -%}
-<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>
-{%- elif name == 'file' -%}
-<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>
-{%- elif name == 'wallet' -%}
-<path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
-{%- elif name == 'calendar' -%}
-<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
-{%- elif name == 'box' -%}
-<path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
-{%- elif name == 'wrench' -%}
-<path d="M14.7 6.3a4 4 0 0 1 5 5l-8.4 8.4a2.1 2.1 0 0 1-3-3L16.7 8.3"/><path d="M9.5 4.5 4 10l-1.5-1.5a4 4 0 0 1 5.5-5.5Z"/>
-{%- elif name == 'clipboard' -%}
-<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>
-{%- elif name == 'shield' -%}
-<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>
-{%- elif name == 'bell' -%}
-<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
-{%- elif name == 'logout' -%}
-<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>
-{%- elif name == 'search' -%}
-<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
-{%- elif name == 'chevron' -%}
-<path d="m6 9 6 6 6-6"/>
-{%- elif name == 'message' -%}
-<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-{%- elif name == 'brain' -%}
-<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
-<path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
-{%- elif name == 'target' -%}
-<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
-{%- elif name == 'folder' -%}
-<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/>
-{%- elif name == 'chart' -%}
-<path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-6"/>
-{%- elif name == 'tag' -%}
-<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.2"/>
-{%- elif name == 'receipt' -%}
-<path d="M4 2v20l3-2 3 2 3-2 3 2 3-2V2l-3 2-3-2-3 2-3-2-3 2Z"/><path d="M8 7h8M8 11h8M8 15h5"/>
-{%- elif name == 'ban' -%}
-<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>
-{%- elif name == 'log' -%}
-<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>
-{%- elif name == 'refresh' -%}
-<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>
-{%- elif name == 'check' -%}
-<path d="M20 6 9 17l-5-5"/>
-{%- elif name == 'x' -%}
-<path d="M18 6 6 18M6 6l12 12"/>
-{%- elif name == 'plus' -%}
-<path d="M12 5v14M5 12h14"/>
-{%- elif name == 'trash' -%}
-<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"/>
-{%- elif name == 'alert' -%}
-<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/>
-{%- elif name == 'eye' -%}
-<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>
-{%- elif name == 'paperclip' -%}
-<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-{%- elif name == 'printer' -%}
-<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
-{%- elif name == 'tools' -%}
-<path d="M14.7 6.3a4 4 0 0 0-1 6.3l-8.4 8.4a2.1 2.1 0 0 1-3-3L10.7 9.6"/>
-{%- elif name == 'sync' -%}
-<path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.8 1 6.4 2.6L21 8"/><path d="M21 3v5h-5"/>
-{%- elif name == 'arrow-left' -%}
-<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>
-{%- elif name == 'camera' -%}
-<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3"/>
-{%- elif name == 'lock' -%}
-<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-{%- endif -%}
-</svg>
-{%- endmacro %}
+{# La macro icon reste réexportée pour les anciens templates. #}
 
 {# Libellés courts pour l'avatar : initiales de l'utilisateur #}
 {% set _uname = session.get('username', 'U') %}
@@ -334,8 +242,8 @@
             </div>
             
             <!-- Hamburger button for mobile -->
-            <button class="nav-toggle" id="navToggle" aria-label="Ouvrir le menu">
-                ☰
+            <button class="nav-toggle" id="navToggle" type="button" aria-label="Ouvrir le menu" aria-controls="navDrawer" aria-expanded="false">
+                {{ icon('menu', 20) }}
             </button>
             
             {% if session.get('user_id') %}
@@ -609,7 +517,7 @@
 
                 {% if current_role == 'admin' %}
                 <a href="{{ url_for('utilisateurs.register') }}" class="nav-link" style="background:#e0e7ff;color:#1e40af;padding:6px 14px;border-radius:6px;font-weight:600;">
-                    👤 Inscrire
+                    {{ icon('user', '1em') }} Inscrire
                 </a>
                 {% endif %}
             </div>
@@ -625,7 +533,7 @@
                 <span class="logo"><img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" style="width: 36px; height: 36px;"></span>
                 <span class="brand-text">Menu</span>
             </div>
-            <button class="drawer-close" id="drawerClose" aria-label="Fermer le menu">×</button>
+            <button class="drawer-close" id="drawerClose" aria-label="Fermer le menu">{{ icon('x', '1em') }}</button>
         </div>
         
         <div class="drawer-links">
@@ -774,10 +682,10 @@
                data-message-count-url="{{ url_for('messagerie.messagerie_non_lus') }}">
             <header class="activity-panel-head">
                 <div class="activity-panel-heading">
-                    <span class="activity-panel-head-icon" id="activityPanelIcon" aria-hidden="true">🔔</span>
+                    <span class="activity-panel-head-icon" id="activityPanelIcon" aria-hidden="true">{{ icon('bell', '1em') }}</span>
                     <div><span class="activity-panel-label">Aperçu</span><h2 id="activityPanelTitle">Activité</h2></div>
                 </div>
-                <button type="button" class="activity-panel-close" id="activityPanelClose" aria-label="Fermer">×</button>
+                <button type="button" class="activity-panel-close" id="activityPanelClose" aria-label="Fermer">{{ icon('x', '1em') }}</button>
             </header>
             <div class="activity-panel-body" id="activityPanelBody" aria-live="polite">
                 <div class="activity-panel-loader"><span></span><p>Chargement…</p></div>
@@ -810,7 +718,7 @@
     <div id="deleteModal" class="modal-backdrop">
         <div class="delete-modal">
             <div class="modal-header">
-                <div class="modal-icon">🗑️</div>
+                <div class="modal-icon">{{ icon('trash', '1em') }}</div>
                 <h3 class="modal-title">Supprimer cet employé ?</h3>
                 <p class="modal-subtitle">Action irréversible</p>
             </div>
@@ -836,7 +744,7 @@
     <div id="genericConfirmModal" class="modal-backdrop">
         <div class="delete-modal">
             <div class="modal-header">
-                <div class="modal-icon" id="genericConfirmIcon">⚠️</div>
+                <div class="modal-icon" id="genericConfirmIcon">{{ icon('alert', '1em') }}</div>
                 <h3 class="modal-title" id="genericConfirmTitle">Confirmer cette action ?</h3>
                 <p class="modal-subtitle" id="genericConfirmSubtitle">Action irréversible</p>
             </div>
@@ -864,7 +772,7 @@
             <div class="form-modal-head">
                 <h3 class="form-modal-title" id="formModalTitle">Chargement…</h3>
                 <button type="button" class="form-modal-close" id="formModalClose"
-                        aria-label="Fermer">&times;</button>
+                        aria-label="Fermer">{{ icon('x', '1em') }}</button>
             </div>
             <div class="form-modal-body" id="formModalBody">
                 <div class="form-modal-loader"><span class="spinner"></span> Chargement…</div>
@@ -885,6 +793,14 @@
         let isDrawerOpen = false;
         let enableOverlayTimer = null;
 
+        function syncDrawerIcon() {
+            if (!navToggle) return;
+            const open = navDrawer.classList.contains('open');
+            window.AppIcons.set(navToggle, open ? 'x' : 'menu', 20);
+            navToggle.setAttribute('aria-expanded', String(open));
+            navToggle.setAttribute('aria-label', open ? 'Fermer le menu' : 'Ouvrir le menu');
+        }
+
         function openDrawer() {
             if (!navDrawer || isDrawerOpen) return;
 
@@ -901,6 +817,7 @@
 
             document.body.style.overflow = 'hidden';
             isDrawerOpen = true;
+            syncDrawerIcon();
 
             if (navToggle) {
                 navToggle.style.pointerEvents = 'auto';
@@ -941,7 +858,7 @@
             setTimeout(() => {
                 isDrawerOpen = false;
                 // Extra safety: force icon back
-                if (navToggle) navToggle.innerHTML = '☰';
+                syncDrawerIcon();
             }, delay);
         }
 
@@ -959,7 +876,7 @@
 
                 setTimeout(() => {
                     if (navToggle && navDrawer) {
-                        navToggle.innerHTML = navDrawer.classList.contains('open') ? '✕' : '☰';
+                        syncDrawerIcon();
                     }
                 }, 20);
             }, { passive: false });
@@ -1039,7 +956,7 @@
         function setupHamburgerIcon() {
             if (navDrawer && navToggle) {
                 navDrawer.addEventListener('transitionend', () => {
-                    navToggle.innerHTML = navDrawer.classList.contains('open') ? '✕' : '☰';
+                    syncDrawerIcon();
                 });
             }
         }
@@ -1131,7 +1048,15 @@
             // retire ensuite pour ne pas l'afficher deux fois.
             const heading = body.querySelector('.card-header h1, .card-header h2, h1, h2');
             if (heading) {
-                titleEl.textContent = heading.textContent.trim();
+                const headingIcon = heading.querySelector('svg.ico');
+                const headingText = document.createTextNode(heading.textContent.trim());
+                // Conserver le pictogramme serveur sans interpréter le titre
+                // (qui peut contenir un nom saisi par un utilisateur).
+                if (headingIcon) {
+                    titleEl.replaceChildren(headingIcon.cloneNode(true), document.createTextNode(' '), headingText);
+                } else {
+                    titleEl.replaceChildren(headingText);
+                }
                 const header = heading.closest('.card-header');
                 (header || heading).remove();
             }
@@ -1163,7 +1088,7 @@
             // Les liens « Annuler » ferment la popup au lieu de naviguer.
             body.querySelectorAll('a.btn-secondary, a.btn').forEach(a => {
                 const t = (a.textContent || '').trim().toLowerCase();
-                if (t === 'annuler' || t.startsWith('annuler') || t.startsWith('←')) {
+                if (t === 'annuler' || t.startsWith('annuler') || t.startsWith('←') || a.querySelector('[data-icon="arrow-left"]')) {
                     a.addEventListener('click', e => { e.preventDefault(); closeFormModal(); });
                 }
             });
@@ -1262,12 +1187,14 @@
         let currentGenericForm = null;
         function showGenericConfirm(formElement) {
             const modal = document.getElementById('genericConfirmModal');
-            document.getElementById('genericConfirmIcon').textContent = formElement.dataset.confirmIcon || '⚠️';
+            window.AppIcons.set(document.getElementById('genericConfirmIcon'), formElement.dataset.confirmIcon || 'alert', 30);
             document.getElementById('genericConfirmTitle').textContent = formElement.dataset.confirmTitle || 'Confirmer cette action ?';
             document.getElementById('genericConfirmSubtitle').textContent = formElement.dataset.confirmSubtitle || 'Action irréversible';
             const warningEl = document.getElementById('genericConfirmWarning');
             if (formElement.dataset.confirmWarning) {
-                warningEl.innerHTML = '<strong>Attention :</strong> ' + formElement.dataset.confirmWarning;
+                const prefix = document.createElement('strong');
+                prefix.textContent = 'Attention :';
+                warningEl.replaceChildren(prefix, document.createTextNode(' ' + formElement.dataset.confirmWarning));
                 warningEl.style.display = 'block';
             } else {
                 warningEl.style.display = 'none';
@@ -1358,7 +1285,7 @@
                 }
             });
 
-            console.log('%c✅ Super fluid animation + auto-close + responsive ready', 'color:#16a34a');
+            console.log('%cSuper fluid animation + auto-close + responsive ready', 'color:#16a34a');
         });
     </script>
 

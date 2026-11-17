@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends 'base.html' %}
 {% block title %}Objectifs · TeamSphere{% endblock %}
 {% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='objectifs.css') }}">{% endblock %}
@@ -5,42 +6,42 @@
 <div class="rc-shell">
   <section class="rc-hero obj-hero">
     <div>
-      <h1>🎯 Objectifs</h1>
+      <h1>{{ icon('target', '1em') }} Objectifs</h1>
       <p>Définissez, suivez et validez les objectifs individuels des collaborateurs. Chaque collaborateur peut proposer ses propres objectifs, le manager ou les RH les valident et suivent leur progression jusqu'à réalisation.</p>
     </div>
     <div class="rc-hero-actions">
-      <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste', miens='1') }}">👤 Mes objectifs</a>
+      <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste', miens='1') }}">{{ icon('user', '1em') }} Mes objectifs</a>
       <a class="rc-btn js-modal-form" data-modal-title="Nouvel objectif" href="{{ url_for('objectifs.objectif_nouveau') }}">+ Nouvel objectif</a>
     </div>
   </section>
 
   <section class="obj-stats">
     <div class="stat-card acc-total">
-      <span class="stat-ico">🎯</span>
+      <span class="stat-ico">{{ icon('target', '1em') }}</span>
       <span class="stat-label">Total</span>
       <strong class="stat-value">{{ comptes.get('total',0) }}</strong>
       <span class="stat-sub">tous objectifs</span>
     </div>
     <div class="stat-card acc-brouillon">
-      <span class="stat-ico">📝</span>
+      <span class="stat-ico">{{ icon('edit', '1em') }}</span>
       <span class="stat-label">Brouillons</span>
       <strong class="stat-value">{{ comptes.get('brouillon',0) }}</strong>
       <span class="stat-sub">en rédaction</span>
     </div>
     <div class="stat-card acc-cours">
-      <span class="stat-ico">🚀</span>
+      <span class="stat-ico">{{ icon('rocket', '1em') }}</span>
       <span class="stat-label">En cours</span>
       <strong class="stat-value">{{ comptes.get('en_cours',0) }}</strong>
       <span class="stat-sub">progression suivie</span>
     </div>
     <div class="stat-card acc-retard">
-      <span class="stat-ico">⏰</span>
+      <span class="stat-ico">{{ icon('clock', '1em') }}</span>
       <span class="stat-label">En retard</span>
       <strong class="stat-value" style="color:#dc2626;">{{ comptes.get('en_retard',0) }}</strong>
       <span class="stat-sub">échéance dépassée</span>
     </div>
     <div class="stat-card acc-valider">
-      <span class="stat-ico">✅</span>
+      <span class="stat-ico">{{ icon('check-circle', '1em') }}</span>
       <span class="stat-label">À valider</span>
       <strong class="stat-value" style="color:#b45309;">{{ comptes.get('atteint',0) }}</strong>
       <span class="stat-sub">atteints</span>
@@ -50,9 +51,9 @@
   <section class="rc-card">
     <div class="obj-toolbar">
       <div class="obj-search">
-        <span class="obj-search-ico">🔍</span>
+        <span class="obj-search-ico">{{ icon('search', '1em') }}</span>
         <input type="text" id="objSearch" placeholder="Filtrer par titre…" autocomplete="off">
-        <button type="button" class="obj-search-clear" id="objSearchClear" hidden aria-label="Effacer">✕</button>
+        <button type="button" class="obj-search-clear" id="objSearchClear" hidden aria-label="Effacer">{{ icon('x', '1em') }}</button>
       </div>
       <form method="get" class="obj-filters">
         <select name="statut" onchange="this.form.requestSubmit()">
@@ -73,7 +74,7 @@
           <input type="checkbox" name="miens" value="1" {% if filtres.miens %}checked{% endif %} onchange="this.form.requestSubmit()">
           Mes objectifs uniquement
         </label>
-        <a class="rc-btn rc-btn-light rc-btn-sm" href="{{ url_for('objectifs.objectifs_liste') }}" title="Réinitialiser les filtres">↺ Réinitialiser</a>
+        <a class="rc-btn rc-btn-light rc-btn-sm" href="{{ url_for('objectifs.objectifs_liste') }}" title="Réinitialiser les filtres">{{ icon('refresh', '1em') }} Réinitialiser</a>
       </form>
     </div>
 
@@ -97,7 +98,7 @@
             </div>
             <div class="obj-card-tags">
               <span class="obj-prio {{ o.priorite }}">{{ priorites.get(o.priorite, o.priorite) }}</span>
-              <span class="rc-badge rc-badge-{{ badges.get(o.statut,'') }}">{{ labels.get(o.statut, o.statut) }}</span>
+              <span class="rc-badge rc-badge-{{ badges.get(o.statut,'') }}">{{ icon({'brouillon':'edit', 'en_cours':'play', 'atteint':'check-circle', 'non_atteint':'x-circle', 'annule':'ban'}.get(o.statut, 'info'), '1em') }} {{ labels.get(o.statut, o.statut) }}</span>
               {% if en_retard %}<span class="rc-badge rc-badge-refusee">En retard</span>{% endif %}
             </div>
           </div>
@@ -108,14 +109,14 @@
             <div class="obj-bar-val">{{ o.progression }}%</div>
           </div>
           <div class="meta-row">
-            {% if o.date_debut %}<span>▸ Début {{ o.date_debut.strftime('%d/%m/%Y') }}</span>{% endif %}
-            {% if o.date_echeance %}<span>▸ Échéance <strong {% if en_retard %}style="color:#dc2626;"{% endif %}>{{ o.date_echeance.strftime('%d/%m/%Y') }}</strong>
+            {% if o.date_debut %}<span>{{ icon('calendar', '1em') }} Début {{ o.date_debut.strftime('%d/%m/%Y') }}</span>{% endif %}
+            {% if o.date_echeance %}<span>{{ icon('calendar', '1em') }} Échéance <strong {% if en_retard %}style="color:#dc2626;"{% endif %}>{{ o.date_echeance.strftime('%d/%m/%Y') }}</strong>
               {% if o.statut=='en_cours' %}<span class="jours {{ 'negatif' if en_retard }}">{{ 'J+'~jours if jours>=0 else 'J'~jours }} j</span>{% endif %}
             </span>{% endif %}
-            {% if o.date_realisation %}<span>✓ Réalisé le {{ o.date_realisation.strftime('%d/%m/%Y') }}</span>{% endif %}
+            {% if o.date_realisation %}<span>{{ icon('check', '1em') }} Réalisé le {{ o.date_realisation.strftime('%d/%m/%Y') }}</span>{% endif %}
           </div>
           <div class="obj-card-foot">
-            {% if o.categorie %}<span class="obj-chip">🏷️ {{ o.categorie }}</span>{% endif %}
+            {% if o.categorie %}<span class="obj-chip">{{ icon('tag', '1em') }} {{ o.categorie }}</span>{% endif %}
             {% if o.comp_nom %}<span class="skill-cat">{{ o.comp_nom }}</span>{% endif %}
           </div>
         </a>
@@ -126,7 +127,7 @@
     </p>
     {% else %}
       <div class="rc-empty">
-        <div style="font-size:2.3rem;margin-bottom:8px;">🎯</div>
+        <div style="font-size:2.3rem;margin-bottom:8px;">{{ icon('target', '1em') }}</div>
         Aucun objectif dans ce périmètre.<br>
         <a href="{{ url_for('objectifs.objectif_nouveau') }}" style="color:#b45309;font-weight:700;" class="js-modal-form" data-modal-title="Nouvel objectif">Créer le premier objectif</a>.
       </div>

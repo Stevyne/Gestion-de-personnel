@@ -1,5 +1,5 @@
 {% extends layout|default("base.html") %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Mon profil · TeamSphere{% endblock %}
 
 {% block content %}
@@ -61,7 +61,7 @@
                   class="confirm-form"
                   data-confirm-title="Supprimer votre photo ?"
                   data-confirm-subtitle="Retour aux initiales"
-                  data-confirm-icon="🖼️"
+                  data-confirm-icon="image"
                   data-confirm-confirm="Supprimer"
                   data-confirm-warning="Votre photo sera définitivement supprimée.">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

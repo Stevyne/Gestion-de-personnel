@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends "base.html" %}
 {% from "base.html" import pagination, icon %}
 {% block title %}Employés · TeamSphere{% endblock %}
@@ -91,7 +92,7 @@
             </div>
             <div class="table-meta">
                 {% if sort != 'nom' or order != 'asc' %}
-                    Trié par <strong>{{ sort }}</strong> ({{ '↓' if order == 'desc' else '↑' }})
+                    Trié par <strong>{{ sort }}</strong> (<span role="img" aria-label="{{ 'Ordre décroissant' if order == 'desc' else 'Ordre croissant' }}">{{ icon('arrow-down' if order == 'desc' else 'arrow-up', '1em') }}</span>)
                 {% endif %}
             </div>
         </div>
@@ -170,19 +171,19 @@
                         <td data-label="Actions" class="actions-col">
                             <div class="actions">
                                 <a href="{{ url_for('view_employee', id=emp.id) }}" 
-                                   class="action-btn" title="Voir le profil">👁️</a>
+                                   class="action-btn" title="Voir le profil" aria-label="Voir le profil">{{ icon('eye', '1em') }}</a>
                                 
                                 <a data-modal-title="Modifier l'employé" href="{{ url_for('edit_employee', id=emp.id) }}" 
-                                   class="js-modal-form action-btn" title="Modifier">✏️</a>
+                                   class="js-modal-form action-btn" title="Modifier" aria-label="Modifier l'employé">{{ icon('edit', '1em') }}</a>
                                 
                                 <form action="{{ url_for('presences.clock_in', employe_id=emp.id) }}" method="post" style="display:inline;">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="action-btn" title="Pointer arrivée" onclick="return confirm('Pointer l\'arrivée ?')">⏰</button>
+                                    <button type="submit" class="action-btn" title="Pointer arrivée" onclick="return confirm('Pointer l\'arrivée ?')" aria-label="Pointer arrivée">{{ icon('clock', '1em') }}</button>
                                 </form>
                                 
                                 <form action="{{ url_for('presences.clock_out', employe_id=emp.id) }}" method="post" style="display:inline;">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="action-btn" title="Pointer sortie" onclick="return confirm('Pointer la sortie ?')">🏁</button>
+                                    <button type="submit" class="action-btn" title="Pointer sortie" onclick="return confirm('Pointer la sortie ?')" aria-label="Pointer sortie">{{ icon('flag', '1em') }}</button>
                                 </form>
                                 {% if session.get('role') in ['admin', 'rh', 'manager'] %}
                                 <!-- DELETE - triggers beautiful modal popup -->
@@ -192,7 +193,7 @@
                                       data-employee-id="{{ emp.id }}"
                                       data-employee-name="{{ emp.prenom }} {{ emp.nom }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="action-btn danger" title="Supprimer">🗑️</button>
+                                    <button type="submit" class="action-btn danger" title="Supprimer" aria-label="Supprimer">{{ icon('trash', '1em') }}</button>
                                 </form>
                                 {% endif %}
                             </div>
@@ -201,7 +202,7 @@
                     {% else %}
                     <tr>
                         <td colspan="7" class="empty-state">
-                            <div class="empty-icon">📋</div>
+                            <div class="empty-icon">{{ icon('clipboard', '1em') }}</div>
                             <div><strong>Aucun employé trouvé</strong></div>
                             {% if search or selected_dept %}
                                 <div style="margin-top:8px;">

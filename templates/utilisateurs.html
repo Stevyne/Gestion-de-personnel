@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Gestion des Utilisateurs · TeamSphere{% endblock %}
 
 {% block content %}
@@ -98,12 +98,12 @@
                                     data-is-self="{{ '1' if is_self else '0' }}"
                                     data-edit-url="{{ url_for('utilisateurs.edit_utilisateur', user_id=u.id) }}"
                                     data-password-url="{{ url_for('utilisateurs.reset_password_utilisateur', user_id=u.id) }}">
-                                ✏️ Modifier
+                                {{ icon('edit', '1em') }} Modifier
                             </button>
                             {% else %}
                             <span class="btn btn-secondary btn-xs" style="opacity:.5;cursor:not-allowed;"
                                   title="Seul un administrateur peut modifier un compte administrateur">
-                                🔒 Modifier
+                                {{ icon('lock', '1em') }} Modifier
                             </span>
                             {% endif %}
 
@@ -124,12 +124,12 @@
                                   class="confirm-form"
                                   data-confirm-title="Déconnecter {{ u.username }} ?"
                                   data-confirm-subtitle="Fermeture des sessions ouvertes"
-                                  data-confirm-icon="🚪"
+                                  data-confirm-icon="logout"
                                   data-confirm-confirm="Déconnecter"
                                   data-confirm-warning="Cet utilisateur devra se reconnecter. Son travail non enregistré sera perdu.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-xs btn-disconnect" title="Fermer les sessions de cet utilisateur">
-                                    🚪 Déconnecter
+                                    {{ icon('logout', '1em') }} Déconnecter
                                 </button>
                             </form>
                             {% endif %}
@@ -140,10 +140,10 @@
                                   class="confirm-form"
                                   data-confirm-title="Supprimer cet utilisateur ?"
                                   data-confirm-subtitle="Action irréversible"
-                                  data-confirm-icon="👤"
+                                  data-confirm-icon="user"
                                   data-confirm-warning="Ce compte perdra tout accès à la plateforme.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-danger btn-xs">🗑️</button>
+                                <button type="submit" class="btn btn-danger btn-xs" aria-label="Supprimer">{{ icon('trash', '1em') }}</button>
                             </form>
                             {% endif %}
                         </div>
@@ -216,7 +216,7 @@
 
             <div class="modal-footer">
                 <button type="button" class="modal-btn cancel js-close-user-modal">Annuler</button>
-                <button type="submit" class="modal-btn primary">💾 Enregistrer</button>
+                <button type="submit" class="modal-btn primary">{{ icon('save', '1em') }} Enregistrer</button>
             </div>
         </form>
 
@@ -233,7 +233,7 @@
                                class="form-control" minlength="6" required autocomplete="new-password"
                                placeholder="6 caractères minimum">
                         <button type="button" class="password-toggle" id="togglePassword"
-                                aria-label="Afficher le mot de passe">👁️</button>
+                                aria-label="Afficher le mot de passe" aria-pressed="false">{{ icon('eye', '1em') }}</button>
                     </div>
                     <small class="form-hint">
                         L'utilisateur devra se connecter avec ce nouveau mot de passe.
@@ -247,7 +247,7 @@
 
             <div class="modal-footer">
                 <button type="button" class="modal-btn cancel js-close-user-modal">Annuler</button>
-                <button type="submit" class="modal-btn danger">🔑 Réinitialiser</button>
+                <button type="submit" class="modal-btn danger">{{ icon('key', '1em') }} Réinitialiser</button>
             </div>
         </form>
     </div>
@@ -304,6 +304,11 @@
         roleHint.style.display = isSelf ? 'block' : 'none';
 
         pwdInput.value = '';
+        pwdInput.type = 'password';
+        const toggle = document.getElementById('togglePassword');
+        window.AppIcons.set(toggle, 'eye');
+        toggle.setAttribute('aria-pressed', 'false');
+        toggle.setAttribute('aria-label', 'Afficher le mot de passe');
         setTab('infos');
 
         modal.classList.add('show');
@@ -344,7 +349,8 @@
         toggle.addEventListener('click', () => {
             const show = pwdInput.type === 'password';
             pwdInput.type = show ? 'text' : 'password';
-            toggle.textContent = show ? '🙈' : '👁️';
+            window.AppIcons.set(toggle, show ? 'eye-off' : 'eye');
+            toggle.setAttribute('aria-pressed', String(show));
             toggle.setAttribute('aria-label',
                 show ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
             pwdInput.focus();

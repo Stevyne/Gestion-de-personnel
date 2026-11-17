@@ -45,10 +45,10 @@
                 match.textContent = '';
                 match.className = 'match-message';
             } else if (matches) {
-                match.textContent = '✓ Les mots de passe correspondent';
+                window.AppIcons.withText(match, 'check', 'Les mots de passe correspondent');
                 match.className = 'match-message match';
             } else {
-                match.textContent = '✗ Les mots de passe ne correspondent pas';
+                window.AppIcons.withText(match, 'x', 'Les mots de passe ne correspondent pas');
                 match.className = 'match-message no-match';
             }
         }
@@ -67,7 +67,8 @@
                 if (!input) return;
                 const show = input.type === 'password';
                 input.type = show ? 'text' : 'password';
-                button.textContent = show ? '🙈' : '👁️';
+                window.AppIcons.set(button, show ? 'eye-off' : 'eye');
+                button.setAttribute('aria-pressed', String(show));
                 button.setAttribute('aria-label', show
                     ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
                 input.focus();

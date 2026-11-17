@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends 'base.html' %}
 {% block title %}{{ emp.prenom }} {{ emp.nom }} · Compétences{% endblock %}
 {% block extra_styles %}<link rel="stylesheet" href="{{ url_for('static', filename='competences.css') }}">{% endblock %}
@@ -6,7 +7,7 @@
   <section class="skill-emp-header">
     <div class="skill-avatar">{{ emp.prenom[:1] }}{{ emp.nom[:1] }}</div>
     <div class="skill-emp-title">
-      <h1>🧠 {{ emp.prenom }} {{ emp.nom }}</h1>
+      <h1>{{ icon('brain', '1em') }} {{ emp.prenom }} {{ emp.nom }}</h1>
       <p>
         {% if emp.poste %}<strong>{{ emp.poste }}</strong>{% endif %}
         {% if emp.poste and emp.departement %} · {% endif %}
@@ -23,8 +24,8 @@
       </p>
     </div>
     <div class="skill-emp-actions">
-      <a class="rc-btn rc-btn-light" href="{{ url_for('view_employee', id=emp.id) }}">← Fiche employé</a>
-      <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste', employe_id=emp.id) }}">🎯 Ses objectifs</a>
+      <a class="rc-btn rc-btn-light" href="{{ url_for('view_employee', id=emp.id) }}">{{ icon('arrow-left', '1em') }} Fiche employé</a>
+      <a class="rc-btn rc-btn-light" href="{{ url_for('objectifs.objectifs_liste', employe_id=emp.id) }}">{{ icon('target', '1em') }} Ses objectifs</a>
       <a class="rc-btn rc-btn-light" href="{{ url_for('competences.competences_liste') }}">Catalogue</a>
     </div>
   </section>
@@ -77,7 +78,7 @@
 
             {% if peut_ecrire %}
             <details>
-              <summary>Modifier / retirer</summary>
+              <summary>{{ icon('chevron', '1em') }} Modifier / retirer</summary>
               <form method="POST" action="{{ url_for('competences.employe_competence_modifier', eid=emp.id, ecid=ec.id) }}" class="skill-inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="row">
                   <label style="font-size:.85rem;font-weight:700;color:#334e68;">Niveau :
@@ -103,7 +104,7 @@
       </div>
       {% else %}
         <div class="rc-empty">
-          <div style="font-size:2rem;margin-bottom:6px;">📊</div>
+          <div style="font-size:2rem;margin-bottom:6px;">{{ icon('chart', '1em') }}</div>
           Aucune compétence n'est encore renseignée pour ce collaborateur.
         </div>
       {% endif %}
@@ -111,7 +112,7 @@
 
     {% if peut_ecrire and disponibles %}
     <aside class="obj-side-card" style="background:#fff;">
-      <h3 style="margin:0 0 6px;color:#183b5b;">➕ Ajouter une compétence</h3>
+      <h3 style="margin:0 0 6px;color:#183b5b;">{{ icon('plus', '1em') }} Ajouter une compétence</h3>
       <p class="rc-muted" style="margin:0 0 14px;font-size:.85rem;">Choisissez une compétence du référentiel et estimez son niveau.</p>
       <form method="POST" action="{{ url_for('competences.employe_competence_ajouter', eid=emp.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="rc-field" style="margin-bottom:12px;">
@@ -141,7 +142,7 @@
     </aside>
     {% elif peut_ecrire and not disponibles and competences %}
     <aside class="obj-side-card" style="background:#fff;">
-      <h3 style="margin:0 0 6px;color:#183b5b;">🎯 Toutes les compétences actives sont déjà associées</h3>
+      <h3 style="margin:0 0 6px;color:#183b5b;">{{ icon('target', '1em') }} Toutes les compétences actives sont déjà associées</h3>
       <p class="rc-muted" style="font-size:.88rem;">Vous pouvez <a href="{{ url_for('competences.competence_ajouter') }}" style="color:#4f46e5;font-weight:700;" class="js-modal-form" data-modal-title="Nouvelle compétence">créer une nouvelle compétence</a> dans le référentiel.</p>
     </aside>
     {% endif %}

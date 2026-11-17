@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends layout|default("base.html") %}
 
 {% block title %}{{ 'Modifier' if competence else 'Nouvelle compétence' }} · TeamSphere{% endblock %}
@@ -5,9 +6,9 @@
 {% block content %}
 <div class="card" style="max-width: 760px; margin: 0 auto;">
     <div class="card-header">
-        <h1>{{ '✏️ Modifier une compétence' if competence else '➕ Nouvelle compétence' }}</h1>
+        <h1>{{ icon('edit' if competence else 'plus', '1em') }} {{ 'Modifier une compétence' if competence else 'Nouvelle compétence' }}</h1>
         {% if not is_modal %}
-        <a class="btn btn-secondary" href="{{ url_for('competences.competences_liste') }}">← Retour</a>
+        <a class="btn btn-secondary" href="{{ url_for('competences.competences_liste') }}">{{ icon('arrow-left', '1em') }} Retour</a>
         {% endif %}
     </div>
 

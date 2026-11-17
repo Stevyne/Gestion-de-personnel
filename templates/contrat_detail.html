@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Détails du contrat · TeamSphere{% endblock %}
 {% block content %}
 <div class="card" style="max-width:880px;margin:auto;">
@@ -11,7 +11,7 @@
         &middot; {{ contrat.reference or 'Sans référence' }}
       </p>
     </div>
-    <a href="{{ url_for('contrats.contrats_liste') }}" class="btn btn-secondary">← Contrats</a>
+    <a href="{{ url_for('contrats.contrats_liste') }}" class="btn btn-secondary">{{ icon('arrow-left', '1em') }} Contrats</a>
   </div>
 
   <div class="rc-detail" style="margin-bottom:18px;">
@@ -37,7 +37,7 @@
     <a href="{{ url_for('contrats.contrat_renouveler', id=contrat.id) }}" class="btn btn-secondary">{{ icon('history', 15) }} Renouveler</a>
     <form method="post" action="{{ url_for('contrats.contrat_resilier', id=contrat.id) }}" class="confirm-form"
           data-confirm-title="Résilier ce contrat ?" data-confirm-subtitle="Action irréversible"
-          data-confirm-icon="⚠" data-confirm-warning="La résiliation met fin au contrat de manière anticipée."
+          data-confirm-icon="alert" data-confirm-warning="La résiliation met fin au contrat de manière anticipée."
           style="display:flex;gap:8px;flex:1;min-width:260px;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input name="motif" class="form-control" placeholder="Motif de résiliation" required>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "base.html" import icon, pagination %}
+{% from "_icons.html" import icon %}
+{% from "base.html" import pagination %}
 {% block title %}Maintenance & réparations · TeamSphere{% endblock %}
 
 {% block content %}
@@ -76,7 +77,7 @@
             <label>Statut</label>
             <select name="statut" class="form-control">
                 <option value="">Tous</option>
-                <option value="ouvert" {{ 'selected' if filters.statut == 'ouvert' }}>⏳ En cours</option>
+                <option value="ouvert" {{ 'selected' if filters.statut == 'ouvert' }}>En cours</option>
                 {% for val, lib in statuts %}
                 <option value="{{ val }}" {{ 'selected' if filters.statut == val }}>{{ lib }}</option>
                 {% endfor %}
@@ -168,7 +169,7 @@
                         </a>
                         <form method="post" action="{{ url_for('parc.discussion_maintenance', id=m.id) }}" style="display:inline;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-sm btn-secondary maintenance-chat-link" title="Discussion">{{ icon('message', 13) }}</button>
+                            <button type="submit" class="btn btn-sm btn-secondary maintenance-chat-link" title="Discussion" aria-label="Discussion">{{ icon('message', 13) }}</button>
                         </form>
                     </td>
                 </tr>

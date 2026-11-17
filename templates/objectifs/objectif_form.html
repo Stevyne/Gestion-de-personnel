@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% extends layout|default("base.html") %}
 
 {% block title %}{{ 'Modifier' if objectif else 'Nouvel objectif' }} · Objectifs{% endblock %}
@@ -5,9 +6,9 @@
 {% block content %}
 <div class="card" style="max-width: 860px; margin: 0 auto;">
     <div class="card-header">
-        <h1>{{ '✏️ Modifier l\'objectif' if objectif else '➕ Nouvel objectif' }}</h1>
+        <h1>{{ icon('edit' if objectif else 'plus', '1em') }} {{ 'Modifier l\'objectif' if objectif else 'Nouvel objectif' }}</h1>
         {% if not is_modal %}
-        <a class="btn btn-secondary" href="{{ url_for('objectifs.objectifs_liste') }}">← Retour</a>
+        <a class="btn btn-secondary" href="{{ url_for('objectifs.objectifs_liste') }}">{{ icon('arrow-left', '1em') }} Retour</a>
         {% endif %}
     </div>
 

@@ -43,7 +43,7 @@
     function setHeading(kind) {
         const messages = kind === 'messages';
         title.textContent = messages ? 'Messages' : 'Notifications';
-        icon.textContent = messages ? '💬' : '🔔';
+        window.AppIcons.set(icon, messages ? 'message' : 'bell', 22);
         layer.classList.toggle('is-messages', messages);
         layer.classList.toggle('is-notifications', !messages);
         if (messages) ensureMessageStyles();
@@ -193,7 +193,11 @@
                 const output = root.querySelector(outputSelector);
                 input?.addEventListener('change', () => {
                     const file = input.files && input.files[0];
-                    if (output) { output.textContent = file ? `📎 ${file.name}` : ''; output.hidden = !file; }
+                    if (output) {
+                        if (file) window.AppIcons.withText(output, 'paperclip', file.name);
+                        else output.replaceChildren();
+                        output.hidden = !file;
+                    }
                 });
             });
 
@@ -250,7 +254,8 @@
             body.scrollTop = 0;
         } catch (error) {
             if (error.name === 'AbortError') return;
-            body.innerHTML = '<div class="activity-panel-error"><span>⚠️</span><p>Impossible de charger ce panneau.</p><button type="button">Réessayer</button></div>';
+            body.innerHTML = '<div class="activity-panel-error"><span class="activity-panel-error-symbol"></span><p>Impossible de charger ce panneau.</p><button type="button">Réessayer</button></div>';
+            window.AppIcons.set(body.querySelector('.activity-panel-error-symbol'), 'alert', 32);
             body.querySelector('button')?.addEventListener('click', () => load(currentUrl, currentKind));
         } finally {
             stopLoading();

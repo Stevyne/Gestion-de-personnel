@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import icon %}
+{% from "_icons.html" import icon %}
 {% block title %}Documents & Pièces jointes · TeamSphere{% endblock %}
 
 {% block content %}
@@ -9,7 +9,7 @@
             <h1>{{ icon('folder') }}<span>Documents &amp; Pièces jointes</span></h1>
             <p>Stockage centralisé des contrats, certifications et pièces RH.</p>
         </div>
-        <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Tableau de bord</a>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">{{ icon('arrow-left', '1em') }} Tableau de bord</a>
     </div>
 
     <!-- Upload form -->
@@ -101,10 +101,10 @@
                                   class="confirm-form"
                                   data-confirm-title="Supprimer ce document ?"
                                   data-confirm-subtitle="Action irréversible"
-                                  data-confirm-icon="📄"
+                                  data-confirm-icon="file"
                                   data-confirm-warning="Le fichier sera supprimé du serveur.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-danger">{{ icon('ban', 13) }}</button>
+                                <button type="submit" class="btn btn-sm btn-danger" aria-label="Supprimer le document">{{ icon('trash', 13) }}</button>
                         </form>
                         {% endif %}
                     </td>
@@ -112,7 +112,7 @@
                 {% else %}
                 <tr>
                     <td colspan="6" class="empty-state">
-                        <div class="empty-icon">📁</div>
+                        <div class="empty-icon">{{ icon('folder', '1em') }}</div>
                         <strong>Aucun document uploadé.</strong>
                         <div class="rc-muted" style="margin-top:4px;">Uploadez votre premier document via le formulaire ci-dessus.</div>
                     </td>
