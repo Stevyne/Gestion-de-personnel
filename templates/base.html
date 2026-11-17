@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='ui-polish.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='loading.css') }}">
     <script src="{{ url_for('static', filename='loading.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='flash-messages.css') }}">
+    <script src="{{ url_for('static', filename='flash-messages.js') }}" defer></script>
     <style>
         /* ===== BEAUTIFUL DELETE CONFIRMATION MODAL ===== */
         .modal-backdrop {
@@ -171,13 +173,27 @@
     {% block extra_styles %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
-    <div id="appLoading" class="app-loading" role="progressbar"
-         aria-label="Chargement en cours" hidden>
-        <span class="app-loading-segment" aria-hidden="true"></span>
-        <span class="app-loading-segment app-loading-segment--secondary" aria-hidden="true"></span>
-    </div>
-    <span id="appLoadingStatus" class="app-loading-status" role="status"
-          aria-live="polite" aria-atomic="true"></span>
+    <dialog id="appLoadingOverlay" class="app-loading-overlay" role="dialog"
+            aria-modal="true" aria-labelledby="appLoadingTitle"
+            aria-describedby="appLoadingDescription" tabindex="-1">
+        <div class="app-loading-panel">
+            <div id="appLoading" class="app-loading" role="progressbar"
+                 aria-label="Chargement en cours" hidden>
+                <span class="app-loading-segment" aria-hidden="true"></span>
+                <span class="app-loading-segment app-loading-segment--secondary" aria-hidden="true"></span>
+            </div>
+            <span class="app-loading-symbol" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 3h12M6 21h12M8 3v4l4 5-4 5v4M16 3v4l-4 5 4 5v4"/>
+                </svg>
+            </span>
+            <h2 id="appLoadingTitle" class="app-loading-title">Chargement en cours…</h2>
+            <p id="appLoadingDescription" class="app-loading-description">Veuillez patienter, l’action est en cours.</p>
+            <span id="appLoadingStatus" class="app-loading-status" role="status"
+                  aria-live="polite" aria-atomic="true"></span>
+        </div>
+    </dialog>
 {% macro pagination(endpoint, base_qs, pg, page_items) %}
 {% if pg and pg.pages > 1 %}
 <nav style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin:20px 0 6px;">
@@ -774,10 +790,11 @@
     {% endif %}
 
     <div class="container">
+        {% from "_flash_message.html" import flash_message %}
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {{ flash_message(category, message) }}
                 {% endfor %}
             {% endif %}
         {% endwith %}

@@ -1,52 +1,78 @@
 (() => {
     'use strict';
 
+    const overlay = document.getElementById('appLoadingOverlay');
     const bar = document.getElementById('appLoading');
     const status = document.getElementById('appLoadingStatus');
-    if (!bar || !status) return;
+    if (!overlay || !bar || !status) return;
 
-    // Évite le clignotement des opérations rapides, sans retarder les requêtes.
-    const SHOW_DELAY = 120;
-    const MIN_VISIBLE = 280;
     const NAVIGATION_TIMEOUT = 30000;
     const pending = new Set();
-    let showTimer = null;
-    let hideTimer = null;
-    let visibleSince = 0;
+    let locked = false;
+    let previousFocus = null;
     let navigationDone = null;
     let navigationTimer = null;
 
-    const card = document.querySelector('.login-card');
-    if (card) card.prepend(bar);
-
-    function hide() {
-        bar.hidden = true;
-        status.textContent = '';
+    function usable(element) {
+        return element && element !== document.body && element !== document.documentElement
+            && element.isConnected && !element.disabled && !element.closest('[inert]')
+            && !overlay.contains(element) && element.getClientRects().length > 0;
     }
 
-    // Chaque opération reçoit sa propre fonction de fin, idempotente : une
-    // ancienne réponse/annulation ne peut pas arrêter une requête plus récente.
+    function restoreFocus() {
+        const surface = document.querySelector('#formModal.show')
+            || document.querySelector('#genericConfirmModal.show, #deleteModal.show')
+            || document.querySelector('.activity-panel-layer.is-open .activity-panel');
+        let target = usable(previousFocus) ? previousFocus : null;
+        if (surface && (!target || !surface.contains(target))) {
+            const fields = 'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])';
+            target = Array.from(surface.querySelectorAll(fields)).find(usable)
+                || Array.from(surface.querySelectorAll('button:not([disabled]), a[href]')).find(usable);
+        }
+        if (!surface) {
+            // Le script de connexion a pu demander ce focus alors que le
+            // document était encore inerte pendant son chargement initial.
+            target = document.querySelector('input[type="password"][aria-invalid="true"]')
+                || target || document.querySelector('[autofocus]');
+        }
+        if (usable(target) && document.activeElement !== target) target.focus({preventScroll: true});
+        previousFocus = null;
+    }
+
+    function lock() {
+        if (locked) return;
+        previousFocus = document.activeElement;
+        locked = true;
+        document.documentElement.classList.add('app-loading-active');
+        document.body.classList.add('app-loading-active');
+        bar.hidden = false;
+        status.textContent = 'Chargement en cours…';
+        // showModal place le voile dans la couche supérieure du navigateur et
+        // rend tout le reste du document inerte, y compris les nouveaux nœuds.
+        overlay.showModal();
+        overlay.focus({preventScroll: true});
+    }
+
+    function hide() {
+        const wasLocked = locked;
+        locked = false;
+        bar.hidden = true;
+        status.textContent = '';
+        if (overlay.open) overlay.close();
+        document.documentElement.classList.remove('app-loading-active');
+        document.body.classList.remove('app-loading-active');
+        if (wasLocked) restoreFocus();
+    }
+
+    // Chaque opération possède sa fin idempotente. Ni délai d'affichage ni
+    // durée minimale : blocage immédiat, libération dès la dernière fin.
     function start() {
         const token = {};
         pending.add(token);
-        window.clearTimeout(hideTimer);
-        if (bar.hidden && showTimer === null) {
-            showTimer = window.setTimeout(() => {
-                showTimer = null;
-                if (!pending.size) return;
-                visibleSince = Date.now();
-                bar.hidden = false;
-                status.textContent = 'Chargement en cours…';
-            }, SHOW_DELAY);
-        }
+        lock();
         return () => {
             if (!pending.delete(token) || pending.size) return;
-            window.clearTimeout(showTimer);
-            showTimer = null;
-            const remaining = bar.hidden ? 0 : MIN_VISIBLE - (Date.now() - visibleSince);
-            hideTimer = window.setTimeout(() => {
-                if (!pending.size) hide();
-            }, Math.max(0, remaining));
+            hide();
         };
     }
 
@@ -59,8 +85,7 @@
     function startNavigation() {
         if (navigationDone) return;
         navigationDone = start();
-        // Le navigateur n'expose pas de promesse pour une navigation native.
-        // Ce garde-fou évite une barre infinie si celle-ci est abandonnée.
+        // Une navigation native n'expose pas de promesse de fin.
         navigationTimer = window.setTimeout(stopNavigation, NAVIGATION_TIMEOUT);
     }
 
@@ -76,10 +101,8 @@
 
     function reset() {
         pending.clear();
-        window.clearTimeout(showTimer);
-        window.clearTimeout(hideTimer);
         window.clearTimeout(navigationTimer);
-        showTimer = hideTimer = navigationTimer = null;
+        navigationTimer = null;
         navigationDone = null;
         hide();
     }
@@ -99,10 +122,31 @@
         }
     }
 
+    function blockInteraction(event) {
+        if (!locked) return;
+        if (event.type.startsWith('key')) {
+            // Les raccourcis du navigateur (recharger, retour…) restent
+            // utilisables, mais aucun raccourci de la page ne reçoit l'événement.
+            if (!event.ctrlKey && !event.metaKey && !event.altKey && !/^F\d+$/.test(event.key)) {
+                event.preventDefault();
+            }
+        } else if (event.type !== 'touchmove' || event.touches.length < 2) {
+            event.preventDefault();
+        }
+        event.stopImmediatePropagation();
+    }
+
+    ['click', 'dblclick', 'pointerdown', 'pointerup', 'mousedown', 'mouseup',
+     'touchstart', 'touchend', 'contextmenu', 'dragstart', 'dragover', 'drop',
+     'submit', 'keydown', 'keyup', 'keypress', 'wheel', 'touchmove'].forEach(type => {
+        window.addEventListener(type, blockInteraction, {capture: true, passive: false});
+    });
+    // Échap ne doit fermer ni le voile ni une popup située derrière lui.
+    overlay.addEventListener('cancel', event => event.preventDefault());
+
     // La capture voit aussi les liens du tiroir mobile (stopPropagation).
-    // Une nouvelle tâche, plutôt qu'une microtâche, laisse TOUS les handlers
-    // terminer : une popup, une validation ou un preventDefault n'allume pas
-    // par erreur le témoin de navigation.
+    // La tâche différée laisse les handlers terminer : un preventDefault
+    // utilisé par une popup n'est pas pris pour une navigation native.
     document.addEventListener('click', event => {
         if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         const link = event.target.closest('a[href]');
@@ -134,11 +178,9 @@
         }, 0);
     }, true);
 
-    // Ne modifie ni window.fetch ni HTMLFormElement.prototype.submit.
-    // Les requêtes d'arrière-plan restent silencieuses par défaut.
+    // Les fetch non suivis (polling) restent silencieux. Aucun prototype natif
+    // n'est remplacé ; l'API existante des popups et panneaux reste identique.
     window.AppLoading = Object.freeze({start, navigate});
-
-    // Une page restaurée via Précédent/Suivant doit revenir au repos.
     window.addEventListener('pageshow', reset);
     if (document.readyState !== 'complete') {
         const done = start();

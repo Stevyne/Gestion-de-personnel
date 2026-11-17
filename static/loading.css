@@ -1,9 +1,80 @@
+/* Une vraie modale native : aucune interaction avec le fond pendant l'attente. */
+html.app-loading-active,
+body.app-loading-active {
+    overflow: hidden !important;
+    overscroll-behavior: none;
+}
+
+.app-loading-overlay {
+    width: min(360px, calc(100vw - 40px));
+    max-width: calc(100vw - 40px);
+    max-height: calc(100dvh - 40px);
+    margin: auto;
+    padding: 0;
+    border: 1px solid #dbe7f4;
+    border-radius: 18px;
+    background: #ffffff;
+    color: #17324d;
+    box-shadow: 0 24px 80px rgb(0 0 0 / .3);
+    overflow: hidden;
+    outline: none;
+    cursor: wait;
+    overscroll-behavior: contain;
+    touch-action: none;
+}
+
+.app-loading-overlay:not([open]) {
+    display: none;
+}
+
+.app-loading-overlay::backdrop {
+    background: rgb(8 15 28 / .68);
+    cursor: wait;
+    touch-action: none;
+}
+
+.app-loading-panel {
+    position: relative;
+    padding: 30px 26px 28px;
+    text-align: center;
+}
+
+.app-loading-symbol {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 16px;
+    place-items: center;
+    border-radius: 14px;
+    color: #1a73e8;
+    background: #e8f0fe;
+}
+
+.app-loading-symbol svg {
+    width: 25px;
+    height: 25px;
+}
+
+.app-loading-title {
+    margin: 0 0 7px;
+    color: #17324d;
+    font: inherit;
+    font-size: 1.08rem;
+    font-weight: 750;
+}
+
+.app-loading-description {
+    margin: 0;
+    color: #687f95;
+    font-size: .85rem;
+    line-height: 1.5;
+}
+
 /* Barre indéterminée inspirée de Material : aucun pourcentage fictif. */
 .app-loading {
     --loading-color: #1a73e8;
     --loading-track: #d2e3fc;
-    position: fixed;
-    z-index: 100010; /* Au-dessus de la navigation et des popups. */
+    position: absolute;
     inset: 0 0 auto;
     height: 4px;
     overflow: hidden;
@@ -43,16 +114,6 @@
     100% { transform: translateX(110%) scaleX(.35); }
 }
 
-/* Sur la connexion, la barre épouse le haut de la carte, comme chez Google. */
-.login-card {
-    position: relative;
-    overflow: hidden;
-}
-
-.login-card > .app-loading {
-    position: absolute;
-}
-
 .app-loading-status {
     position: absolute;
     width: 1px;
@@ -63,6 +124,16 @@
     clip-path: inset(50%);
     white-space: nowrap;
     border: 0;
+}
+
+@media (max-height: 320px) {
+    .app-loading-panel {
+        padding: 16px 20px;
+    }
+
+    .app-loading-symbol {
+        display: none;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -78,8 +149,16 @@
 }
 
 @media print {
-    .app-loading,
-    .app-loading-status {
+    .app-loading-overlay {
         display: none !important;
+    }
+
+    .app-loading-overlay::backdrop {
+        background: transparent;
+    }
+
+    html.app-loading-active,
+    body.app-loading-active {
+        overflow: visible !important;
     }
 }

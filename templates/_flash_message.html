@@ -1,0 +1,16 @@
+{# Uniquement les confirmations/informations : les erreurs restent visibles. #}
+{% macro flash_message(category, message, panel=false) -%}
+{% set timed = category in ['success', 'info', 'message'] %}
+<div class="{% if panel %}activity-panel-flash activity-panel-flash--{{ category }}{% else %}alert alert-{{ category }}{% endif %} flash-message"
+     role="{{ 'alert' if category in ['danger', 'error', 'warning'] else 'status' }}"
+     data-flash-message{% if timed %} data-dismiss-after="10000"{% endif %}>
+    <span class="flash-message-text">{{ message }}</span>
+    {% if timed %}
+    <span class="flash-message-countdown" data-flash-countdown aria-hidden="true"
+          title="Fermeture automatique après 10 secondes ; pause au survol ou au focus." hidden>10 s</span>
+    {% endif %}
+    <button type="button" class="flash-message-close" data-flash-dismiss
+            aria-label="Fermer le message" hidden>×</button>
+    {% if timed %}<span class="flash-message-timer" data-flash-timer aria-hidden="true" hidden></span>{% endif %}
+</div>
+{%- endmacro %}

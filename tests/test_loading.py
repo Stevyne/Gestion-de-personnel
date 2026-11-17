@@ -86,3 +86,37 @@ def test_le_polling_du_badge_reste_silencieux():
     polling = source.split('async function refreshMessageBadge()', 1)[1].split('function normalize', 1)[0]
     assert 'await fetch(' in polling
     assert 'AppLoading' not in polling
+
+
+def test_voile_unique_et_modal_sans_blocage_si_javascript_absent(client):
+    response = client.get('/login')
+    html = response.get_data(as_text=True)
+    assert html.count('id="appLoadingOverlay"') == 1
+    assert '<dialog id="appLoadingOverlay"' in html
+    assert 'aria-labelledby="appLoadingTitle"' in html
+    assert 'aria-describedby="appLoadingDescription"' in html
+    assert 'tabindex="-1"' in html
+    assert 'id="appLoadingTitle"' in html
+    # Sans attribut open, le navigateur masque la modale sans JavaScript.
+    dialog_tag = re.search(r'<dialog\b[^>]*>', html).group(0)
+    assert ' open' not in dialog_tag
+
+
+def test_voile_sombre_blocage_et_liberation_sont_configures():
+    css = (ROOT / 'static/loading.css').read_text(encoding='utf-8')
+    js = (ROOT / 'static/loading.js').read_text(encoding='utf-8')
+    assert '.app-loading-overlay::backdrop' in css
+    assert 'rgb(8 15 28 / .68)' in css
+    assert 'overflow: hidden !important' in css
+    assert 'touch-action: none' in css
+    assert 'overlay.showModal()' in js
+    assert 'overlay.close()' in js
+    assert "overlay.addEventListener('cancel'" in js
+    assert 'capture: true, passive: false' in js
+
+
+def test_les_fragments_ajax_n_ajoutent_pas_de_deuxieme_voile(admin_client):
+    for url in ('/departements/add?modal=1', '/notifications?panel=1'):
+        response = admin_client.get(url)
+        assert response.status_code == 200
+        assert b'id="appLoadingOverlay"' not in response.data
